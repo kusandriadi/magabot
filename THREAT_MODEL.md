@@ -41,9 +41,8 @@ Magabot is a self-hosted multi-platform chatbot with LLM integration. This docum
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │                 FILE SYSTEM                           │  │
-│  │  ~/.magabot/                                          │  │
-│  │  ├── config.yaml (0600)                              │  │
-│  │  └── data/magabot.db (0600)                          │  │
+│  │  ~/.magabot/config.yaml (0600)                        │  │
+│  │  ~/data/magabot/db/magabot.db (0600)                 │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -210,7 +209,7 @@ Response (encrypted before storage)
 | Input validation | ✅ | Sanitization + URL validation |
 | Audit logging | ✅ | security.log with rotation |
 | Secure defaults | ✅ | Config validator |
-| Dependency updates | ✅ | 2024 versions |
+| Dependency updates | ✅ | 2026 versions |
 
 ## Residual Risks
 
@@ -229,5 +228,5 @@ Response (encrypted before storage)
 
 ---
 
-*Last Updated: 2026-02-06*
-*Next Review: 2026-05-06*
+*Last Updated: 2026-02-07*
+*Next Review: 2026-05-07*

@@ -170,11 +170,11 @@ magabot start
 
 | Provider | Models | Streaming | Status |
 |----------|--------|:---------:|:------:|
-| **Anthropic** | Claude 3.5, Claude 4 | ✅ | ✅ |
-| **OpenAI** | GPT-4o, GPT-4 | ✅ | ✅ |
+| **Anthropic** | Claude 4 Opus/Sonnet, Claude 3.5 Sonnet/Haiku | ✅ | ✅ |
+| **OpenAI** | GPT-4o, GPT-4, o1, o3 | ✅ | ✅ |
 | **Google** | Gemini 1.5 Pro/Flash | ✅ | ✅ |
-| **DeepSeek** | deepseek-chat, deepseek-coder, R1 | ✅ | ✅ |
-| **Zhipu** | GLM-4, GLM-4V | ✅ | ✅ |
+| **DeepSeek** | deepseek-chat, deepseek-coder | ✅ | ✅ |
+| **Zhipu** | GLM-4, GLM-4V, GLM-4-Plus | ✅ | ✅ |
 
 ### Fallback Chain
 
@@ -217,15 +217,22 @@ curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/main/install.sh |
 ### Manual
 
 ```bash
-# Download latest release
+# Download latest release (Linux)
 wget https://github.com/kusandriadi/magabot/releases/latest/download/magabot_linux_amd64.tar.gz
-
-# Extract and install
 tar -xzf magabot_linux_amd64.tar.gz
 sudo mv magabot /usr/local/bin/
 
 # Setup
 magabot setup
+```
+
+### Windows
+
+Pre-built `.exe` binaries are available in [Releases](https://github.com/kusandriadi/magabot/releases) for `windows/amd64` and `windows/arm64`.
+
+```powershell
+# Download magabot_windows_amd64.zip from Releases, extract, then:
+.\magabot.exe setup
 ```
 
 ### From Source
@@ -307,12 +314,15 @@ magabot update apply    # Apply update
 | 🤖 5 LLM Providers | Anthropic, OpenAI, Gemini, DeepSeek, GLM |
 | 🛠️ 5 Tools | Search, Maps, Weather, Scraper, Browser |
 | 🔐 Security | AES-256-GCM, allowlist, audit, rate limit |
+| 🧩 Skills | Custom skills with YAML, auto-reload on file changes |
 | 🧠 Memory/RAG | Remember context across sessions |
 | 💓 Heartbeat | Proactive periodic checks |
 | 🔄 Multi-Session | Background tasks, parallel processing |
 | ⏰ Cron Jobs | Scheduled notifications, multi-channel |
 | 📦 Self-Update | One-command updates with rollback |
+| 📂 Configurable Paths | Custom data, logs, memory, cache, exports directories |
 | 🐳 Docker | Container-ready |
+| 🪟 Windows | Pre-built Windows binaries (amd64, arm64) |
 
 ---
 
@@ -322,12 +332,36 @@ magabot update apply    # Apply update
 ~/.magabot/
 ├── config.yaml          # All configuration
 ├── magabot.pid          # PID file
-├── data/
-│   ├── magabot.db       # SQLite (encrypted)
-│   └── memory/          # Per-user memories
+
+~/data/magabot/          # Default data directory (configurable via paths.data_dir)
+├── db/
+│   └── magabot.db       # SQLite (encrypted)
+├── memory/              # Per-user memories
 ├── logs/
 │   └── magabot.log
-└── skills/              # Custom skills
+├── cache/
+├── exports/
+└── downloads/
+
+~/code/magabot-skills/   # Default skills directory (configurable via skills.dir)
+└── my-skill/
+    └── skill.yaml       # Auto-reloaded on changes
+```
+
+All paths are configurable in `config.yaml`:
+
+```yaml
+paths:
+  data_dir: ~/data/magabot
+  logs_dir: ~/data/magabot/logs
+  memory_dir: ~/data/magabot/memory
+  cache_dir: ~/data/magabot/cache
+  exports_dir: ~/data/magabot/exports
+  downloads_dir: ~/data/magabot/downloads
+
+skills:
+  dir: ~/code/magabot-skills
+  auto_reload: true
 ```
 
 ---
