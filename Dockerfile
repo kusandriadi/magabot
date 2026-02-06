@@ -14,8 +14,11 @@ RUN go mod download
 
 # Build
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build \
-    -ldflags="-s -w -X main.version=$(cat VERSION 2>/dev/null || echo 'docker')" \
+RUN VERSION=$(cat VERSION 2>/dev/null || echo 'docker') && \
+    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') && \
+    BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
+    CGO_ENABLED=1 GOOS=linux go build \
+    -ldflags="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}" \
     -o magabot ./cmd/magabot
 
 # Stage 2: Runtime

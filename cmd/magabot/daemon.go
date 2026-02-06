@@ -20,6 +20,7 @@ import (
 	"github.com/kusa/magabot/internal/router"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/storage"
+	"github.com/kusa/magabot/internal/version"
 )
 
 // runDaemon runs the main bot daemon
@@ -58,7 +59,7 @@ func runDaemon() {
 	}
 	logger := slog.New(logHandler)
 
-	logger.Info("magabot starting", "version", version)
+	logger.Info("magabot starting", "version", version.Short())
 
 	// Initialize vault
 	vault, err := security.NewVault(cfg.Security.EncryptionKey)
@@ -247,7 +248,7 @@ func runDaemon() {
 	}
 
 	logger.Info("magabot started",
-		"version", version,
+		"version", version.Short(),
 		"platforms", rtr.Platforms(),
 		"llm_providers", llmRouter.Providers(),
 	)

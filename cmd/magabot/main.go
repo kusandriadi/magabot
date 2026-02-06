@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-)
 
-var (
-	version   = "0.1.0"
-	buildTime = "dev"
+	"github.com/kusa/magabot/internal/version"
 )
 
 // Default paths (cross-platform)
@@ -66,7 +63,7 @@ func main() {
 	case "uninstall":
 		cmdUninstall()
 	case "version", "-v", "--version":
-		fmt.Printf("magabot %s (built %s)\n", version, buildTime)
+		fmt.Println(version.Info())
 	case "help", "-h", "--help":
 		printUsage()
 	case "genkey":

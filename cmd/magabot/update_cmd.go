@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/updater"
+	"github.com/kusa/magabot/internal/version"
 )
 
 const (
@@ -43,12 +44,12 @@ func cmdUpdate() {
 
 func cmdUpdateCheck() {
 	fmt.Printf("🔍 Checking for updates...\n\n")
-	fmt.Printf("Current version: %s\n", version)
+	fmt.Printf("Current version: %s\n", version.Short())
 
 	u := updater.New(updater.Config{
 		RepoOwner:      repoOwner,
 		RepoName:       repoName,
-		CurrentVersion: version,
+		CurrentVersion: version.Short(),
 		BinaryName:     "magabot",
 	})
 
@@ -74,7 +75,7 @@ func cmdUpdateApply() {
 	u := updater.New(updater.Config{
 		RepoOwner:      repoOwner,
 		RepoName:       repoName,
-		CurrentVersion: version,
+		CurrentVersion: version.Short(),
 		BinaryName:     "magabot",
 	})
 
@@ -92,7 +93,7 @@ func cmdUpdateApply() {
 		return
 	}
 
-	fmt.Printf("\n📦 New version available: %s → %s\n", version, release.TagName)
+	fmt.Printf("\n📦 New version available: %s → %s\n", version.Short(), release.TagName)
 	fmt.Printf("\n📝 Release Notes:\n%s\n", truncateNotes(release.Body, 300))
 
 	// Confirm
@@ -119,7 +120,7 @@ func cmdUpdateApply() {
 	}
 
 	fmt.Println("✅ Update successful!")
-	fmt.Printf("📦 Version: %s → %s\n", version, release.TagName)
+	fmt.Printf("📦 Version: %s → %s\n", version.Short(), release.TagName)
 	fmt.Println("\n💡 Run 'magabot start' to start the new version")
 	fmt.Println("💡 Run 'magabot update rollback' if you encounter issues")
 }
@@ -130,7 +131,7 @@ func cmdUpdateRollback() {
 	u := updater.New(updater.Config{
 		RepoOwner:      repoOwner,
 		RepoName:       repoName,
-		CurrentVersion: version,
+		CurrentVersion: version.Short(),
 		BinaryName:     "magabot",
 	})
 

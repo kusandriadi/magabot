@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	// Version is the semantic version (set via ldflags)
-	Version = "0.1.0"
+	// Version is the semantic version (set via ldflags at build time)
+	Version = "dev"
 
 	// GitCommit is the git commit hash (set via ldflags)
 	GitCommit = "unknown"

@@ -7,7 +7,7 @@ LDFLAGS := -ldflags "-s -w \
 	-X github.com/kusa/magabot/internal/version.Version=$(VERSION) \
 	-X github.com/kusa/magabot/internal/version.GitCommit=$(GIT_COMMIT) \
 	-X github.com/kusa/magabot/internal/version.BuildTime=$(BUILD_TIME)"
-PLATFORMS := linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64
+PLATFORMS := linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
 .PHONY: all build clean test install uninstall release
 
