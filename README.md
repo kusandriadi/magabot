@@ -211,7 +211,7 @@ All tools are **100% free** (no API keys required for basics).
 ### One-liner (Linux/macOS)
 
 ```bash
-curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/master/install.sh | bash
 ```
 
 ### Manual
