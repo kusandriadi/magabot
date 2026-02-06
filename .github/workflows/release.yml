@@ -28,6 +28,12 @@ jobs:
           - goos: darwin
             goarch: arm64
             runner: macos-latest
+          - goos: windows
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: windows
+            goarch: arm64
+            runner: ubuntu-latest
 
     runs-on: ${{ matrix.runner }}
 
@@ -48,16 +54,22 @@ jobs:
           GIT_COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}"
-          go build -ldflags="${LDFLAGS}" -o magabot ./cmd/magabot
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
+          go build -ldflags="${LDFLAGS}" -o magabot${EXT} ./cmd/magabot
 
       - name: Package
         run: |
-          tar -czf magabot_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz magabot
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip magabot_${{ matrix.goos }}_${{ matrix.goarch }}.zip magabot.exe
+          else
+            tar -czf magabot_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz magabot
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: magabot_${{ matrix.goos }}_${{ matrix.goarch }}
-          path: magabot_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          path: magabot_${{ matrix.goos }}_${{ matrix.goarch }}.*
 
   release:
     needs: build
@@ -72,4 +84,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: magabot_*.tar.gz
+          files: |
+            magabot_*.tar.gz
+            magabot_*.zip

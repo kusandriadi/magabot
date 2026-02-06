@@ -43,13 +43,27 @@ platforms:
     hmac_secret: ""
     allowed_ips: []
 
+# Paths - Directory structure
+paths:
+  data_dir: ~/data/magabot           # Base data directory
+  logs_dir: ~/data/magabot/logs      # Log files
+  memory_dir: ~/data/magabot/memory  # RAG/memory storage
+  cache_dir: ~/data/magabot/cache    # Temporary cache
+  exports_dir: ~/data/magabot/exports    # User exports
+  downloads_dir: ~/data/magabot/downloads # Bot downloads
+
+# Skills - Plugin system
+skills:
+  dir: ~/code/magabot-skills  # Skills directory (can be git repo)
+  auto_reload: true           # Watch for changes and reload
+
 # Storage
 storage:
-  database: "data/magabot.db"
+  database: ""  # Default: ~/data/magabot/db/magabot.db
   history_retention: 90  # days, 0 = forever
   backup:
     enabled: true
-    path: "data/backups"
+    path: ""  # Default: ~/data/magabot/backups
     keep_count: 10
     auto_interval: 24  # hours, 0 = disabled
 

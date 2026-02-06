@@ -49,6 +49,12 @@ type Config struct {
 	// Storage settings
 	Storage StorageConfig `yaml:"storage"`
 
+	// Paths settings
+	Paths PathsConfig `yaml:"paths"`
+
+	// Skills settings
+	Skills SkillsConfig `yaml:"skills"`
+
 	// Server settings
 	Server ServerConfig `yaml:"server"`
 
@@ -273,6 +279,22 @@ type StorageConfig struct {
 	Backup   BackupConfig `yaml:"backup"`
 }
 
+// PathsConfig holds directory paths
+type PathsConfig struct {
+	DataDir      string `yaml:"data_dir"`      // Base data directory (default: ~/data/magabot)
+	LogsDir      string `yaml:"logs_dir"`      // Logs directory (default: data_dir/logs)
+	MemoryDir    string `yaml:"memory_dir"`    // Memory/RAG directory (default: data_dir/memory)
+	CacheDir     string `yaml:"cache_dir"`     // Cache directory (default: data_dir/cache)
+	ExportsDir   string `yaml:"exports_dir"`   // Exports directory (default: data_dir/exports)
+	DownloadsDir string `yaml:"downloads_dir"` // Downloads directory (default: data_dir/downloads)
+}
+
+// SkillsConfig holds skills settings
+type SkillsConfig struct {
+	Dir        string `yaml:"dir"`         // Skills directory (default: ~/code/magabot-skills)
+	AutoReload bool   `yaml:"auto_reload"` // Watch for changes and reload (default: true)
+}
+
 // BackupConfig holds backup settings
 type BackupConfig struct {
 	Enabled   bool   `yaml:"enabled"`
@@ -306,6 +328,8 @@ func Load(filePath string) (*Config, error) {
 
 // setDefaults sets default values for missing fields
 func (c *Config) setDefaults() {
+	home, _ := os.UserHomeDir()
+
 	if c.Bot.Prefix == "" {
 		c.Bot.Prefix = "/"
 	}
@@ -315,6 +339,46 @@ func (c *Config) setDefaults() {
 	if c.Version == "" {
 		c.Version = "1"
 	}
+
+	// Paths defaults
+	if c.Paths.DataDir == "" {
+		c.Paths.DataDir = filepath.Join(home, "data", "magabot")
+	}
+	// Expand ~ in paths
+	c.Paths.DataDir = expandPath(c.Paths.DataDir)
+	
+	if c.Paths.LogsDir == "" {
+		c.Paths.LogsDir = filepath.Join(c.Paths.DataDir, "logs")
+	}
+	c.Paths.LogsDir = expandPath(c.Paths.LogsDir)
+	
+	if c.Paths.MemoryDir == "" {
+		c.Paths.MemoryDir = filepath.Join(c.Paths.DataDir, "memory")
+	}
+	c.Paths.MemoryDir = expandPath(c.Paths.MemoryDir)
+	
+	if c.Paths.CacheDir == "" {
+		c.Paths.CacheDir = filepath.Join(c.Paths.DataDir, "cache")
+	}
+	c.Paths.CacheDir = expandPath(c.Paths.CacheDir)
+	
+	if c.Paths.ExportsDir == "" {
+		c.Paths.ExportsDir = filepath.Join(c.Paths.DataDir, "exports")
+	}
+	c.Paths.ExportsDir = expandPath(c.Paths.ExportsDir)
+	
+	if c.Paths.DownloadsDir == "" {
+		c.Paths.DownloadsDir = filepath.Join(c.Paths.DataDir, "downloads")
+	}
+	c.Paths.DownloadsDir = expandPath(c.Paths.DownloadsDir)
+
+	// Skills defaults
+	if c.Skills.Dir == "" {
+		c.Skills.Dir = filepath.Join(home, "code", "magabot-skills")
+	}
+	c.Skills.Dir = expandPath(c.Skills.Dir)
+	// Auto reload enabled by default
+	// (already false by default, set explicitly if needed)
 
 	// Platform defaults
 	if c.Platforms.Telegram != nil {
@@ -332,6 +396,15 @@ func (c *Config) setDefaults() {
 			c.Platforms.Discord.AllowDMs = true
 		}
 	}
+}
+
+// expandPath expands ~ to home directory
+func expandPath(path string) string {
+	if len(path) > 0 && path[0] == '~' {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[1:])
+	}
+	return path
 }
 
 // Save writes config to file
