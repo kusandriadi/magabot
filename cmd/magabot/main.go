@@ -46,6 +46,8 @@ func main() {
 	cmd := os.Args[1]
 
 	switch cmd {
+	case "daemon":
+		runDaemon()
 	case "start":
 		cmdStart()
 	case "stop":

@@ -335,10 +335,3 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 	}
 }
 
-func init() {
-	// Check if running as daemon
-	if len(os.Args) >= 2 && os.Args[1] == "daemon" {
-		runDaemon()
-		os.Exit(0)
-	}
-}
