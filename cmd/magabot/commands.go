@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/kusa/magabot/internal/security"
 )
@@ -30,23 +28,17 @@ func cmdStart() {
 	// Ensure directories
 	ensureDirs()
 
-	// Start daemon
-	cmd := exec.Command(os.Args[0], "daemon")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
-	}
-
-	if err := cmd.Start(); err != nil {
+	// Start daemon (platform-specific)
+	pid, err := startDaemonProcess()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to start: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Save PID
-	os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0600)
+	os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0600)
 
-	fmt.Printf("✅ Magabot started (PID: %d)\n", cmd.Process.Pid)
+	fmt.Printf("✅ Magabot started (PID: %d)\n", pid)
 	fmt.Printf("   Logs: %s\n", logFile)
 }
 
@@ -58,14 +50,7 @@ func cmdStop() {
 		return
 	}
 
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		fmt.Println("⚠️  Magabot is not running")
-		os.Remove(pidFile)
-		return
-	}
-
-	if err := process.Signal(syscall.SIGTERM); err != nil {
+	if err := stopProcess(pid); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to stop: %v\n", err)
 		os.Exit(1)
 	}
@@ -105,18 +90,14 @@ func cmdStatus() {
 	}
 }
 
-// cmdLog shows logs (tail -f)
+// cmdLog shows logs (platform-specific: tail -f on Unix, manual read on Windows)
 func cmdLog() {
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		fmt.Println("❌ No log file found")
 		return
 	}
 
-	// Use tail -f
-	cmd := exec.Command("tail", "-f", logFile)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Run()
+	tailLogFile(logFile)
 }
 
 // cmdSetup runs the setup wizard
@@ -201,20 +182,8 @@ func isRunning() bool {
 	return pid != 0 && processExists(pid)
 }
 
-func processExists(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
-}
-
-func readLastLines(filename string, n int) (string, error) {
-	cmd := exec.Command("tail", fmt.Sprintf("-%d", n), filename)
-	output, err := cmd.Output()
-	return string(output), err
-}
+// processExists, readLastLines, startDaemonProcess, stopProcess, tailLogFile
+// are defined in commands_unix.go and commands_windows.go
 
 func generateConfig(encKey, telegramToken, anthropicKey, openaiKey, telegramUserID string) string {
 	telegramEnabled := "false"

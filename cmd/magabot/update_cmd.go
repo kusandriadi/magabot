@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/kusa/magabot/internal/updater"
@@ -170,10 +169,9 @@ Notes:
 }
 
 func stopIfRunning() {
-	// Check if PID file exists
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
-		return // Not running
+		return
 	}
 
 	var pid int
@@ -181,18 +179,11 @@ func stopIfRunning() {
 		return
 	}
 
-	// Check if process exists
-	process, err := os.FindProcess(pid)
-	if err != nil {
+	// Uses platform-specific stopProcess from commands_unix.go / commands_windows.go
+	if err := stopProcess(pid); err != nil {
 		return
 	}
 
-	// Send SIGTERM
-	if err := process.Signal(syscall.SIGTERM); err != nil {
-		return
-	}
-
-	// Wait a bit for graceful shutdown
 	time.Sleep(2 * time.Second)
 }
 

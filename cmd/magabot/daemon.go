@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/kusa/magabot/internal/backup"
@@ -253,32 +251,18 @@ func runDaemon() {
 		"llm_providers", llmRouter.Providers(),
 	)
 
-	// Wait for shutdown or restart signal
+	// Wait for shutdown or restart signal (platform-specific)
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	registerSignals(sigCh)
 
 	for {
 		sig := <-sigCh
-		
-		if sig == syscall.SIGHUP {
-			// Graceful restart: reload config and restart
-			logger.Info("SIGHUP received, restarting...")
-			rtr.Stop()
-			
-			// Re-exec ourselves
-			executable, _ := os.Executable()
-			args := []string{executable, "daemon"}
-			env := os.Environ()
-			
-			// Use exec to replace the process
-			if err := syscall.Exec(executable, args, env); err != nil {
-				logger.Error("restart failed", "error", err)
-				os.Exit(1)
-			}
-			return
+
+		if handleReloadSignal(sig, rtr, logger) {
+			continue
 		}
-		
-		// SIGINT or SIGTERM - shutdown
+
+		// SIGINT or SIGTERM (or os.Interrupt on Windows) - shutdown
 		break
 	}
 
