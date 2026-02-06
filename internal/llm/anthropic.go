@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -16,12 +17,14 @@ const anthropicAPIURL = "https://api.anthropic.com/v1/messages"
 
 // Anthropic provider
 type Anthropic struct {
-	apiKey      string
-	model       string
-	maxTokens   int
-	temperature float64
-	baseURL     string
-	client      *http.Client
+	apiKey       string
+	model        string
+	maxTokens    int
+	temperature  float64
+	baseURL      string
+	client       *http.Client
+	useOAuth     bool
+	oauthManager *OAuthManager
 }
 
 // AnthropicConfig for Anthropic provider
@@ -31,13 +34,33 @@ type AnthropicConfig struct {
 	MaxTokens   int
 	Temperature float64
 	BaseURL     string
+	UseOAuth    bool // Use Claude CLI OAuth tokens
 }
 
 // NewAnthropic creates a new Anthropic provider
 func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 	apiKey := cfg.APIKey
+	useOAuth := cfg.UseOAuth
+
+	// Try to load from environment
 	if apiKey == "" {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+	}
+
+	// Auto-detect OAuth token format (sk-ant-oat01-* is OAuth)
+	if apiKey != "" && strings.HasPrefix(apiKey, "sk-ant-oat01-") {
+		useOAuth = true
+	}
+
+	// If no API key, try to load from Claude CLI credentials
+	var oauthManager *OAuthManager
+	if apiKey == "" || useOAuth {
+		oauthManager = GetOAuthManager()
+		creds, err := oauthManager.LoadClaudeCliCredentials()
+		if err == nil && creds != nil {
+			apiKey = creds.AccessToken
+			useOAuth = true
+		}
 	}
 
 	baseURL := cfg.BaseURL
@@ -56,12 +79,14 @@ func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 	}
 
 	return &Anthropic{
-		apiKey:      apiKey,
-		model:       model,
-		maxTokens:   maxTokens,
-		temperature: cfg.Temperature,
-		baseURL:     baseURL,
-		client:      &http.Client{Timeout: 120 * time.Second},
+		apiKey:       apiKey,
+		model:        model,
+		maxTokens:    maxTokens,
+		temperature:  cfg.Temperature,
+		baseURL:      baseURL,
+		client:       &http.Client{Timeout: 120 * time.Second},
+		useOAuth:     useOAuth,
+		oauthManager: oauthManager,
 	}
 }
 
@@ -72,12 +97,48 @@ func (a *Anthropic) Name() string {
 
 // Available checks if provider is available
 func (a *Anthropic) Available() bool {
-	return a.apiKey != ""
+	if a.apiKey != "" {
+		return true
+	}
+	// Check if OAuth credentials are available
+	if a.oauthManager != nil && a.oauthManager.HasCredentials("anthropic") {
+		return true
+	}
+	return false
+}
+
+// getAPIKey returns the current API key, refreshing OAuth token if needed
+func (a *Anthropic) getAPIKey() (string, error) {
+	if !a.useOAuth {
+		return a.apiKey, nil
+	}
+
+	if a.oauthManager == nil {
+		return a.apiKey, nil
+	}
+
+	// Get token, auto-refresh if expired
+	token, err := a.oauthManager.GetAccessToken("anthropic")
+	if err != nil {
+		// Fall back to stored key if refresh fails
+		if a.apiKey != "" {
+			return a.apiKey, nil
+		}
+		return "", fmt.Errorf("get OAuth token: %w", err)
+	}
+
+	return token, nil
 }
 
 // Complete sends a completion request
 func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, error) {
 	start := time.Now()
+
+	// Get API key (with OAuth refresh if needed)
+	apiKey, err := a.getAPIKey()
+	if err != nil {
+		return nil, err
+	}
 
 	// Convert messages to Anthropic format
 	var systemPrompt string
@@ -125,7 +186,7 @@ func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, erro
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", a.apiKey)
+	httpReq.Header.Set("x-api-key", apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
 	// Send request
