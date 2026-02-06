@@ -1,0 +1,59 @@
+# Translator Skill
+# Translates text between languages with context awareness
+
+name: translator
+description: Advanced translation with context and formality options
+version: 1.0.0
+author: Magabot
+tags:
+  - language
+  - translation
+  - utility
+
+triggers:
+  # Command triggers
+  commands:
+    - /translate
+    - /tr
+    - /terjemah
+  
+  # Keyword triggers
+  keywords:
+    - translate this
+    - translate to
+    - terjemahkan
+    - in english
+    - in indonesian
+  
+  # Pattern triggers (regex)
+  patterns:
+    - '(?i)translate\s+.+\s+to\s+(english|indonesian|japanese|korean|chinese|spanish|french|german)'
+    - '(?i)terjemahkan\s+.+\s+ke\s+(inggris|indonesia|jepang|korea|cina|spanyol|prancis|jerman)'
+
+actions:
+  type: prompt
+  prompt: |
+    You are a professional translator. The user wants to translate text.
+    
+    Guidelines:
+    1. Detect the source language automatically if not specified
+    2. Maintain the tone and formality of the original text
+    3. Preserve formatting (bullet points, paragraphs)
+    4. For technical terms, provide both translation and original in parentheses
+    5. If the text contains idioms, explain their meaning
+    
+    Format your response:
+    📝 Original: [detected language]
+    🌐 Translation: [target language]
+    
+    [translated text]
+    
+    💡 Notes: [any translation notes, if applicable]
+
+# Additional context for the LLM when this skill is active
+system_prompt: |
+  You are an expert multilingual translator with knowledge of:
+  - Cultural context and nuances
+  - Formal vs informal registers
+  - Technical terminology
+  - Idiomatic expressions

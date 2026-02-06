@@ -1,0 +1,134 @@
+# Magabot Configuration
+# Platform-specific configs: configs/platforms/<name>/config.example.yaml
+# LLM config: configs/llm/config.example.yaml
+
+# Security
+security:
+  # Encryption key (32 bytes, base64) - generate with: ./magabot -genkey
+  encryption_key: ""
+  
+  # Allowed users per platform (empty = allow all for setup)
+  allowed_users:
+    telegram: []
+    # telegram: ["287676843"]
+    whatsapp: []
+    slack: []
+  
+  rate_limit:
+    messages_per_minute: 30
+    commands_per_minute: 10
+
+# Platforms
+platforms:
+  telegram:
+    enabled: true
+    bot_token: ""  # From @BotFather
+    
+  whatsapp:
+    enabled: false
+    
+  slack:
+    enabled: false
+    bot_token: ""   # xoxb-...
+    app_token: ""   # xapp-...
+    signing_secret: ""
+    
+  webhook:
+    enabled: false
+    port: 8080
+    path: "/webhook"
+    bind: "127.0.0.1"
+    auth_method: "bearer"  # none, bearer, basic, hmac
+    bearer_token: ""
+    hmac_secret: ""
+    allowed_ips: []
+
+# Storage
+storage:
+  database: "data/magabot.db"
+  history_retention: 90  # days, 0 = forever
+  backup:
+    enabled: true
+    path: "data/backups"
+    keep_count: 10
+    auto_interval: 24  # hours, 0 = disabled
+
+# Logging
+logging:
+  level: "info"  # debug, info, warn, error
+  file: "data/magabot.log"
+  redact_messages: true
+
+# LLM Configuration
+llm:
+  default: "anthropic"
+  fallback_chain:
+    - "anthropic"
+    - "openai"
+    - "gemini"
+  
+  system_prompt: |
+    Kamu adalah asisten AI yang helpful dan ramah.
+    Jawab dengan singkat dan jelas dalam bahasa Indonesia.
+  
+  max_input_length: 10000
+  timeout: 60
+  rate_limit: 10  # requests per minute per user
+  
+  # Anthropic (Claude)
+  anthropic:
+    enabled: true
+    api_key: ""  # or env: ANTHROPIC_API_KEY
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  # OpenAI (GPT)
+  openai:
+    enabled: false
+    api_key: ""  # or env: OPENAI_API_KEY
+    model: "gpt-4o"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  # Google Gemini
+  gemini:
+    enabled: false
+    api_key: ""  # or env: GOOGLE_API_KEY
+    model: "gemini-1.5-pro"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  # Zhipu GLM (ChatGLM)
+  glm:
+    enabled: false
+    api_key: ""  # or env: GLM_API_KEY
+    model: "glm-4"
+    max_tokens: 4096
+    temperature: 0.7
+    base_url: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+
+# Tools Configuration (100% FREE - no API keys required!)
+tools:
+  # Web Search
+  # Primary: Brave API (if key provided)
+  # Fallback: DuckDuckGo scraping (no key needed)
+  search:
+    enabled: true
+    api_key: ""  # Optional: BRAVE_API_KEY for better results
+  
+  # Maps - Nominatim (OpenStreetMap) - 100% free
+  maps:
+    enabled: true
+    # No API key needed!
+  
+  # Weather - wttr.in - 100% free
+  weather:
+    enabled: true
+    # No API key needed!
+  
+  # Web Scraper - Colly (lightweight browser alternative)
+  scraper:
+    enabled: true
+    # Scrape any website, extract text, links, images
+    # No API key needed!

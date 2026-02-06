@@ -1,0 +1,28 @@
+# Docker ignore file
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build artifacts
+bin/
+*.exe
+
+# Config with secrets
+config.yaml
+platform/*/config.yaml
+
+# Data (mount as volume instead)
+data/
+
+# Docs
+*.md
+!README.md
+
+# Test files
+*_test.go

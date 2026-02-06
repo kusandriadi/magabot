@@ -1,0 +1,69 @@
+# Magabot Docker Compose
+# Usage: docker-compose up -d
+
+version: "3.8"
+
+services:
+  magabot:
+    build: .
+    container_name: magabot
+    restart: unless-stopped
+    
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    
+    # Environment variables (alternative to config file)
+    environment:
+      - TZ=Asia/Jakarta
+      # Secrets via env (optional, config.yaml preferred)
+      # - TELEGRAM_BOT_TOKEN=
+      # - SLACK_BOT_TOKEN=
+      # - ENCRYPTION_KEY=
+    
+    # Volumes
+    volumes:
+      # Data persistence (sessions, database, backups)
+      - ./data:/app/data
+      # Platform configs
+      - ./platform:/app/platform:ro
+      # Main config (optional, can use per-platform configs)
+      - ./config.yaml:/app/config.yaml:ro
+    
+    # Ports (uncomment as needed)
+    ports:
+      # Webhook receiver
+      - "8080:8080"
+      # Telegram webhook (if using webhook mode)
+      # - "8443:8443"
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "pgrep", "magabot"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Networks (optional, for multi-service setups)
+networks:
+  default:
+    name: magabot-net

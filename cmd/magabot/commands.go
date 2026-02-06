@@ -1,0 +1,334 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"github.com/kusa/magabot/internal/security"
+)
+
+// cmdStart starts the magabot daemon
+func cmdStart() {
+	// Check if already running
+	if isRunning() {
+		fmt.Println("⚠️  Magabot is already running")
+		return
+	}
+
+	// Check if config exists
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		fmt.Println("❌ Config not found. Run 'magabot setup' first.")
+		os.Exit(1)
+	}
+
+	// Ensure directories
+	ensureDirs()
+
+	// Start daemon
+	cmd := exec.Command(os.Args[0], "daemon")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid: true,
+	}
+
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to start: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Save PID
+	os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0600)
+
+	fmt.Printf("✅ Magabot started (PID: %d)\n", cmd.Process.Pid)
+	fmt.Printf("   Logs: %s\n", logFile)
+}
+
+// cmdStop stops the magabot daemon
+func cmdStop() {
+	pid := getPID()
+	if pid == 0 {
+		fmt.Println("⚠️  Magabot is not running")
+		return
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		fmt.Println("⚠️  Magabot is not running")
+		os.Remove(pidFile)
+		return
+	}
+
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to stop: %v\n", err)
+		os.Exit(1)
+	}
+
+	os.Remove(pidFile)
+	fmt.Println("✅ Magabot stopped")
+}
+
+// cmdRestart restarts the daemon
+func cmdRestart() {
+	cmdStop()
+	cmdStart()
+}
+
+// cmdStatus shows the daemon status
+func cmdStatus() {
+	pid := getPID()
+
+	if pid == 0 || !processExists(pid) {
+		fmt.Println("🔴 Magabot is NOT running")
+
+		// Check for recent errors in log
+		if content, err := readLastLines(logFile, 5); err == nil && content != "" {
+			fmt.Println("\n📋 Recent log entries:")
+			fmt.Println(content)
+		}
+		return
+	}
+
+	fmt.Printf("🟢 Magabot is running (PID: %d)\n", pid)
+	fmt.Printf("   Config: %s\n", configFile)
+	fmt.Printf("   Logs:   %s\n", logFile)
+
+	// Show some stats
+	if info, err := os.Stat(filepath.Join(dataDir, "magabot.db")); err == nil {
+		fmt.Printf("   DB:     %.2f KB\n", float64(info.Size())/1024)
+	}
+}
+
+// cmdLog shows logs (tail -f)
+func cmdLog() {
+	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+		fmt.Println("❌ No log file found")
+		return
+	}
+
+	// Use tail -f
+	cmd := exec.Command("tail", "-f", logFile)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
+
+// cmdSetup runs the setup wizard
+func cmdSetup() {
+	RunWizard()
+}
+
+// cmdReset resets config to default (keeps platform connections)
+func cmdReset() {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("⚠️  This will reset your config but keep platform sessions. Continue? [y/N]: ")
+	answer, _ := reader.ReadString('\n')
+	if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+		fmt.Println("Reset cancelled.")
+		return
+	}
+
+	// Backup current config
+	if _, err := os.Stat(configFile); err == nil {
+		backupFile := configFile + ".backup"
+		os.Rename(configFile, backupFile)
+		fmt.Printf("📦 Config backed up to: %s\n", backupFile)
+	}
+
+	// Run setup
+	cmdSetup()
+}
+
+// cmdUninstall completely removes magabot
+func cmdUninstall() {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("⚠️  This will completely remove magabot and all data. Continue? [y/N]: ")
+	answer, _ := reader.ReadString('\n')
+	if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+		fmt.Println("Uninstall cancelled.")
+		return
+	}
+
+	// Stop if running
+	cmdStop()
+
+	// Remove config directory
+	if err := os.RemoveAll(configDir); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to remove config: %v\n", err)
+	}
+
+	fmt.Println("✅ Magabot uninstalled")
+	fmt.Println("   To reinstall, run: magabot setup")
+}
+
+// cmdGenKey generates an encryption key
+func cmdGenKey() {
+	key := security.GenerateKey()
+	fmt.Printf("Generated key: %s\n", key)
+	fmt.Println("Add this to your config.yaml under security.encryption_key")
+}
+
+// Helper functions
+
+func ensureDirs() {
+	os.MkdirAll(configDir, 0700)
+	os.MkdirAll(dataDir, 0700)
+	os.MkdirAll(logDir, 0700)
+	os.MkdirAll(filepath.Join(dataDir, "sessions"), 0700)
+	os.MkdirAll(filepath.Join(dataDir, "backups"), 0700)
+}
+
+func getPID() int {
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return 0
+	}
+	return pid
+}
+
+func isRunning() bool {
+	pid := getPID()
+	return pid != 0 && processExists(pid)
+}
+
+func processExists(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+func readLastLines(filename string, n int) (string, error) {
+	cmd := exec.Command("tail", fmt.Sprintf("-%d", n), filename)
+	output, err := cmd.Output()
+	return string(output), err
+}
+
+func generateConfig(encKey, telegramToken, anthropicKey, openaiKey, telegramUserID string) string {
+	telegramEnabled := "false"
+	if telegramToken != "" {
+		telegramEnabled = "true"
+	}
+
+	anthropicEnabled := "false"
+	if anthropicKey != "" {
+		anthropicEnabled = "true"
+	}
+
+	openaiEnabled := "false"
+	if openaiKey != "" {
+		openaiEnabled = "true"
+	}
+
+	allowedUsers := "[]"
+	if telegramUserID != "" {
+		allowedUsers = fmt.Sprintf(`["%s"]`, telegramUserID)
+	}
+
+	defaultLLM := "anthropic"
+	if anthropicKey == "" && openaiKey != "" {
+		defaultLLM = "openai"
+	}
+
+	return fmt.Sprintf(`# Magabot Configuration
+# Generated by setup wizard
+
+security:
+  encryption_key: "%s"
+  allowed_users:
+    telegram: %s
+  rate_limit:
+    messages_per_minute: 30
+    commands_per_minute: 10
+
+platforms:
+  telegram:
+    enabled: %s
+    bot_token: "%s"
+  whatsapp:
+    enabled: false
+  slack:
+    enabled: false
+  webhook:
+    enabled: false
+    port: 8080
+    path: "/webhook"
+    bind: "127.0.0.1"
+    auth_method: "bearer"
+
+storage:
+  database: "%s/magabot.db"
+  history_retention: 90
+  backup:
+    enabled: true
+    path: "%s/backups"
+    keep_count: 10
+
+logging:
+  level: "info"
+  file: "%s"
+  redact_messages: true
+
+llm:
+  default: "%s"
+  fallback_chain: ["anthropic", "openai", "gemini"]
+  system_prompt: |
+    Kamu adalah asisten AI yang helpful dan ramah.
+    Jawab dengan singkat dan jelas.
+  max_input_length: 10000
+  timeout: 60
+  rate_limit: 10
+  
+  anthropic:
+    enabled: %s
+    api_key: "%s"
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  openai:
+    enabled: %s
+    api_key: "%s"
+    model: "gpt-4o"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  gemini:
+    enabled: false
+    api_key: ""
+    model: "gemini-1.5-pro"
+  
+  glm:
+    enabled: false
+    api_key: ""
+    model: "glm-4"
+
+tools:
+  search:
+    enabled: true
+  maps:
+    enabled: true
+  weather:
+    enabled: true
+  scraper:
+    enabled: true
+  browser:
+    enabled: true
+    headless: true
+`, encKey, allowedUsers, telegramEnabled, telegramToken,
+		dataDir, dataDir, logFile, defaultLLM,
+		anthropicEnabled, anthropicKey,
+		openaiEnabled, openaiKey)
+}
