@@ -211,14 +211,14 @@ All tools are **100% free** (no API keys required for basics).
 ### One-liner (Linux/macOS)
 
 ```bash
-curl -sL https://raw.githubusercontent.com/kusa/magabot/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/main/install.sh | bash
 ```
 
 ### Manual
 
 ```bash
 # Download latest release
-wget https://github.com/kusa/magabot/releases/latest/download/magabot_linux_amd64.tar.gz
+wget https://github.com/kusandriadi/magabot/releases/latest/download/magabot_linux_amd64.tar.gz
 
 # Extract and install
 tar -xzf magabot_linux_amd64.tar.gz
@@ -231,7 +231,7 @@ magabot setup
 ### From Source
 
 ```bash
-git clone https://github.com/kusa/magabot.git
+git clone https://github.com/kusandriadi/magabot.git
 cd magabot
 make build
 ./bin/magabot setup
@@ -243,7 +243,7 @@ make build
 docker run -d \
   --name magabot \
   -v ~/.magabot:/root/.magabot \
-  ghcr.io/kusa/magabot:latest
+  ghcr.io/kusandriadi/magabot:latest
 ```
 
 ---

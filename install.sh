@@ -1,10 +1,10 @@
 #!/bin/bash
 # Magabot Installer
-# Usage: curl -sL https://raw.githubusercontent.com/kusa/magabot/main/install.sh | bash
+# Usage: curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/master/install.sh | bash
 
 set -e
 
-REPO="kusa/magabot"
+REPO="kusandriadi/magabot"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="magabot"
 VERSION="${MAGABOT_VERSION:-latest}"
