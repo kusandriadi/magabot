@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,10 +19,24 @@ var (
 	ErrTimeout        = errors.New("request timeout")
 )
 
+// ContentBlock represents a content part (text or image)
+type ContentBlock struct {
+	Type      string `json:"type"`                 // "text" or "image"
+	Text      string `json:"text,omitempty"`        // For text blocks
+	MimeType  string `json:"mime_type,omitempty"`   // For image blocks (e.g. "image/jpeg")
+	ImageData string `json:"image_data,omitempty"`  // Base64-encoded image data
+}
+
 // Message represents a chat message
 type Message struct {
-	Role    string `json:"role"`    // "system", "user", "assistant"
-	Content string `json:"content"`
+	Role    string         `json:"role"`    // "system", "user", "assistant"
+	Content string         `json:"content"`
+	Blocks  []ContentBlock `json:"blocks,omitempty"` // Multi-modal content blocks
+}
+
+// HasBlocks returns true if the message has multi-modal content blocks
+func (m *Message) HasBlocks() bool {
+	return len(m.Blocks) > 0
 }
 
 // Request represents an LLM request
@@ -97,12 +112,38 @@ func NewRouter(cfg *Config) *Router {
 	}
 }
 
+// DetectProvider detects the provider name from a model name
+func DetectProvider(model string) string {
+	model = strings.ToLower(model)
+	prefixes := map[string]string{
+		"claude":   "anthropic",
+		"gpt":     "openai",
+		"o1":      "openai",
+		"o3":      "openai",
+		"gemini":  "gemini",
+		"glm":    "glm",
+		"deepseek": "deepseek",
+	}
+	for prefix, provider := range prefixes {
+		if strings.Contains(model, prefix) {
+			return provider
+		}
+	}
+	return ""
+}
+
 // Register registers a provider
 func (r *Router) Register(p Provider) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.providers[p.Name()] = p
 	r.logger.Info("registered LLM provider", "name", p.Name())
+
+	// Auto-detect default provider if not explicitly set
+	if r.defaultName == "" && p.Available() {
+		r.defaultName = p.Name()
+		r.logger.Info("auto-selected default provider", "name", p.Name())
+	}
 }
 
 // Complete sends a request to the LLM
@@ -168,6 +209,24 @@ func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, 
 		r.logger.Warn("fallback provider failed", "provider", name, "error", err)
 	}
 
+	// Last resort: try any available provider
+	r.mu.RLock()
+	for name, provider := range r.providers {
+		if name == r.defaultName {
+			continue
+		}
+		if provider.Available() {
+			r.mu.RUnlock()
+			resp, err := provider.Complete(ctx, req)
+			if err == nil {
+				r.logger.Info("used available provider", "provider", name)
+				return resp, nil
+			}
+			r.mu.RLock()
+		}
+	}
+	r.mu.RUnlock()
+
 	return nil, ErrNoProvider
 }
 
@@ -195,14 +254,58 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	// Try providers
+	// Try default provider first
 	r.mu.RLock()
-	provider, ok := r.providers[r.defaultName]
+	defaultProvider, ok := r.providers[r.defaultName]
 	r.mu.RUnlock()
 
-	if ok && provider.Available() {
-		return provider.Complete(ctx, req)
+	if ok && defaultProvider.Available() {
+		resp, err := defaultProvider.Complete(ctx, req)
+		if err == nil {
+			return resp, nil
+		}
+		r.logger.Warn("default provider failed", "provider", r.defaultName, "error", err)
 	}
+
+	// Try fallback chain
+	for _, name := range r.fallbackChain {
+		if name == r.defaultName {
+			continue
+		}
+
+		r.mu.RLock()
+		provider, ok := r.providers[name]
+		r.mu.RUnlock()
+
+		if !ok || !provider.Available() {
+			continue
+		}
+
+		resp, err := provider.Complete(ctx, req)
+		if err == nil {
+			r.logger.Info("used fallback provider", "provider", name)
+			return resp, nil
+		}
+		r.logger.Warn("fallback provider failed", "provider", name, "error", err)
+	}
+
+	// Last resort: try any available provider
+	r.mu.RLock()
+	for name, provider := range r.providers {
+		if name == r.defaultName {
+			continue
+		}
+		if provider.Available() {
+			r.mu.RUnlock()
+			resp, err := provider.Complete(ctx, req)
+			if err == nil {
+				r.logger.Info("used available provider", "provider", name)
+				return resp, nil
+			}
+			r.mu.RLock()
+		}
+	}
+	r.mu.RUnlock()
 
 	return nil, ErrNoProvider
 }

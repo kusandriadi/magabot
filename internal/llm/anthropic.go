@@ -149,17 +149,44 @@ func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, erro
 
 	// Convert messages to Anthropic format
 	var systemPrompt string
-	var messages []map[string]string
+	var messages []map[string]interface{}
 
 	for _, m := range req.Messages {
 		if m.Role == "system" {
 			systemPrompt = m.Content
 			continue
 		}
-		messages = append(messages, map[string]string{
-			"role":    m.Role,
-			"content": m.Content,
-		})
+		if m.HasBlocks() {
+			// Multi-modal message with content blocks
+			var content []map[string]interface{}
+			for _, b := range m.Blocks {
+				switch b.Type {
+				case "text":
+					content = append(content, map[string]interface{}{
+						"type": "text",
+						"text": b.Text,
+					})
+				case "image":
+					content = append(content, map[string]interface{}{
+						"type": "image",
+						"source": map[string]interface{}{
+							"type":       "base64",
+							"media_type": b.MimeType,
+							"data":       b.ImageData,
+						},
+					})
+				}
+			}
+			messages = append(messages, map[string]interface{}{
+				"role":    m.Role,
+				"content": content,
+			})
+		} else {
+			messages = append(messages, map[string]interface{}{
+				"role":    m.Role,
+				"content": m.Content,
+			})
+		}
 	}
 
 	// Build request body
@@ -209,8 +236,8 @@ func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, erro
 	}
 	defer resp.Body.Close()
 
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
+	// Read response (limit to 10MB to prevent OOM from malicious server)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

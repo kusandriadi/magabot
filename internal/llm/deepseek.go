@@ -79,11 +79,35 @@ func (d *DeepSeek) Complete(ctx context.Context, req *Request) (*Response, error
 	}
 
 	// Convert messages to DeepSeek format (OpenAI-compatible)
-	dsMessages := make([]map[string]string, len(req.Messages))
+	dsMessages := make([]map[string]interface{}, len(req.Messages))
 	for i, msg := range req.Messages {
-		dsMessages[i] = map[string]string{
-			"role":    msg.Role,
-			"content": msg.Content,
+		if msg.HasBlocks() {
+			var content []map[string]interface{}
+			for _, b := range msg.Blocks {
+				switch b.Type {
+				case "text":
+					content = append(content, map[string]interface{}{
+						"type": "text",
+						"text": b.Text,
+					})
+				case "image":
+					content = append(content, map[string]interface{}{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": "data:" + b.MimeType + ";base64," + b.ImageData,
+						},
+					})
+				}
+			}
+			dsMessages[i] = map[string]interface{}{
+				"role":    msg.Role,
+				"content": content,
+			}
+		} else {
+			dsMessages[i] = map[string]interface{}{
+				"role":    msg.Role,
+				"content": msg.Content,
+			}
 		}
 	}
 
@@ -115,7 +139,7 @@ func (d *DeepSeek) Complete(ctx context.Context, req *Request) (*Response, error
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}

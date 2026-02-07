@@ -239,7 +239,7 @@ func (m *OAuthManager) refreshAnthropicToken(creds *OAuthCredentials) (*OAuthCre
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))
@@ -296,7 +296,7 @@ func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCreden
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))

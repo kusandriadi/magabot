@@ -106,7 +106,7 @@ func listOpenAIModels(ctx context.Context, o *OpenAI) ([]ModelInfo, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API error: %s", string(body))
 	}
@@ -161,7 +161,7 @@ func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API error: %s", string(body))
 	}

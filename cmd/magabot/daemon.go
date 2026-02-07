@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"mime"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/kusa/magabot/internal/platform/whatsapp"
 	"github.com/kusa/magabot/internal/router"
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusa/magabot/internal/session"
 	"github.com/kusa/magabot/internal/storage"
 	"github.com/kusa/magabot/internal/version"
 )
@@ -149,8 +153,20 @@ func runDaemon() {
 		}))
 	}
 
+	// Initialize session manager
+	maxHistory := cfg.Session.MaxHistory
+	if maxHistory <= 0 {
+		maxHistory = 50
+	}
+	sessionMgr := session.NewManager(nil, maxHistory)
+
 	// Initialize message router
 	rtr := router.NewRouter(store, vault, authorizer, rateLimiter, logger)
+
+	// Set session notify function after router is created
+	sessionMgr = session.NewManager(func(platform, chatID, message string) error {
+		return rtr.Send(platform, chatID, message)
+	}, maxHistory)
 
 	// Set message handler with LLM integration
 	rtr.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
@@ -164,11 +180,38 @@ func runDaemon() {
 			return handleCommand(msg, llmRouter, store)
 		}
 
-		// Send to LLM
-		resp, err := llmRouter.Complete(ctx, msg.UserID, msg.Text)
+		// Get or create session for this chat
+		sess := sessionMgr.GetOrCreate(msg.Platform, msg.ChatID, msg.UserID)
+
+		// Build message list from session history
+		history := sessionMgr.GetHistory(sess, maxHistory)
+		messages := make([]llm.Message, 0, len(history)+1)
+		for _, h := range history {
+			messages = append(messages, llm.Message{
+				Role:    h.Role,
+				Content: h.Content,
+			})
+		}
+
+		// Add current user message (with media if present)
+		userMsg := llm.Message{
+			Role:    "user",
+			Content: msg.Text,
+		}
+		if len(msg.Media) > 0 {
+			userMsg.Blocks = buildContentBlocks(msg.Text, msg.Media, logger)
+		}
+		messages = append(messages, userMsg)
+
+		// Send to LLM with full conversation history
+		resp, err := llmRouter.Chat(ctx, msg.UserID, messages)
 		if err != nil {
 			return llm.FormatError(err), nil
 		}
+
+		// Record messages in session
+		sessionMgr.AddMessage(sess, "user", msg.Text)
+		sessionMgr.AddMessage(sess, "assistant", resp.Content)
 
 		logger.Debug("llm response",
 			"provider", resp.Provider,
@@ -185,8 +228,9 @@ func runDaemon() {
 
 	if cfg.Platforms.Telegram.Enabled {
 		tg, err := telegram.New(&telegram.Config{
-			Token:  cfg.Platforms.Telegram.BotToken,
-			Logger: logger.With("platform", "telegram"),
+			Token:        cfg.Platforms.Telegram.BotToken,
+			DownloadsDir: cfg.Paths.DownloadsDir,
+			Logger:       logger.With("platform", "telegram"),
 		})
 		if err != nil {
 			logger.Error("init telegram failed", "error", err)
@@ -210,9 +254,8 @@ func runDaemon() {
 
 	if cfg.Platforms.WhatsApp.Enabled {
 		wa, err := whatsapp.New(&whatsapp.Config{
-			SessionPath: dataDir + "/sessions",
-			Vault:       vault,
-			Logger:      logger.With("platform", "whatsapp"),
+			DBPath: cfg.Platforms.WhatsApp.DBPath,
+			Logger: logger.With("platform", "whatsapp"),
 		})
 		if err != nil {
 			logger.Error("init whatsapp failed", "error", err)
@@ -335,3 +378,37 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 	}
 }
 
+// buildContentBlocks creates multi-modal content blocks from text and media paths
+func buildContentBlocks(text string, mediaPaths []string, logger *slog.Logger) []llm.ContentBlock {
+	var blocks []llm.ContentBlock
+
+	// Add text block if present
+	if text != "" {
+		blocks = append(blocks, llm.ContentBlock{
+			Type: "text",
+			Text: text,
+		})
+	}
+
+	// Add image blocks
+	for _, path := range mediaPaths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			logger.Warn("read media file failed", "path", path, "error", err)
+			continue
+		}
+
+		mimeType := mime.TypeByExtension(filepath.Ext(path))
+		if mimeType == "" {
+			mimeType = "image/jpeg"
+		}
+
+		blocks = append(blocks, llm.ContentBlock{
+			Type:      "image",
+			MimeType:  mimeType,
+			ImageData: base64.StdEncoding.EncodeToString(data),
+		})
+	}
+
+	return blocks
+}

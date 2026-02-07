@@ -1,5 +1,6 @@
 # Binaries
 bin/
+/magabot
 *.exe
 *.exe~
 *.dll

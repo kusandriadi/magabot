@@ -516,7 +516,36 @@ func setupAnthropic() {
 	cfg.LLM.Anthropic.Enabled = true
 	cfg.LLM.Default = "anthropic"
 
+	fmt.Println()
+	fmt.Println("Available models:")
+	anthropicModels := []string{
+		"claude-opus-4-6",
+		"claude-sonnet-4-5-20250929",
+		"claude-haiku-4-5-20251001",
+		"claude-opus-4-20250514",
+		"claude-sonnet-4-20250514",
+		"claude-3-5-sonnet-20241022",
+		"claude-3-5-haiku-20241022",
+	}
+	for i, m := range anthropicModels {
+		fmt.Printf("  %d. %s\n", i+1, m)
+	}
+	fmt.Println()
+
 	model := askString(reader, "Model", "claude-sonnet-4-20250514")
+
+	// Allow numeric selection
+	if idx := parseNumericChoice(model, len(anthropicModels)); idx > 0 {
+		model = anthropicModels[idx-1]
+	}
+
+	// Validate model name (must start with "claude-")
+	if !strings.HasPrefix(model, "claude-") {
+		fmt.Printf("⚠️  '%s' doesn't look like a valid Claude model name\n", model)
+		fmt.Println("   Using default: claude-sonnet-4-20250514")
+		model = "claude-sonnet-4-20250514"
+	}
+
 	cfg.LLM.Anthropic.Model = model
 
 	if err := cfg.Save(); err != nil {

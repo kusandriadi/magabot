@@ -5,6 +5,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -123,7 +125,10 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 	if asset == nil {
 		return fmt.Errorf("no binary found for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
-	
+
+	// Look for a checksums file in the release assets
+	checksumAsset := u.findChecksumAsset(release)
+
 	// Get current executable path
 	execPath, err := os.Executable()
 	if err != nil {
@@ -133,23 +138,33 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve executable path: %w", err)
 	}
-	
-	// Download to temp file
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, "magabot-update")
-	
+
+	// Use a unique temporary directory to prevent TOCTOU race
+	tmpDir, err := os.MkdirTemp("", "magabot-update-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpFile := filepath.Join(tmpDir, "download")
+
 	if err := u.downloadAsset(ctx, asset, tmpFile); err != nil {
 		return fmt.Errorf("failed to download update: %w", err)
 	}
-	
+
+	// Verify checksum if checksums file is available
+	if checksumAsset != nil {
+		if err := u.verifyChecksum(ctx, checksumAsset, asset.Name, tmpFile); err != nil {
+			return fmt.Errorf("checksum verification failed: %w", err)
+		}
+	}
+
 	// If it's a tar.gz, extract it
 	if strings.HasSuffix(asset.Name, ".tar.gz") || strings.HasSuffix(asset.Name, ".tgz") {
 		extractedPath, err := u.extractTarGz(tmpFile, tmpDir)
 		if err != nil {
-			os.Remove(tmpFile)
 			return fmt.Errorf("failed to extract update: %w", err)
 		}
-		os.Remove(tmpFile)
 		tmpFile = extractedPath
 	}
 	
@@ -231,13 +246,14 @@ func (u *Updater) downloadAsset(ctx context.Context, asset *Asset, destPath stri
 		return fmt.Errorf("download failed: %d", resp.StatusCode)
 	}
 	
-	out, err := os.Create(destPath)
+	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	
-	_, err = io.Copy(out, resp.Body)
+
+	// Limit download to 200MB to prevent disk exhaustion
+	_, err = io.Copy(out, io.LimitReader(resp.Body, 200*1024*1024))
 	return err
 }
 
@@ -248,17 +264,17 @@ func (u *Updater) extractTarGz(archivePath, destDir string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-	
+
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return "", err
 	}
 	defer gzr.Close()
-	
+
 	tr := tar.NewReader(gzr)
-	
+
 	var binaryPath string
-	
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -267,30 +283,112 @@ func (u *Updater) extractTarGz(archivePath, destDir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		
-		// Look for the binary
-		if header.Typeflag == tar.TypeReg {
-			name := filepath.Base(header.Name)
-			if name == u.config.BinaryName || name == u.config.BinaryName+".exe" {
-				binaryPath = filepath.Join(destDir, name)
-				outFile, err := os.Create(binaryPath)
-				if err != nil {
-					return "", err
-				}
-				if _, err := io.Copy(outFile, tr); err != nil {
-					outFile.Close()
-					return "", err
-				}
-				outFile.Close()
-			}
+
+		// Only extract regular files
+		if header.Typeflag != tar.TypeReg {
+			continue
 		}
+
+		// Reject path traversal attempts
+		if strings.Contains(header.Name, "..") {
+			return "", fmt.Errorf("invalid tar entry: %s", header.Name)
+		}
+
+		// Only extract the target binary
+		name := filepath.Base(header.Name)
+		if name != u.config.BinaryName && name != u.config.BinaryName+".exe" {
+			continue
+		}
+
+		binaryPath = filepath.Join(destDir, name)
+
+		// Verify destination is still within destDir
+		if !strings.HasPrefix(filepath.Clean(binaryPath), filepath.Clean(destDir)) {
+			return "", fmt.Errorf("path traversal detected: %s", header.Name)
+		}
+
+		outFile, err := os.OpenFile(binaryPath, os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return "", err
+		}
+		// Limit extracted file size to 200MB
+		if _, err := io.Copy(outFile, io.LimitReader(tr, 200*1024*1024)); err != nil {
+			outFile.Close()
+			return "", err
+		}
+		outFile.Close()
 	}
-	
+
 	if binaryPath == "" {
 		return "", fmt.Errorf("binary not found in archive")
 	}
-	
+
 	return binaryPath, nil
+}
+
+// findChecksumAsset looks for a SHA256 checksums file in release assets
+func (u *Updater) findChecksumAsset(release *Release) *Asset {
+	names := []string{"checksums.txt", "SHA256SUMS", "sha256sums.txt"}
+	for _, asset := range release.Assets {
+		for _, name := range names {
+			if strings.EqualFold(asset.Name, name) {
+				return &asset
+			}
+		}
+	}
+	return nil
+}
+
+// verifyChecksum downloads checksums file and verifies the downloaded file
+func (u *Updater) verifyChecksum(ctx context.Context, checksumAsset *Asset, assetName, filePath string) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", checksumAsset.BrowserDownloadURL, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := u.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("download checksums: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	if err != nil {
+		return err
+	}
+
+	// Parse checksums file (format: "hash  filename" per line)
+	var expectedHash string
+	for _, line := range strings.Split(string(body), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[1] == assetName {
+			expectedHash = parts[0]
+			break
+		}
+	}
+
+	if expectedHash == "" {
+		return fmt.Errorf("no checksum found for %s in checksums file", assetName)
+	}
+
+	// Compute SHA-256 of downloaded file
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return err
+	}
+
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+	if actualHash != expectedHash {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+
+	return nil
 }
 
 // Rollback restores the previous version

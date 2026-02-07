@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +138,7 @@ type LarkConfig struct {
 // WhatsAppConfig for WhatsApp platform
 type WhatsAppConfig struct {
 	Enabled      bool     `yaml:"enabled"`
+	DBPath       string   `yaml:"db_path"` // SQLite database for whatsmeow session
 	Admins       []string `yaml:"admins"`
 	AllowedUsers []string `yaml:"allowed_users"`
 	AllowedChats []string `yaml:"allowed_chats"`
@@ -318,12 +321,35 @@ func Load(filePath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	// Expand environment variable references before parsing YAML
+	// Supports $VAR_NAME and ${VAR_NAME} syntax
+	expanded := expandEnvVars(string(data))
+
+	if err := yaml.Unmarshal([]byte(expanded), cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	cfg.setDefaults()
 	return cfg, nil
+}
+
+// envVarPattern matches $VAR_NAME and ${VAR_NAME} patterns
+var envVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+
+// expandEnvVars replaces $VAR and ${VAR} references with environment variable values
+func expandEnvVars(input string) string {
+	return envVarPattern.ReplaceAllStringFunc(input, func(match string) string {
+		var name string
+		if strings.HasPrefix(match, "${") {
+			name = match[2 : len(match)-1]
+		} else {
+			name = match[1:]
+		}
+		if val, ok := os.LookupEnv(name); ok {
+			return val
+		}
+		return match // Keep original if env var not set
+	})
 }
 
 // setDefaults sets default values for missing fields

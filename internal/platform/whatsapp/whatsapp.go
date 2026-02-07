@@ -1,57 +1,69 @@
 // Package whatsapp provides WhatsApp integration via whatsmeow (multi-device)
-// Note: Full implementation requires github.com/tulir/whatsmeow
 package whatsapp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/mdp/qrterminal/v3"
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
+	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/kusa/magabot/internal/router"
-	"github.com/kusa/magabot/internal/security"
 )
 
-// Bot represents a WhatsApp bot
+// Bot represents a WhatsApp bot using whatsmeow
 type Bot struct {
-	sessionPath string
-	vault       *security.Vault
-	handler     router.MessageHandler
-	logger      *slog.Logger
-	connected   bool
-	done        chan struct{}
-	mu          sync.RWMutex
+	client    *whatsmeow.Client
+	container *sqlstore.Container
+	handler   router.MessageHandler
+	logger    *slog.Logger
+	dbPath    string
+	done      chan struct{}
+	mu        sync.RWMutex
+	wg        sync.WaitGroup
 }
 
 // Config for WhatsApp bot
 type Config struct {
-	SessionPath string
-	Vault       *security.Vault
-	Logger      *slog.Logger
-}
-
-// SessionData represents encrypted session data
-type SessionData struct {
-	DeviceID  string `json:"device_id"`
-	Session   string `json:"session"` // Encrypted
-	UpdatedAt string `json:"updated_at"`
+	DBPath string // Path to SQLite database for whatsmeow session
+	Logger *slog.Logger
 }
 
 // New creates a new WhatsApp bot
 func New(cfg *Config) (*Bot, error) {
-	if err := os.MkdirAll(cfg.SessionPath, 0700); err != nil {
-		return nil, fmt.Errorf("create session dir: %w", err)
+	dbPath := cfg.DBPath
+	if dbPath == "" {
+		home, _ := os.UserHomeDir()
+		dbPath = filepath.Join(home, ".magabot", "whatsapp.db")
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
+		return nil, fmt.Errorf("create db dir: %w", err)
+	}
+
+	dbURI := fmt.Sprintf("file:%s?_foreign_keys=on", dbPath)
+	container, err := sqlstore.New(context.Background(), "sqlite3", dbURI, waLog.Noop)
+	if err != nil {
+		return nil, fmt.Errorf("create whatsmeow store: %w", err)
 	}
 
 	return &Bot{
-		sessionPath: cfg.SessionPath,
-		vault:       cfg.Vault,
-		logger:      cfg.Logger,
-		done:        make(chan struct{}),
+		container: container,
+		logger:    cfg.Logger,
+		dbPath:    dbPath,
+		done:      make(chan struct{}),
 	}, nil
 }
 
@@ -62,58 +74,91 @@ func (b *Bot) Name() string {
 
 // Start starts the WhatsApp client
 func (b *Bot) Start(ctx context.Context) error {
-	sessionFile := filepath.Join(b.sessionPath, "whatsapp_session.json")
-	
-	if _, err := os.Stat(sessionFile); os.IsNotExist(err) {
-		b.logger.Info("no WhatsApp session found")
-		b.logger.Info("run 'magabot whatsapp login' to scan QR code")
-		return nil
-	}
-
-	data, err := os.ReadFile(sessionFile)
+	deviceStore, err := b.container.GetFirstDevice(ctx)
 	if err != nil {
-		return fmt.Errorf("read session: %w", err)
+		return fmt.Errorf("get device: %w", err)
 	}
 
-	var session SessionData
-	if err := json.Unmarshal(data, &session); err != nil {
-		return fmt.Errorf("parse session: %w", err)
-	}
+	client := whatsmeow.NewClient(deviceStore, waLog.Noop)
+	client.AddEventHandler(b.eventHandler)
+	client.EnableAutoReconnect = true
 
-	if b.vault != nil {
-		decrypted, err := b.vault.Decrypt(session.Session)
+	b.mu.Lock()
+	b.client = client
+	b.mu.Unlock()
+
+	if client.Store.ID == nil {
+		// New device — need QR code pairing
+		qrChan, err := client.GetQRChannel(ctx)
 		if err != nil {
-			return fmt.Errorf("decrypt session: %w", err)
+			return fmt.Errorf("get QR channel: %w", err)
 		}
-		session.Session = string(decrypted)
+
+		if err := client.Connect(); err != nil {
+			return fmt.Errorf("connect: %w", err)
+		}
+
+		b.wg.Add(1)
+		go func() {
+			defer b.wg.Done()
+			for evt := range qrChan {
+				switch evt.Event {
+				case "code":
+					b.logger.Info("scan QR code to link WhatsApp device")
+					qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stderr)
+				case "success":
+					b.logger.Info("WhatsApp pairing successful")
+				case "timeout":
+					b.logger.Warn("QR code expired, reconnect to get a new one")
+				}
+			}
+		}()
+	} else {
+		// Already paired
+		if err := client.Connect(); err != nil {
+			return fmt.Errorf("connect: %w", err)
+		}
 	}
 
-	// TODO: Initialize whatsmeow client with session
-	b.logger.Info("WhatsApp session loaded", "device_id", session.DeviceID)
-	b.connected = true
-
+	b.logger.Info("whatsapp client started", "db", b.dbPath)
 	return nil
 }
 
 // Stop stops the WhatsApp client
 func (b *Bot) Stop() error {
 	close(b.done)
+
+	b.mu.RLock()
+	client := b.client
+	b.mu.RUnlock()
+
+	if client != nil {
+		client.Disconnect()
+	}
+
+	b.wg.Wait()
 	return nil
 }
 
-// Send sends a message
+// Send sends a text message to a WhatsApp chat
 func (b *Bot) Send(chatID, message string) error {
 	b.mu.RLock()
-	connected := b.connected
+	client := b.client
 	b.mu.RUnlock()
 
-	if !connected {
+	if client == nil || !client.IsConnected() {
 		return fmt.Errorf("WhatsApp not connected")
 	}
 
-	// TODO: Send via whatsmeow
-	b.logger.Info("send message", "chat_id", chatID, "length", len(message))
-	return nil
+	jid, err := types.ParseJID(chatID)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID %q: %w", chatID, err)
+	}
+
+	_, err = client.SendMessage(context.Background(), jid, &waE2E.Message{
+		Conversation: proto.String(message),
+	})
+	return err
 }
 
 // SetHandler sets the message handler
@@ -121,46 +166,137 @@ func (b *Bot) SetHandler(h router.MessageHandler) {
 	b.handler = h
 }
 
-// SaveSession saves encrypted session data
-func (b *Bot) SaveSession(deviceID, sessionData string) error {
-	var encryptedSession string
-	if b.vault != nil {
-		var err error
-		encryptedSession, err = b.vault.Encrypt([]byte(sessionData))
-		if err != nil {
-			return fmt.Errorf("encrypt session: %w", err)
-		}
-	} else {
-		encryptedSession = sessionData
-	}
-
-	session := SessionData{
-		DeviceID:  deviceID,
-		Session:   encryptedSession,
-		UpdatedAt: time.Now().Format(time.RFC3339),
-	}
-
-	data, err := json.MarshalIndent(session, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	sessionFile := filepath.Join(b.sessionPath, "whatsapp_session.json")
-	return os.WriteFile(sessionFile, data, 0600)
-}
-
-// ClearSession removes the session file
-func (b *Bot) ClearSession() error {
-	sessionFile := filepath.Join(b.sessionPath, "whatsapp_session.json")
-	if err := os.Remove(sessionFile); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
-}
-
 // IsConnected returns connection status
 func (b *Bot) IsConnected() bool {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.connected
+	client := b.client
+	b.mu.RUnlock()
+	return client != nil && client.IsConnected()
+}
+
+// eventHandler dispatches whatsmeow events
+func (b *Bot) eventHandler(evt interface{}) {
+	switch v := evt.(type) {
+	case *events.Message:
+		b.handleMessage(v)
+	case *events.Connected:
+		b.logger.Info("connected to WhatsApp")
+	case *events.Disconnected:
+		b.logger.Info("disconnected from WhatsApp (auto-reconnect enabled)")
+	case *events.LoggedOut:
+		b.logger.Warn("logged out from WhatsApp — re-run setup to pair again")
+	}
+}
+
+// handleMessage processes an incoming WhatsApp message
+func (b *Bot) handleMessage(evt *events.Message) {
+	if b.handler == nil {
+		return
+	}
+
+	// Skip own messages
+	if evt.Info.IsFromMe {
+		return
+	}
+
+	// Skip status broadcasts
+	if evt.Info.Chat.Server == "broadcast" {
+		return
+	}
+
+	content := extractContent(evt)
+	if content == "" {
+		return
+	}
+
+	chatID := evt.Info.Chat.String()
+	userID := evt.Info.Sender.String()
+
+	msg := &router.Message{
+		Platform:  "whatsapp",
+		ChatID:    chatID,
+		UserID:    userID,
+		Username:  evt.Info.PushName,
+		Text:      content,
+		Timestamp: evt.Info.Timestamp,
+	}
+
+	ctx := context.Background()
+	response, err := b.handler(ctx, msg)
+	if err != nil {
+		b.logger.Debug("handler error", "error", err)
+		return
+	}
+
+	if response == "" {
+		return
+	}
+
+	if err := b.Send(chatID, response); err != nil {
+		b.logger.Error("send reply failed", "error", err)
+	}
+}
+
+// extractContent extracts text content from a WhatsApp message
+func extractContent(evt *events.Message) string {
+	msg := evt.Message
+	if msg == nil {
+		return ""
+	}
+
+	// Text message
+	if msg.GetConversation() != "" {
+		return msg.GetConversation()
+	}
+
+	// Extended text (reply, link preview)
+	if ext := msg.GetExtendedTextMessage(); ext != nil && ext.GetText() != "" {
+		return ext.GetText()
+	}
+
+	// Image with caption
+	if img := msg.GetImageMessage(); img != nil {
+		if caption := img.GetCaption(); caption != "" {
+			return "[Image] " + caption
+		}
+		return "[Image]"
+	}
+
+	// Video with caption
+	if vid := msg.GetVideoMessage(); vid != nil {
+		if caption := vid.GetCaption(); caption != "" {
+			return "[Video] " + caption
+		}
+		return "[Video]"
+	}
+
+	// Document with caption
+	if doc := msg.GetDocumentMessage(); doc != nil {
+		if caption := doc.GetCaption(); caption != "" {
+			return "[Document] " + caption
+		}
+		return "[Document]"
+	}
+
+	// Voice/Audio message
+	if msg.GetAudioMessage() != nil {
+		return "[Voice Message]"
+	}
+
+	// Sticker
+	if msg.GetStickerMessage() != nil {
+		return "[Sticker]"
+	}
+
+	// Location
+	if loc := msg.GetLocationMessage(); loc != nil {
+		return fmt.Sprintf("[Location: %.6f, %.6f]", loc.GetDegreesLatitude(), loc.GetDegreesLongitude())
+	}
+
+	// Contact
+	if msg.GetContactMessage() != nil {
+		return "[Contact]"
+	}
+
+	return ""
 }

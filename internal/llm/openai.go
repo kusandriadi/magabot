@@ -80,12 +80,37 @@ func (o *OpenAI) Complete(ctx context.Context, req *Request) (*Response, error) 
 	start := time.Now()
 
 	// Convert messages to OpenAI format
-	var messages []map[string]string
+	var messages []map[string]interface{}
 	for _, m := range req.Messages {
-		messages = append(messages, map[string]string{
-			"role":    m.Role,
-			"content": m.Content,
-		})
+		if m.HasBlocks() {
+			// Multi-modal message
+			var content []map[string]interface{}
+			for _, b := range m.Blocks {
+				switch b.Type {
+				case "text":
+					content = append(content, map[string]interface{}{
+						"type": "text",
+						"text": b.Text,
+					})
+				case "image":
+					content = append(content, map[string]interface{}{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": "data:" + b.MimeType + ";base64," + b.ImageData,
+						},
+					})
+				}
+			}
+			messages = append(messages, map[string]interface{}{
+				"role":    m.Role,
+				"content": content,
+			})
+		} else {
+			messages = append(messages, map[string]interface{}{
+				"role":    m.Role,
+				"content": m.Content,
+			})
+		}
 	}
 
 	// Build request body
@@ -124,8 +149,8 @@ func (o *OpenAI) Complete(ctx context.Context, req *Request) (*Response, error) 
 	}
 	defer resp.Body.Close()
 
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
+	// Read response (limit to 10MB to prevent OOM)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

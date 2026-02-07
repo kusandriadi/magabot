@@ -415,6 +415,15 @@ func askInt(reader *bufio.Reader, prompt string, defaultVal int) int {
 	return val
 }
 
+// parseNumericChoice converts "1", "2", etc. to an int if within range, else 0
+func parseNumericChoice(input string, max int) int {
+	val, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil || val < 1 || val > max {
+		return 0
+	}
+	return val
+}
+
 func generateWizardConfig(state *WizardState) string {
 	// Build allowed users
 	allowedUsers := "[]"

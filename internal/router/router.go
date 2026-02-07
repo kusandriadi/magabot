@@ -37,6 +37,7 @@ type Message struct {
 	UserID    string
 	Username  string
 	Text      string
+	Media     []string    // File paths for images/voice/documents
 	Timestamp time.Time
 	Raw       interface{} // Platform-specific raw message
 }

@@ -89,12 +89,36 @@ func (g *Gemini) Complete(ctx context.Context, req *Request) (*Response, error) 
 			role = "model"
 		}
 
-		contents = append(contents, map[string]interface{}{
-			"role": role,
-			"parts": []map[string]string{
-				{"text": m.Content},
-			},
-		})
+		if m.HasBlocks() {
+			// Multi-modal message
+			var parts []map[string]interface{}
+			for _, b := range m.Blocks {
+				switch b.Type {
+				case "text":
+					parts = append(parts, map[string]interface{}{
+						"text": b.Text,
+					})
+				case "image":
+					parts = append(parts, map[string]interface{}{
+						"inlineData": map[string]string{
+							"mimeType": b.MimeType,
+							"data":     b.ImageData,
+						},
+					})
+				}
+			}
+			contents = append(contents, map[string]interface{}{
+				"role":  role,
+				"parts": parts,
+			})
+		} else {
+			contents = append(contents, map[string]interface{}{
+				"role": role,
+				"parts": []map[string]string{
+					{"text": m.Content},
+				},
+			})
+		}
 	}
 
 	// Build request body
@@ -141,8 +165,8 @@ func (g *Gemini) Complete(ctx context.Context, req *Request) (*Response, error) 
 	}
 	defer resp.Body.Close()
 
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
+	// Read response (limit to 10MB to prevent OOM)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
