@@ -772,56 +772,7 @@ func saveSecret(key, value string) {
 	}
 }
 
-func askString(reader *bufio.Reader, prompt, defaultVal string) string {
-	if defaultVal != "" {
-		fmt.Printf("%s [%s]: ", prompt, defaultVal)
-	} else {
-		fmt.Printf("%s: ", prompt)
-	}
-
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input == "" {
-		return defaultVal
-	}
-	return input
-}
-
-func askInt(reader *bufio.Reader, prompt string, defaultVal int) int {
-	fmt.Printf("%s [%d]: ", prompt, defaultVal)
-
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input == "" {
-		return defaultVal
-	}
-
-	val, err := strconv.Atoi(input)
-	if err != nil {
-		return defaultVal
-	}
-	return val
-}
-
-func askYesNo(reader *bufio.Reader, prompt string, defaultVal bool) bool {
-	defaultStr := "y/N"
-	if defaultVal {
-		defaultStr = "Y/n"
-	}
-
-	fmt.Printf("%s [%s]: ", prompt, defaultStr)
-
-	input, _ := reader.ReadString('\n')
-	input = strings.ToLower(strings.TrimSpace(input))
-
-	if input == "" {
-		return defaultVal
-	}
-
-	return input == "y" || input == "yes"
-}
+// askString, askInt, askYesNo are defined in wizard.go
 
 func askRestart(reader *bufio.Reader) {
 	fmt.Println()

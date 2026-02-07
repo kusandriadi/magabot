@@ -100,10 +100,7 @@ func cmdLog() {
 	tailLogFile(logFile)
 }
 
-// cmdSetup runs the setup wizard
-func cmdSetup() {
-	RunWizard()
-}
+// cmdSetup is defined in setup_cmd.go
 
 // cmdReset resets config to default (keeps platform connections)
 func cmdReset() {
