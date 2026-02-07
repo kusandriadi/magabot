@@ -5,10 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
@@ -844,12 +842,9 @@ func restartDaemon() {
 
 	pid := getPID()
 	if pid > 0 {
-		// Send SIGHUP for graceful reload
-		if proc, err := os.FindProcess(pid); err == nil {
-			proc.Signal(syscall.SIGHUP)
+		// Try graceful reload first (platform-specific)
+		if signalReload(pid) {
 			time.Sleep(2 * time.Second)
-
-			// Check if still running
 			if processExists(pid) {
 				fmt.Println("✅ Configuration reloaded")
 				return
@@ -877,14 +872,7 @@ func isRunning() bool {
 	return pid > 0 && processExists(pid)
 }
 
-func processExists(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil
-}
+// processExists is defined in platform-specific files (setup_unix.go, setup_windows.go)
 
 func getPID() int {
 	data, err := os.ReadFile(pidFile)
