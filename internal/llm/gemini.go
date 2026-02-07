@@ -35,12 +35,15 @@ type GeminiConfig struct {
 func NewGemini(cfg *GeminiConfig) *Gemini {
 	apiKey := cfg.APIKey
 	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if apiKey == "" {
 		apiKey = os.Getenv("GOOGLE_API_KEY")
 	}
 
 	model := cfg.Model
 	if model == "" {
-		model = "gemini-1.5-pro"
+		model = "gemini-2.0-flash"
 	}
 
 	maxTokens := cfg.MaxTokens

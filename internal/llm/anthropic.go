@@ -47,8 +47,11 @@ func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
 
-	// Auto-detect OAuth token format (sk-ant-oat01-* is OAuth)
-	if apiKey != "" && strings.HasPrefix(apiKey, "sk-ant-oat01-") {
+	// Auto-detect token format:
+	// sk-ant-api* = standard API key
+	// sk-ant-oat01-* = OAuth token
+	// anything else (setup tokens, etc.) = treat as OAuth/Bearer token
+	if apiKey != "" && !strings.HasPrefix(apiKey, "sk-ant-api") {
 		useOAuth = true
 	}
 
@@ -186,8 +189,14 @@ func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, erro
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
+
+	if a.useOAuth {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+		httpReq.Header.Set("anthropic-beta", "oauth-2025-04-20")
+	} else {
+		httpReq.Header.Set("x-api-key", apiKey)
+	}
 
 	// Send request
 	resp, err := a.client.Do(httpReq)

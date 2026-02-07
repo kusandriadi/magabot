@@ -73,16 +73,16 @@ func (r *Router) ListAllModels(ctx context.Context) map[string][]ModelInfo {
 	return result
 }
 
-// Anthropic models (hardcoded - no list API)
+// Anthropic models (hardcoded)
 func listAnthropicModels() []ModelInfo {
 	return []ModelInfo{
+		{ID: "claude-opus-4-6", Name: "Claude Opus 4.6", Provider: "anthropic", MaxTokens: 16384},
+		{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: "anthropic", MaxTokens: 16384},
+		{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: "anthropic", MaxTokens: 8192},
 		{ID: "claude-opus-4-20250514", Name: "Claude Opus 4", Provider: "anthropic", MaxTokens: 8192},
 		{ID: "claude-sonnet-4-20250514", Name: "Claude Sonnet 4", Provider: "anthropic", MaxTokens: 8192},
 		{ID: "claude-3-5-sonnet-20241022", Name: "Claude 3.5 Sonnet", Provider: "anthropic", MaxTokens: 8192},
 		{ID: "claude-3-5-haiku-20241022", Name: "Claude 3.5 Haiku", Provider: "anthropic", MaxTokens: 8192},
-		{ID: "claude-3-opus-20240229", Name: "Claude 3 Opus", Provider: "anthropic", MaxTokens: 4096},
-		{ID: "claude-3-sonnet-20240229", Name: "Claude 3 Sonnet", Provider: "anthropic", MaxTokens: 4096},
-		{ID: "claude-3-haiku-20240307", Name: "Claude 3 Haiku", Provider: "anthropic", MaxTokens: 4096},
 	}
 }
 
@@ -146,12 +146,13 @@ func listOpenAIModels(ctx context.Context, o *OpenAI) ([]ModelInfo, error) {
 
 // Gemini models via API
 func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", g.apiKey)
+	url := "https://generativelanguage.googleapis.com/v1beta/models"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("x-goog-api-key", g.apiKey)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -202,14 +203,12 @@ func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) {
 func listGLMModels(ctx context.Context, g *GLM) ([]ModelInfo, error) {
 	// GLM doesn't have a public models endpoint, return known models
 	return []ModelInfo{
-		{ID: "glm-4-plus", Name: "GLM-4 Plus", Provider: "glm", Description: "Most capable"},
-		{ID: "glm-4", Name: "GLM-4", Provider: "glm", Description: "Balanced"},
-		{ID: "glm-4-air", Name: "GLM-4 Air", Provider: "glm", Description: "Fast"},
-		{ID: "glm-4-airx", Name: "GLM-4 AirX", Provider: "glm", Description: "Fastest"},
-		{ID: "glm-4-flash", Name: "GLM-4 Flash", Provider: "glm", Description: "Free tier"},
+		{ID: "glm-4.7", Name: "GLM-4.7", Provider: "glm", Description: "Latest, most capable"},
+		{ID: "glm-4.6", Name: "GLM-4.6", Provider: "glm", Description: "Previous generation"},
+		{ID: "glm-4.5", Name: "GLM-4.5", Provider: "glm", Description: "Stable"},
+		{ID: "glm-4-plus", Name: "GLM-4 Plus", Provider: "glm", Description: "Most capable (legacy)"},
+		{ID: "glm-4-flash", Name: "GLM-4 Flash", Provider: "glm", Description: "Fast, free tier"},
 		{ID: "glm-4-long", Name: "GLM-4 Long", Provider: "glm", Description: "Long context"},
-		{ID: "glm-4v", Name: "GLM-4V", Provider: "glm", Description: "Vision"},
-		{ID: "glm-4v-plus", Name: "GLM-4V Plus", Provider: "glm", Description: "Vision+"},
 	}, nil
 }
 

@@ -37,6 +37,9 @@ type GLMConfig struct {
 func NewGLM(cfg *GLMConfig) *GLM {
 	apiKey := cfg.APIKey
 	if apiKey == "" {
+		apiKey = os.Getenv("ZAI_API_KEY")
+	}
+	if apiKey == "" {
 		apiKey = os.Getenv("GLM_API_KEY")
 	}
 
@@ -47,7 +50,7 @@ func NewGLM(cfg *GLMConfig) *GLM {
 
 	model := cfg.Model
 	if model == "" {
-		model = "glm-4"
+		model = "glm-4.7"
 	}
 
 	maxTokens := cfg.MaxTokens

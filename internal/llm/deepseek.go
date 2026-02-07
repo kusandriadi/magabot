@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -32,6 +33,9 @@ type DeepSeek struct {
 
 // NewDeepSeek creates a new DeepSeek provider
 func NewDeepSeek(config *DeepSeekConfig) *DeepSeek {
+	if config.APIKey == "" {
+		config.APIKey = os.Getenv("DEEPSEEK_API_KEY")
+	}
 	if config.Model == "" {
 		config.Model = "deepseek-chat"
 	}
