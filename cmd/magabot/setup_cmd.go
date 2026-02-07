@@ -867,21 +867,4 @@ func addUnique(slice []string, item string) []string {
 	return append(slice, item)
 }
 
-func isRunning() bool {
-	pid := getPID()
-	return pid > 0 && processExists(pid)
-}
-
-// processExists is defined in platform-specific files (setup_unix.go, setup_windows.go)
-
-func getPID() int {
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		return 0
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		return 0
-	}
-	return pid
-}
+// isRunning, processExists, getPID are defined in commands.go / commands_unix.go / commands_windows.go
