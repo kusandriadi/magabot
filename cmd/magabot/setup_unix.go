@@ -17,12 +17,4 @@ func signalReload(pid int) bool {
 	return err == nil
 }
 
-// processExists checks if a process is running
-func processExists(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil
-}
+// processExists is defined in commands_unix.go
