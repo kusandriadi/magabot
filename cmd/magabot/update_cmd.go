@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	repoOwner = "kusa"
+	repoOwner = "kusandriadi"
 	repoName  = "magabot"
 )
 

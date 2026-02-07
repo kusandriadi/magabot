@@ -18,7 +18,7 @@ import (
 
 // Config holds updater configuration
 type Config struct {
-	RepoOwner    string // GitHub owner (e.g., "kusa")
+	RepoOwner    string // GitHub owner (e.g., "kusandriadi")
 	RepoName     string // GitHub repo (e.g., "magabot")
 	CurrentVersion string
 	BinaryName   string
@@ -326,10 +326,44 @@ func isNewerVersion(current, latest string) bool {
 	// Strip 'v' prefix
 	current = strings.TrimPrefix(current, "v")
 	latest = strings.TrimPrefix(latest, "v")
-	
-	// Simple string comparison works for semver
-	// For proper comparison, use a semver library
-	return latest > current
+
+	// "dev" is always older than any release
+	if current == "dev" || current == "unknown" {
+		return latest != "dev" && latest != "unknown"
+	}
+	if latest == "dev" || latest == "unknown" {
+		return false
+	}
+
+	cParts := parseVersion(current)
+	lParts := parseVersion(latest)
+
+	for i := 0; i < 3; i++ {
+		if lParts[i] > cParts[i] {
+			return true
+		}
+		if lParts[i] < cParts[i] {
+			return false
+		}
+	}
+	return false
+}
+
+// parseVersion splits "1.2.3" into [1, 2, 3]
+func parseVersion(v string) [3]int {
+	var parts [3]int
+	segments := strings.SplitN(v, ".", 3)
+	for i, s := range segments {
+		if i >= 3 {
+			break
+		}
+		// Strip any pre-release suffix (e.g. "3-beta")
+		if idx := strings.IndexAny(s, "-+"); idx >= 0 {
+			s = s[:idx]
+		}
+		fmt.Sscanf(s, "%d", &parts[i])
+	}
+	return parts
 }
 
 // FormatReleaseInfo formats release info for display

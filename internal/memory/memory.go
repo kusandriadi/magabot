@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Memory represents a single memory entry
@@ -37,7 +39,11 @@ type Store struct {
 
 // NewStore creates a new memory store for a user
 func NewStore(dataDir, userID string) (*Store, error) {
-	filePath := filepath.Join(dataDir, "memory", fmt.Sprintf("%s.json", userID))
+	safeID := util.SanitizeFilename(userID)
+	if safeID == "" {
+		return nil, fmt.Errorf("invalid user ID")
+	}
+	filePath := filepath.Join(dataDir, "memory", fmt.Sprintf("%s.json", safeID))
 	
 	store := &Store{
 		memories: make(map[string]*Memory),

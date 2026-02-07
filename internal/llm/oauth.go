@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -61,6 +63,24 @@ func NewOAuthManager() *OAuthManager {
 	}
 }
 
+// checkFilePermissions warns if a credential file is world-readable
+func checkFilePermissions(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	mode := info.Mode().Perm()
+	// Reject if group or others have any access (should be 0600 or stricter)
+	if mode&0077 != 0 {
+		log.Printf("[SECURITY] WARNING: credential file %s has unsafe permissions %o, expected 0600", path, mode)
+		return fmt.Errorf("credential file %s has unsafe permissions %o (should be 0600)", path, mode)
+	}
+	return nil
+}
+
 // LoadClaudeCliCredentials loads credentials from ~/.claude/.credentials.json
 func (m *OAuthManager) LoadClaudeCliCredentials() (*OAuthCredentials, error) {
 	home, err := os.UserHomeDir()
@@ -69,6 +89,11 @@ func (m *OAuthManager) LoadClaudeCliCredentials() (*OAuthCredentials, error) {
 	}
 
 	credPath := filepath.Join(home, ".claude", ".credentials.json")
+
+	if err := checkFilePermissions(credPath); err != nil {
+		return nil, fmt.Errorf("credential file security check failed: %w", err)
+	}
+
 	data, err := os.ReadFile(credPath)
 	if err != nil {
 		return nil, fmt.Errorf("read claude credentials: %w", err)
@@ -111,6 +136,11 @@ func (m *OAuthManager) LoadCodexCliCredentials() (*OAuthCredentials, error) {
 	}
 
 	credPath := filepath.Join(codexHome, "auth.json")
+
+	if err := checkFilePermissions(credPath); err != nil {
+		return nil, fmt.Errorf("credential file security check failed: %w", err)
+	}
+
 	data, err := os.ReadFile(credPath)
 	if err != nil {
 		return nil, fmt.Errorf("read codex credentials: %w", err)

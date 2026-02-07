@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kusa/magabot/internal/security"
 )
 
 // NotifierConfig holds notification channel credentials
@@ -188,6 +189,11 @@ func (n *Notifier) sendDiscord(ctx context.Context, target, message string) erro
 
 // sendDiscordWebhook sends via Discord webhook
 func (n *Notifier) sendDiscordWebhook(ctx context.Context, webhookURL, message string) error {
+	// SSRF prevention - validate URL is safe to fetch
+	if err := security.ValidateURL(webhookURL); err != nil {
+		return fmt.Errorf("blocked webhook URL: %w", err)
+	}
+
 	payload := map[string]interface{}{
 		"content": message,
 	}
@@ -322,16 +328,16 @@ func (n *Notifier) getLarkToken(ctx context.Context) (string, error) {
 
 // sendWebhook sends a POST request to a custom webhook
 func (n *Notifier) sendWebhook(ctx context.Context, webhookURL, message string) error {
-	// Validate URL
-	if _, err := url.Parse(webhookURL); err != nil {
-		return fmt.Errorf("invalid webhook URL: %w", err)
+	// SSRF prevention - validate URL is safe to fetch
+	if err := security.ValidateURL(webhookURL); err != nil {
+		return fmt.Errorf("blocked webhook URL: %w", err)
 	}
-	
+
 	payload := map[string]interface{}{
 		"message":   message,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
-	
+
 	return n.postJSON(ctx, webhookURL, payload)
 }
 

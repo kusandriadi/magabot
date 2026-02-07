@@ -264,10 +264,41 @@ func (b *Browser) typeText(ctx context.Context, targetURL, selector, value strin
 	return fmt.Sprintf("✅ Typed into element: %s", selector), nil
 }
 
+// blockedJSPatterns are dangerous JavaScript patterns that could be abused
+var blockedJSPatterns = []string{
+	"fetch(",
+	"XMLHttpRequest",
+	"document.cookie",
+	"localStorage",
+	"sessionStorage",
+	"window.open(",
+	"eval(",
+	"Function(",
+	"importScripts",
+	"navigator.sendBeacon",
+	"WebSocket(",
+	"EventSource(",
+	"window.location",
+	"document.location",
+	"location.href",
+	"location.assign",
+	"location.replace",
+	"postMessage(",
+	"crypto.subtle",
+}
+
 // evaluate runs JavaScript on the page
 func (b *Browser) evaluate(ctx context.Context, targetURL, script string) (string, error) {
 	if script == "" {
 		return "", fmt.Errorf("script required for eval action")
+	}
+
+	// Block dangerous JS patterns
+	scriptLower := strings.ToLower(script)
+	for _, pattern := range blockedJSPatterns {
+		if strings.Contains(scriptLower, strings.ToLower(pattern)) {
+			return "", fmt.Errorf("blocked: script contains disallowed pattern %q", pattern)
+		}
 	}
 
 	page := b.browser.MustPage(targetURL)

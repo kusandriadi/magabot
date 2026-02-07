@@ -119,8 +119,8 @@ func (g *Gemini) Complete(ctx context.Context, req *Request) (*Response, error) 
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	// Build URL
-	url := fmt.Sprintf("%s/%s:generateContent?key=%s", geminiAPIURL, g.model, g.apiKey)
+	// Build URL (API key sent via header, not query parameter, to avoid leaking in logs)
+	url := fmt.Sprintf("%s/%s:generateContent", geminiAPIURL, g.model)
 
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
@@ -129,6 +129,7 @@ func (g *Gemini) Complete(ctx context.Context, req *Request) (*Response, error) 
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", g.apiKey)
 
 	// Send request
 	resp, err := g.client.Do(httpReq)
