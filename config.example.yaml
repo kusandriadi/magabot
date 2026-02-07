@@ -90,9 +90,11 @@ llm:
   rate_limit: 10  # requests per minute per user
   
   # Anthropic (Claude)
+  # Auth priority: api_key > env ANTHROPIC_API_KEY > Claude CLI (~/.claude/.credentials.json)
+  # To use Claude CLI token: leave api_key empty, run "claude setup-token"
   anthropic:
     enabled: true
-    api_key: ""  # or env: ANTHROPIC_API_KEY
+    api_key: ""  # leave empty to auto-load from Claude CLI OAuth
     model: "claude-sonnet-4-20250514"
     max_tokens: 4096
     temperature: 0.7

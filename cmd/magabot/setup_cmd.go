@@ -485,16 +485,34 @@ func setupAnthropic() {
 
 	cfg := loadOrCreateConfig()
 
-	fmt.Println("📝 Get your API key from https://console.anthropic.com/")
+	fmt.Println("Choose authentication method:")
+	fmt.Println("  1. claude-cli  - Use Claude CLI token (from: claude setup-token)")
+	fmt.Println("  2. api-key     - Use API key (from: https://console.anthropic.com/)")
 	fmt.Println()
 
-	key := askString(reader, "API Key (sk-ant-...)", "")
-	if key == "" {
-		fmt.Println("❌ API key is required")
-		return
+	method := askString(reader, "Auth method (claude-cli/api-key)", "claude-cli")
+
+	if method == "api-key" || method == "2" {
+		fmt.Println()
+		fmt.Println("📝 Get your API key from https://console.anthropic.com/")
+		fmt.Println()
+
+		key := askString(reader, "API Key (sk-ant-...)", "")
+		if key == "" {
+			fmt.Println("❌ API key is required")
+			return
+		}
+
+		saveSecret("llm/anthropic_api_key", key)
+		cfg.LLM.Anthropic.APIKey = key
+	} else {
+		// Claude CLI OAuth - clear any existing API key
+		cfg.LLM.Anthropic.APIKey = ""
+		fmt.Println()
+		fmt.Println("📝 Using Claude CLI OAuth token from ~/.claude/.credentials.json")
+		fmt.Println("   Run 'claude setup-token' if you haven't already.")
 	}
 
-	saveSecret("llm/anthropic_api_key", key)
 	cfg.LLM.Anthropic.Enabled = true
 	cfg.LLM.Default = "anthropic"
 

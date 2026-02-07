@@ -48,15 +48,25 @@ func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 	}
 
 	// Auto-detect token format:
-	// sk-ant-api* = standard API key
-	// sk-ant-oat01-* = OAuth token (only if explicitly configured)
+	// sk-ant-api* = standard API key (uses x-api-key header)
+	// anything else = OAuth token (uses Bearer header)
 	var oauthManager *OAuthManager
 	if apiKey != "" && !strings.HasPrefix(apiKey, "sk-ant-api") {
 		useOAuth = true
 	}
 
-	// Only use OAuth manager if explicitly configured to use OAuth
-	if useOAuth {
+	// If no API key found, try loading Claude CLI OAuth credentials
+	if apiKey == "" {
+		oauthManager = GetOAuthManager()
+		creds, err := oauthManager.LoadClaudeCliCredentials()
+		if err == nil && creds != nil {
+			apiKey = creds.AccessToken
+			useOAuth = true
+		}
+	}
+
+	// Use OAuth manager if using OAuth tokens
+	if useOAuth && oauthManager == nil {
 		oauthManager = GetOAuthManager()
 	}
 
