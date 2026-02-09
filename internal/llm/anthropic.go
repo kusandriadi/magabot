@@ -2,18 +2,15 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 	"time"
-)
 
-const anthropicAPIURL = "https://api.anthropic.com/v1/messages"
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+)
 
 // Anthropic provider
 type Anthropic struct {
@@ -22,7 +19,6 @@ type Anthropic struct {
 	maxTokens    int
 	temperature  float64
 	baseURL      string
-	client       *http.Client
 	useOAuth     bool
 	oauthManager *OAuthManager
 }
@@ -70,11 +66,6 @@ func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 		oauthManager = GetOAuthManager()
 	}
 
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = anthropicAPIURL
-	}
-
 	model := cfg.Model
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
@@ -90,8 +81,7 @@ func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 		model:        model,
 		maxTokens:    maxTokens,
 		temperature:  cfg.Temperature,
-		baseURL:      baseURL,
-		client:       &http.Client{Timeout: 120 * time.Second},
+		baseURL:      cfg.BaseURL,
 		useOAuth:     useOAuth,
 		oauthManager: oauthManager,
 	}
@@ -147,131 +137,97 @@ func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, erro
 		return nil, err
 	}
 
-	// Convert messages to Anthropic format
-	var systemPrompt string
-	var messages []map[string]interface{}
+	// Build SDK client options
+	var clientOpts []option.RequestOption
+	if a.baseURL != "" {
+		clientOpts = append(clientOpts, option.WithBaseURL(a.baseURL))
+	}
+	if a.useOAuth {
+		clientOpts = append(clientOpts, option.WithAuthToken(apiKey))
+		clientOpts = append(clientOpts, option.WithHeader("anthropic-beta", "oauth-2025-04-20"))
+	} else {
+		clientOpts = append(clientOpts, option.WithAPIKey(apiKey))
+	}
+
+	client := anthropic.NewClient(clientOpts...)
+
+	// Convert messages to Anthropic SDK format
+	var systemBlocks []anthropic.TextBlockParam
+	var messages []anthropic.MessageParam
 
 	for _, m := range req.Messages {
 		if m.Role == "system" {
-			systemPrompt = m.Content
+			systemBlocks = append(systemBlocks, anthropic.TextBlockParam{Text: m.Content})
 			continue
 		}
 		if m.HasBlocks() {
-			// Multi-modal message with content blocks
-			var content []map[string]interface{}
+			var parts []anthropic.ContentBlockParamUnion
 			for _, b := range m.Blocks {
 				switch b.Type {
 				case "text":
-					content = append(content, map[string]interface{}{
-						"type": "text",
-						"text": b.Text,
-					})
+					parts = append(parts, anthropic.NewTextBlock(b.Text))
 				case "image":
-					content = append(content, map[string]interface{}{
-						"type": "image",
-						"source": map[string]interface{}{
-							"type":       "base64",
-							"media_type": b.MimeType,
-							"data":       b.ImageData,
-						},
-					})
+					parts = append(parts, anthropic.NewImageBlockBase64(b.MimeType, b.ImageData))
 				}
 			}
-			messages = append(messages, map[string]interface{}{
-				"role":    m.Role,
-				"content": content,
-			})
+			switch m.Role {
+			case "user":
+				messages = append(messages, anthropic.NewUserMessage(parts...))
+			case "assistant":
+				messages = append(messages, anthropic.NewAssistantMessage(parts...))
+			}
 		} else {
-			messages = append(messages, map[string]interface{}{
-				"role":    m.Role,
-				"content": m.Content,
-			})
+			switch m.Role {
+			case "user":
+				messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
+			case "assistant":
+				messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+			}
 		}
 	}
 
-	// Build request body
-	body := map[string]interface{}{
-		"model":      a.model,
-		"max_tokens": a.maxTokens,
-		"messages":   messages,
-	}
-
-	if systemPrompt != "" {
-		body["system"] = systemPrompt
-	}
-
-	if a.temperature > 0 {
-		body["temperature"] = a.temperature
-	}
-
+	// Build request params
+	maxTokens := int64(a.maxTokens)
 	if req.MaxTokens > 0 {
-		body["max_tokens"] = req.MaxTokens
+		maxTokens = int64(req.MaxTokens)
 	}
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+	params := anthropic.MessageNewParams{
+		Model:     anthropic.Model(a.model),
+		MaxTokens: maxTokens,
+		Messages:  messages,
 	}
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", a.baseURL, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+	if len(systemBlocks) > 0 {
+		params.System = systemBlocks
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
-
-	if a.useOAuth {
-		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
-		httpReq.Header.Set("anthropic-beta", "oauth-2025-04-20")
-	} else {
-		httpReq.Header.Set("x-api-key", apiKey)
+	temperature := a.temperature
+	if req.Temperature > 0 {
+		temperature = req.Temperature
+	}
+	if temperature > 0 {
+		params.Temperature = anthropic.Float(temperature)
 	}
 
 	// Send request
-	resp, err := a.client.Do(httpReq)
+	message, err := client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response (limit to 10MB to prevent OOM from malicious server)
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, fmt.Errorf("API error: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	// Parse response
-	var result struct {
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
-		} `json:"usage"`
-	}
-
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-
+	// Extract response text
 	content := ""
-	if len(result.Content) > 0 {
-		content = result.Content[0].Text
+	if len(message.Content) > 0 {
+		content = message.Content[0].Text
 	}
 
 	return &Response{
 		Content:      content,
 		Provider:     "anthropic",
 		Model:        a.model,
-		InputTokens:  result.Usage.InputTokens,
-		OutputTokens: result.Usage.OutputTokens,
+		InputTokens:  int(message.Usage.InputTokens),
+		OutputTokens: int(message.Usage.OutputTokens),
 		Latency:      time.Since(start),
 	}, nil
 }

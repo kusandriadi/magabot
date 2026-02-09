@@ -2,17 +2,14 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"time"
-)
 
-const openaiAPIURL = "https://api.openai.com/v1/chat/completions"
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+)
 
 // OpenAI provider
 type OpenAI struct {
@@ -21,7 +18,6 @@ type OpenAI struct {
 	maxTokens   int
 	temperature float64
 	baseURL     string
-	client      *http.Client
 }
 
 // OpenAIConfig for OpenAI provider
@@ -40,11 +36,6 @@ func NewOpenAI(cfg *OpenAIConfig) *OpenAI {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
 
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = openaiAPIURL
-	}
-
 	model := cfg.Model
 	if model == "" {
 		model = "gpt-4o"
@@ -60,8 +51,7 @@ func NewOpenAI(cfg *OpenAIConfig) *OpenAI {
 		model:       model,
 		maxTokens:   maxTokens,
 		temperature: cfg.Temperature,
-		baseURL:     baseURL,
-		client:      &http.Client{Timeout: 120 * time.Second},
+		baseURL:     cfg.BaseURL,
 	}
 }
 
@@ -75,118 +65,124 @@ func (o *OpenAI) Available() bool {
 	return o.apiKey != ""
 }
 
+// newClient creates an OpenAI SDK client with the provider's configuration
+func (o *OpenAI) newClient() openai.Client {
+	opts := []option.RequestOption{
+		option.WithAPIKey(o.apiKey),
+	}
+	if o.baseURL != "" {
+		opts = append(opts, option.WithBaseURL(o.baseURL))
+	}
+	return openai.NewClient(opts...)
+}
+
 // Complete sends a completion request
 func (o *OpenAI) Complete(ctx context.Context, req *Request) (*Response, error) {
+	client := o.newClient()
+	return completeOpenAICompatible(ctx, client, "openai", o.model, o.maxTokens, o.temperature, req)
+}
+
+// openaiCompatibleParams holds the resolved parameters for an OpenAI-compatible request.
+type openaiCompatibleParams struct {
+	maxTokens   int64
+	temperature float64
+}
+
+// resolveParams merges provider defaults with request-level overrides.
+func resolveParams(providerMaxTokens int, providerTemp float64, req *Request) openaiCompatibleParams {
+	maxTokens := int64(providerMaxTokens)
+	if req.MaxTokens > 0 {
+		maxTokens = int64(req.MaxTokens)
+	}
+	temperature := providerTemp
+	if req.Temperature > 0 {
+		temperature = req.Temperature
+	}
+	return openaiCompatibleParams{maxTokens: maxTokens, temperature: temperature}
+}
+
+// completeOpenAICompatible is the shared completion logic for OpenAI-compatible providers
+// (OpenAI, DeepSeek, GLM). It converts messages, builds params, calls the SDK, and
+// extracts the response.
+func completeOpenAICompatible(
+	ctx context.Context,
+	client openai.Client,
+	providerName, model string,
+	maxTokens int,
+	temperature float64,
+	req *Request,
+) (*Response, error) {
 	start := time.Now()
 
-	// Convert messages to OpenAI format
-	var messages []map[string]interface{}
-	for _, m := range req.Messages {
-		if m.HasBlocks() {
-			// Multi-modal message
-			var content []map[string]interface{}
-			for _, b := range m.Blocks {
-				switch b.Type {
-				case "text":
-					content = append(content, map[string]interface{}{
-						"type": "text",
-						"text": b.Text,
-					})
-				case "image":
-					content = append(content, map[string]interface{}{
-						"type": "image_url",
-						"image_url": map[string]string{
-							"url": "data:" + b.MimeType + ";base64," + b.ImageData,
-						},
-					})
-				}
-			}
-			messages = append(messages, map[string]interface{}{
-				"role":    m.Role,
-				"content": content,
-			})
-		} else {
-			messages = append(messages, map[string]interface{}{
-				"role":    m.Role,
-				"content": m.Content,
-			})
-		}
+	messages := convertToOpenAIMessages(req.Messages)
+
+	p := resolveParams(maxTokens, temperature, req)
+
+	params := openai.ChatCompletionNewParams{
+		Model:     openai.ChatModel(model),
+		Messages:  messages,
+		MaxTokens: openai.Int(p.maxTokens),
 	}
 
-	// Build request body
-	body := map[string]interface{}{
-		"model":      o.model,
-		"max_tokens": o.maxTokens,
-		"messages":   messages,
+	if p.temperature > 0 {
+		params.Temperature = openai.Float(p.temperature)
 	}
 
-	if o.temperature > 0 {
-		body["temperature"] = o.temperature
-	}
-
-	if req.MaxTokens > 0 {
-		body["max_tokens"] = req.MaxTokens
-	}
-
-	jsonBody, err := json.Marshal(body)
+	completion, err := client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", o.baseURL, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
-
-	// Send request
-	resp, err := o.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response (limit to 10MB to prevent OOM)
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	// Parse response
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-		} `json:"usage"`
-	}
-
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+		return nil, fmt.Errorf("API error: %v", err)
 	}
 
 	content := ""
-	if len(result.Choices) > 0 {
-		content = result.Choices[0].Message.Content
+	if len(completion.Choices) > 0 {
+		content = completion.Choices[0].Message.Content
 	}
 
 	return &Response{
 		Content:      content,
-		Provider:     "openai",
-		Model:        o.model,
-		InputTokens:  result.Usage.PromptTokens,
-		OutputTokens: result.Usage.CompletionTokens,
+		Provider:     providerName,
+		Model:        model,
+		InputTokens:  int(completion.Usage.PromptTokens),
+		OutputTokens: int(completion.Usage.CompletionTokens),
 		Latency:      time.Since(start),
 	}, nil
+}
+
+// convertToOpenAIMessages converts internal messages to OpenAI SDK format.
+// Shared by all OpenAI-compatible providers (OpenAI, DeepSeek, GLM).
+func convertToOpenAIMessages(msgs []Message) []openai.ChatCompletionMessageParamUnion {
+	var messages []openai.ChatCompletionMessageParamUnion
+	for _, m := range msgs {
+		if m.HasBlocks() {
+			var parts []openai.ChatCompletionContentPartUnionParam
+			for _, b := range m.Blocks {
+				switch b.Type {
+				case "text":
+					parts = append(parts, openai.TextContentPart(b.Text))
+				case "image":
+					parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+						URL: "data:" + b.MimeType + ";base64," + b.ImageData,
+					}))
+				}
+			}
+			switch m.Role {
+			case "system":
+				messages = append(messages, openai.SystemMessage(m.Content))
+			case "user":
+				messages = append(messages, openai.UserMessage(parts))
+			case "assistant":
+				messages = append(messages, openai.AssistantMessage(m.Content))
+			}
+		} else {
+			switch m.Role {
+			case "system":
+				messages = append(messages, openai.SystemMessage(m.Content))
+			case "user":
+				messages = append(messages, openai.UserMessage(m.Content))
+			case "assistant":
+				messages = append(messages, openai.AssistantMessage(m.Content))
+			}
+		}
+	}
+	return messages
 }

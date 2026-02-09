@@ -1,18 +1,15 @@
-// Zhipu GLM provider (ChatGLM)
+// Zhipu GLM provider (ChatGLM) via Z.AI API
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"time"
+
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 )
 
-const glmAPIURL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+const glmAPIURL = "https://api.z.ai/api/paas/v4"
 
 // GLM provider (Zhipu ChatGLM)
 type GLM struct {
@@ -21,7 +18,6 @@ type GLM struct {
 	maxTokens   int
 	temperature float64
 	baseURL     string
-	client      *http.Client
 }
 
 // GLMConfig for GLM provider
@@ -64,7 +60,6 @@ func NewGLM(cfg *GLMConfig) *GLM {
 		maxTokens:   maxTokens,
 		temperature: cfg.Temperature,
 		baseURL:     baseURL,
-		client:      &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -80,115 +75,9 @@ func (g *GLM) Available() bool {
 
 // Complete sends a completion request
 func (g *GLM) Complete(ctx context.Context, req *Request) (*Response, error) {
-	start := time.Now()
-
-	// GLM uses OpenAI-compatible format
-	var messages []map[string]interface{}
-	for _, m := range req.Messages {
-		if m.HasBlocks() {
-			var content []map[string]interface{}
-			for _, b := range m.Blocks {
-				switch b.Type {
-				case "text":
-					content = append(content, map[string]interface{}{
-						"type": "text",
-						"text": b.Text,
-					})
-				case "image":
-					content = append(content, map[string]interface{}{
-						"type": "image_url",
-						"image_url": map[string]string{
-							"url": "data:" + b.MimeType + ";base64," + b.ImageData,
-						},
-					})
-				}
-			}
-			messages = append(messages, map[string]interface{}{
-				"role":    m.Role,
-				"content": content,
-			})
-		} else {
-			messages = append(messages, map[string]interface{}{
-				"role":    m.Role,
-				"content": m.Content,
-			})
-		}
-	}
-
-	// Build request body
-	body := map[string]interface{}{
-		"model":      g.model,
-		"max_tokens": g.maxTokens,
-		"messages":   messages,
-	}
-
-	if g.temperature > 0 {
-		body["temperature"] = g.temperature
-	}
-
-	if req.MaxTokens > 0 {
-		body["max_tokens"] = req.MaxTokens
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", g.baseURL, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+g.apiKey)
-
-	// Send request
-	resp, err := g.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response (limit to 10MB to prevent OOM)
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	// Parse response (OpenAI-compatible format)
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-		} `json:"usage"`
-	}
-
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-
-	content := ""
-	if len(result.Choices) > 0 {
-		content = result.Choices[0].Message.Content
-	}
-
-	return &Response{
-		Content:      content,
-		Provider:     "glm",
-		Model:        g.model,
-		InputTokens:  result.Usage.PromptTokens,
-		OutputTokens: result.Usage.CompletionTokens,
-		Latency:      time.Since(start),
-	}, nil
+	client := openai.NewClient(
+		option.WithAPIKey(g.apiKey),
+		option.WithBaseURL(g.baseURL),
+	)
+	return completeOpenAICompatible(ctx, client, "glm", g.model, g.maxTokens, g.temperature, req)
 }

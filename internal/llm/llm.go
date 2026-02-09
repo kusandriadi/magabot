@@ -174,60 +174,11 @@ func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, 
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	// Try default provider first
-	r.mu.RLock()
-	defaultProvider, ok := r.providers[r.defaultName]
-	r.mu.RUnlock()
-
-	if ok && defaultProvider.Available() {
-		resp, err := defaultProvider.Complete(ctx, req)
-		if err == nil {
-			return resp, nil
-		}
-		r.logger.Warn("default provider failed", "provider", r.defaultName, "error", err)
+	resp, err := r.tryProviders(ctx, req)
+	if err != nil {
+		return nil, err
 	}
-
-	// Try fallback chain
-	for _, name := range r.fallbackChain {
-		if name == r.defaultName {
-			continue
-		}
-
-		r.mu.RLock()
-		provider, ok := r.providers[name]
-		r.mu.RUnlock()
-
-		if !ok || !provider.Available() {
-			continue
-		}
-
-		resp, err := provider.Complete(ctx, req)
-		if err == nil {
-			r.logger.Info("used fallback provider", "provider", name)
-			return resp, nil
-		}
-		r.logger.Warn("fallback provider failed", "provider", name, "error", err)
-	}
-
-	// Last resort: try any available provider
-	r.mu.RLock()
-	for name, provider := range r.providers {
-		if name == r.defaultName {
-			continue
-		}
-		if provider.Available() {
-			r.mu.RUnlock()
-			resp, err := provider.Complete(ctx, req)
-			if err == nil {
-				r.logger.Info("used available provider", "provider", name)
-				return resp, nil
-			}
-			r.mu.RLock()
-		}
-	}
-	r.mu.RUnlock()
-
-	return nil, ErrNoProvider
+	return resp, nil
 }
 
 // Chat sends a multi-turn conversation
@@ -254,6 +205,13 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
+	return r.tryProviders(ctx, req)
+}
+
+// tryProviders attempts all providers in order: default, fallback chain, any available
+func (r *Router) tryProviders(ctx context.Context, req *Request) (*Response, error) {
+	var lastErr error
+
 	// Try default provider first
 	r.mu.RLock()
 	defaultProvider, ok := r.providers[r.defaultName]
@@ -264,6 +222,7 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 		if err == nil {
 			return resp, nil
 		}
+		lastErr = fmt.Errorf("%s: %w", r.defaultName, err)
 		r.logger.Warn("default provider failed", "provider", r.defaultName, "error", err)
 	}
 
@@ -286,6 +245,7 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 			r.logger.Info("used fallback provider", "provider", name)
 			return resp, nil
 		}
+		lastErr = fmt.Errorf("%s: %w", name, err)
 		r.logger.Warn("fallback provider failed", "provider", name, "error", err)
 	}
 
@@ -302,11 +262,15 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 				r.logger.Info("used available provider", "provider", name)
 				return resp, nil
 			}
+			lastErr = fmt.Errorf("%s: %w", name, err)
 			r.mu.RLock()
 		}
 	}
 	r.mu.RUnlock()
 
+	if lastErr != nil {
+		return nil, fmt.Errorf("%w: %w", ErrNoProvider, lastErr)
+	}
 	return nil, ErrNoProvider
 }
 
@@ -389,6 +353,20 @@ func (r *rateLimiter) allow(userID string) bool {
 	return true
 }
 
+// extractAPIMessage extracts a human-readable message from API error strings
+func extractAPIMessage(err error) string {
+	s := err.Error()
+	// Look for "message":"..." in JSON error responses
+	if idx := strings.Index(s, "\"message\":\""); idx != -1 {
+		start := idx + len("\"message\":\"")
+		end := strings.Index(s[start:], "\"")
+		if end != -1 {
+			return s[start : start+end]
+		}
+	}
+	return ""
+}
+
 // Helper to format error for user
 func FormatError(err error) string {
 	switch {
@@ -399,6 +377,9 @@ func FormatError(err error) string {
 	case errors.Is(err, ErrTimeout):
 		return "⏱️ Request timed out. Please try again."
 	case errors.Is(err, ErrNoProvider):
+		if msg := extractAPIMessage(err); msg != "" {
+			return fmt.Sprintf("🔌 Provider error: %s", msg)
+		}
 		return "🔌 No AI provider available."
 	default:
 		return fmt.Sprintf("❌ Error: %v", err)

@@ -40,6 +40,9 @@ func cmdStart() {
 
 	fmt.Printf("✅ Magabot started (PID: %d)\n", pid)
 	fmt.Printf("   Logs: %s\n", logFile)
+	fmt.Println()
+	fmt.Println("   Run 'magabot status' to check status")
+	fmt.Println("   Run 'magabot logs' to view logs")
 }
 
 // cmdStop stops the magabot daemon

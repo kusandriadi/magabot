@@ -3,13 +3,11 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strings"
-	"time"
+
+	"google.golang.org/genai"
 )
 
 // ModelInfo represents a model
@@ -44,6 +42,8 @@ func (r *Router) ListModels(ctx context.Context, providerName string) ([]ModelIn
 		return listGLMModels(ctx, p)
 	case *Anthropic:
 		return listAnthropicModels(), nil
+	case *DeepSeek:
+		return listDeepSeekModels(p), nil
 	default:
 		return nil, fmt.Errorf("list models not supported for: %s", providerName)
 	}
@@ -86,46 +86,20 @@ func listAnthropicModels() []ModelInfo {
 	}
 }
 
-// OpenAI models via API
+// OpenAI models via SDK
 func listOpenAIModels(ctx context.Context, o *OpenAI) ([]ModelInfo, error) {
-	url := strings.TrimSuffix(o.baseURL, "/chat/completions") + "/models"
-	if !strings.Contains(url, "/models") {
-		url = "https://api.openai.com/v1/models"
-	}
+	client := o.newClient()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %s", string(body))
-	}
-
-	var result struct {
-		Data []struct {
-			ID      string `json:"id"`
-			Created int64  `json:"created"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
+	// Use auto-paging to list all models
+	pager := client.Models.ListAutoPaging(ctx)
 
 	// Filter chat models only
+	chatPrefixes := []string{"gpt-4", "gpt-3.5", "o1", "o3"}
 	var models []ModelInfo
-	chatModels := []string{"gpt-4", "gpt-3.5", "o1", "o3"}
-	for _, m := range result.Data {
-		for _, prefix := range chatModels {
+
+	for pager.Next() {
+		m := pager.Current()
+		for _, prefix := range chatPrefixes {
 			if strings.HasPrefix(m.ID, prefix) {
 				models = append(models, ModelInfo{
 					ID:       m.ID,
@@ -136,6 +110,9 @@ func listOpenAIModels(ctx context.Context, o *OpenAI) ([]ModelInfo, error) {
 			}
 		}
 	}
+	if err := pager.Err(); err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
 
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].ID > models[j].ID // Newest first
@@ -144,52 +121,30 @@ func listOpenAIModels(ctx context.Context, o *OpenAI) ([]ModelInfo, error) {
 	return models, nil
 }
 
-// Gemini models via API
+// Gemini models via SDK
 func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) {
-	url := "https://generativelanguage.googleapis.com/v1beta/models"
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  g.apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("x-goog-api-key", g.apiKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %s", string(body))
-	}
-
-	var result struct {
-		Models []struct {
-			Name                       string   `json:"name"`
-			DisplayName                string   `json:"displayName"`
-			Description                string   `json:"description"`
-			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
-		} `json:"models"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create client: %w", err)
 	}
 
 	var models []ModelInfo
-	for _, m := range result.Models {
+	for model, err := range client.Models.All(ctx) {
+		if err != nil {
+			return nil, fmt.Errorf("list models: %w", err)
+		}
 		// Only include models that support generateContent
-		for _, method := range m.SupportedGenerationMethods {
-			if method == "generateContent" {
-				// Extract model ID from name (e.g., "models/gemini-pro" -> "gemini-pro")
-				id := strings.TrimPrefix(m.Name, "models/")
+		for _, action := range model.SupportedActions {
+			if action == "generateContent" {
+				id := strings.TrimPrefix(model.Name, "models/")
 				models = append(models, ModelInfo{
 					ID:          id,
-					Name:        m.DisplayName,
+					Name:        model.DisplayName,
 					Provider:    "gemini",
-					Description: m.Description,
+					Description: model.Description,
 				})
 				break
 			}
@@ -199,9 +154,8 @@ func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) {
 	return models, nil
 }
 
-// GLM models via API
+// GLM models (hardcoded)
 func listGLMModels(ctx context.Context, g *GLM) ([]ModelInfo, error) {
-	// GLM doesn't have a public models endpoint, return known models
 	return []ModelInfo{
 		{ID: "glm-4.7", Name: "GLM-4.7", Provider: "glm", Description: "Latest, most capable"},
 		{ID: "glm-4.6", Name: "GLM-4.6", Provider: "glm", Description: "Previous generation"},
@@ -212,10 +166,23 @@ func listGLMModels(ctx context.Context, g *GLM) ([]ModelInfo, error) {
 	}, nil
 }
 
+// DeepSeek models (hardcoded)
+func listDeepSeekModels(d *DeepSeek) []ModelInfo {
+	var models []ModelInfo
+	for _, id := range d.Models() {
+		models = append(models, ModelInfo{
+			ID:       id,
+			Name:     id,
+			Provider: "deepseek",
+		})
+	}
+	return models
+}
+
 // FormatModelList formats models for display
 func FormatModelList(models map[string][]ModelInfo) string {
 	var sb strings.Builder
-	
+
 	providers := make([]string, 0, len(models))
 	for p := range models {
 		providers = append(providers, p)

@@ -278,31 +278,83 @@ magabot status
 ### CLI Commands
 
 ```bash
-magabot start           # Start daemon
-magabot stop            # Stop daemon  
-magabot restart         # Restart daemon
-magabot status          # Show status
-magabot log             # View logs (tail -f)
-magabot setup           # First-time setup
-magabot config show     # Show config
-magabot config edit     # Edit config.yaml
-magabot cron list       # List cron jobs
-magabot update check    # Check for updates
-magabot update apply    # Apply update
+# Daemon management
+magabot start                     # Start daemon
+magabot stop                      # Stop daemon
+magabot restart                   # Restart daemon
+magabot status                    # Show status
+magabot log                       # View logs (tail -f)
+
+# Setup
+magabot setup                     # Full interactive wizard
+magabot setup telegram            # Setup Telegram only
+magabot setup discord             # Setup Discord only
+magabot setup slack               # Setup Slack only
+magabot setup whatsapp            # Setup WhatsApp only
+magabot setup lark                # Setup Lark/Feishu only
+magabot setup webhook             # Setup Webhook endpoint
+magabot setup llm                 # Setup all LLM providers
+magabot setup anthropic           # Setup Anthropic (Claude)
+magabot setup openai              # Setup OpenAI (GPT)
+magabot setup gemini              # Setup Google Gemini
+magabot setup deepseek            # Setup DeepSeek
+magabot setup glm                 # Setup Zhipu GLM
+magabot setup admin <user_id>     # Add global admin
+magabot setup paths               # Configure directories
+magabot setup skills              # Configure skills
+
+# Config
+magabot config show               # Show config summary
+magabot config edit               # Edit config.yaml in $EDITOR
+magabot config admin list         # List global admins
+magabot config admin add <id>     # Add global admin
+magabot config admin remove <id>  # Remove global admin
+magabot config path               # Print config file path
+
+# Cron jobs
+magabot cron list                 # List all cron jobs
+magabot cron add                  # Add new job (interactive)
+magabot cron edit <id>            # Edit an existing job
+magabot cron delete <id>          # Delete a job
+magabot cron enable <id>          # Enable a job
+magabot cron disable <id>         # Disable a job
+magabot cron run <id>             # Run a job immediately
+magabot cron show <id>            # Show job details
+
+# Skills
+magabot skill list                # List all installed skills
+magabot skill info <name>         # Show skill details
+magabot skill create <name>       # Create a new skill template
+magabot skill enable <name>       # Enable a skill
+magabot skill disable <name>      # Disable a skill
+magabot skill reload              # Reload all skills
+magabot skill builtin             # List built-in skills
+
+# Updates
+magabot update check              # Check for available updates
+magabot update apply              # Download and install update
+magabot update rollback           # Restore previous version
+
+# Utilities
+magabot genkey                    # Generate encryption key
+magabot reset                     # Reset config (keep connections)
+magabot uninstall                 # Completely uninstall magabot
+magabot version                   # Show version
+magabot help                      # Show help
 ```
 
-### Chat Commands (for admins)
+### Chat Commands
 
-```
-/config status          Show config status
-/config allow user ID   Allow a user
-/config allow chat ID   Allow a group
-/config admin add ID    Add platform admin
-/memory add TEXT        Remember something
-/memory search QUERY    Find memories
-/task spawn TASK        Run background task
-/heartbeat status       Show heartbeat status
-```
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message with basic commands |
+| `/help` | Show available commands |
+| `/status` | Show bot status (provider, message count) |
+| `/models` | List all available AI models |
+| `/providers` | Show available LLM providers |
+| `/config` | Show config commands info |
+
+Any other message is sent to the LLM for a response.
 
 ---
 

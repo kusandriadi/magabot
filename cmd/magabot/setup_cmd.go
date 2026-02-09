@@ -685,7 +685,7 @@ func setupGLM() {
 
 	cfg := loadOrCreateConfig()
 
-	fmt.Println("📝 Get your API key from https://open.bigmodel.cn/")
+	fmt.Println("📝 Get your API key from https://docs.z.ai/")
 	fmt.Println()
 
 	key := askString(reader, "API Key", "")
@@ -844,6 +844,9 @@ func restartDaemon() {
 			time.Sleep(2 * time.Second)
 			if processExists(pid) {
 				fmt.Println("✅ Configuration reloaded")
+				fmt.Println()
+				fmt.Println("   Run 'magabot status' to check status")
+				fmt.Println("   Run 'magabot logs' to view logs")
 				return
 			}
 		}
