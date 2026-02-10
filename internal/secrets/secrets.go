@@ -135,5 +135,24 @@ func NewFromConfig(cfg *Config) (*Manager, error) {
 		return nil, err
 	}
 
-	return NewManager(backend), nil
+	mgr := NewManager(backend)
+
+	// Set up fallback chain:
+	// 1. Try Claude Code credentials (~/.claude/.credentials.json)
+	// 2. Fall back to environment variables (ANTHROPIC_API_KEY, etc.)
+	// This allows using Claude Code's OAuth tokens or standard env vars
+	var fallbackBackends []Backend
+
+	claudeBackend, err := NewClaude()
+	if err == nil {
+		fallbackBackends = append(fallbackBackends, claudeBackend)
+	}
+
+	fallbackBackends = append(fallbackBackends, NewEnv())
+
+	if len(fallbackBackends) > 0 {
+		mgr.SetFallback(NewChain(fallbackBackends...))
+	}
+
+	return mgr, nil
 }
