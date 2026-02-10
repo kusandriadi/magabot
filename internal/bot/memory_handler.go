@@ -3,13 +3,16 @@ package bot
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/kusa/magabot/internal/memory"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // MemoryHandler handles memory-related commands
 type MemoryHandler struct {
-	stores map[string]*memory.Store // userID -> store
+	mu      sync.RWMutex
+	stores  map[string]*memory.Store // userID -> store
 	dataDir string
 }
 
@@ -23,15 +26,26 @@ func NewMemoryHandler(dataDir string) *MemoryHandler {
 
 // GetStore gets or creates a memory store for a user
 func (h *MemoryHandler) GetStore(userID string) (*memory.Store, error) {
+	h.mu.RLock()
+	if store, ok := h.stores[userID]; ok {
+		h.mu.RUnlock()
+		return store, nil
+	}
+	h.mu.RUnlock()
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Double-check after acquiring write lock
 	if store, ok := h.stores[userID]; ok {
 		return store, nil
 	}
-	
+
 	store, err := memory.NewStore(h.dataDir, userID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	h.stores[userID] = store
 	return store, nil
 }
@@ -95,7 +109,7 @@ func (h *MemoryHandler) rememberContent(store *memory.Store, platform, content s
 		return "", err
 	}
 	
-	return fmt.Sprintf("🧠 Noted: %s", truncateStr(mem.Content, 50)), nil
+	return fmt.Sprintf("🧠 Noted: %s", util.Truncate(mem.Content, 50)), nil
 }
 
 // searchMemory searches for relevant memories
@@ -115,7 +129,7 @@ func (h *MemoryHandler) searchMemory(store *memory.Store, args []string) (string
 	sb.WriteString(fmt.Sprintf("🔍 *Memories for: %s*\n\n", query))
 	
 	for i, mem := range memories {
-		sb.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, mem.Type, truncateStr(mem.Content, 80)))
+		sb.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, mem.Type, util.Truncate(mem.Content, 80)))
 		sb.WriteString(fmt.Sprintf("   📅 %s | 🔑 %s\n\n", 
 			mem.CreatedAt.Format("Jan 2"), mem.ID[:8]))
 	}
@@ -147,7 +161,7 @@ func (h *MemoryHandler) listMemory(store *memory.Store, args []string) (string, 
 	
 	for i := 0; i < limit; i++ {
 		mem := memories[i]
-		sb.WriteString(fmt.Sprintf("• [%s] %s\n", mem.Type, truncateStr(mem.Content, 60)))
+		sb.WriteString(fmt.Sprintf("• [%s] %s\n", mem.Type, util.Truncate(mem.Content, 60)))
 	}
 	
 	if len(memories) > limit {
@@ -172,7 +186,7 @@ func (h *MemoryHandler) deleteMemory(store *memory.Store, args []string) (string
 			if err := store.Delete(mem.ID); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("🗑️ Deleted: %s", truncateStr(mem.Content, 50)), nil
+			return fmt.Sprintf("🗑️ Deleted: %s", util.Truncate(mem.Content, 50)), nil
 		}
 	}
 	
@@ -241,11 +255,4 @@ func (h *MemoryHandler) GetContext(userID, query string, maxTokens int) string {
 	}
 	
 	return store.GetContext(query, maxTokens)
-}
-
-func truncateStr(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/backup"
+	"github.com/kusa/magabot/internal/bot"
 	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/platform/slack"
@@ -19,6 +20,7 @@ import (
 	"github.com/kusa/magabot/internal/platform/webhook"
 	"github.com/kusa/magabot/internal/platform/whatsapp"
 	"github.com/kusa/magabot/internal/router"
+	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/session"
 	"github.com/kusa/magabot/internal/storage"
@@ -62,6 +64,9 @@ func runDaemon() {
 	logger := slog.New(logHandler)
 
 	logger.Info("magabot starting", "version", version.Short())
+
+	// Load secrets from backend and overlay onto config
+	loadSecrets(cfg, logger)
 
 	// Initialize vault
 	vault, err := security.NewVault(cfg.Security.EncryptionKey)
@@ -153,20 +158,25 @@ func runDaemon() {
 		}))
 	}
 
+	// Initialize bot handlers
+	adminHandler := bot.NewAdminHandler(cfg, configDir)
+	memoryHandler := bot.NewMemoryHandler(cfg.Paths.MemoryDir)
+
 	// Initialize session manager
 	maxHistory := cfg.Session.MaxHistory
 	if maxHistory <= 0 {
 		maxHistory = 50
 	}
-	sessionMgr := session.NewManager(nil, maxHistory)
+	sessionMgr := session.NewManager(nil, maxHistory, logger)
 
 	// Initialize message router
-	rtr := router.NewRouter(store, vault, authorizer, rateLimiter, logger)
+	rtr := router.NewRouter(store, vault, cfg, authorizer, rateLimiter, logger)
 
 	// Set session notify function after router is created
 	sessionMgr = session.NewManager(func(platform, chatID, message string) error {
 		return rtr.Send(platform, chatID, message)
-	}, maxHistory)
+	}, maxHistory, logger)
+	sessionHandler := bot.NewSessionHandler(sessionMgr)
 
 	// Set message handler with LLM integration
 	rtr.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
@@ -177,7 +187,7 @@ func runDaemon() {
 
 		// Handle commands
 		if strings.HasPrefix(msg.Text, "/") {
-			return handleCommand(msg, llmRouter, store)
+			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler)
 		}
 
 		// Get or create session for this chat
@@ -199,7 +209,7 @@ func runDaemon() {
 			Content: msg.Text,
 		}
 		if len(msg.Media) > 0 {
-			userMsg.Blocks = buildContentBlocks(msg.Text, msg.Media, logger)
+			userMsg.Blocks = buildContentBlocks(msg.Text, msg.Media, cfg.Paths.DownloadsDir, logger)
 		}
 		messages = append(messages, userMsg)
 
@@ -310,7 +320,16 @@ func runDaemon() {
 	}
 
 	logger.Info("shutting down...")
-	rtr.Stop()
+	done := make(chan struct{})
+	go func() {
+		rtr.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		logger.Warn("shutdown timed out after 10s")
+	}
 
 	if cfg.Storage.Backup.Enabled {
 		if info, err := backupMgr.Create(dataDir, rtr.Platforms()); err == nil {
@@ -322,17 +341,18 @@ func runDaemon() {
 }
 
 // handleCommand handles bot commands
-func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store) (string, error) {
+func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store, cfg *config.Config, adminH *bot.AdminHandler, memoryH *bot.MemoryHandler, sessionH *bot.SessionHandler) (string, error) {
 	parts := strings.Fields(msg.Text)
 	if len(parts) == 0 {
 		return "", nil
 	}
 
 	cmd := strings.ToLower(parts[0])
+	args := parts[1:]
 
 	switch cmd {
 	case "/start":
-		return "👋 Halo! Saya Magabot.\n\nKirim pesan apapun dan saya akan menjawab menggunakan AI.\n\nCommands:\n• /status - Status bot\n• /models - List models\n• /help - Bantuan", nil
+		return "👋 Halo! Saya Magabot.\n\nKirim pesan apapun dan saya akan menjawab menggunakan AI.\n\nCommands:\n• /status - Status bot\n• /models - List models\n• /config - Admin config\n• /memory - Memory management\n• /task - Background tasks\n• /help - Bantuan", nil
 
 	case "/help":
 		return `📖 *Magabot Help*
@@ -344,10 +364,16 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 • /status - Status bot
 • /models - Available models
 • /providers - LLM providers
+• /config - Admin configuration
+• /memory - Memory management
+• /task - Background tasks
 • /help - Bantuan ini`, nil
 
 	case "/status":
-		stats, _ := store.Stats()
+		stats, err := store.Stats()
+		if err != nil {
+			return fmt.Sprintf("📊 *Status*\n\n⚠️ Error getting stats: %v", err), nil
+		}
 		llmStats := llmRouter.Stats()
 		return fmt.Sprintf("📊 *Status*\n\n• LLM: %s\n• Providers: %v\n• Messages: %v",
 			llmStats["default"],
@@ -370,16 +396,114 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 		), nil
 
 	case "/config":
-		// Config commands are handled by AdminHandler in bot package
-		return "🔧 Config commands available.\nUse /config help for more info.", nil
+		if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {
+			return "🔒 Admin access required.", nil
+		}
+		resp, needRestart, err := adminH.HandleCommand(msg.Platform, msg.UserID, msg.ChatID, args)
+		if err != nil {
+			return fmt.Sprintf("❌ Error: %v", err), nil
+		}
+		if needRestart {
+			adminH.ScheduleRestart(3, nil)
+		}
+		return resp, nil
+
+	case "/memory":
+		return memoryH.HandleCommand(msg.UserID, msg.Platform, args)
+
+	case "/task":
+		return sessionH.HandleCommand(msg.UserID, msg.Platform, msg.ChatID, args)
 
 	default:
 		return "❓ Unknown command. Try /help", nil
 	}
 }
 
-// buildContentBlocks creates multi-modal content blocks from text and media paths
-func buildContentBlocks(text string, mediaPaths []string, logger *slog.Logger) []llm.ContentBlock {
+// loadSecrets loads secrets from the configured backend and overlays them onto
+// the config. Config values (from YAML/env vars) take precedence — secrets are
+// only applied when the config field is empty.
+func loadSecrets(cfg *config.Config, logger *slog.Logger) {
+	if cfg.Secrets.Backend == "" {
+		return
+	}
+
+	// Convert config types to secrets package types
+	secretsCfg := &secrets.Config{
+		Backend: cfg.Secrets.Backend,
+	}
+	if cfg.Secrets.Vault != nil {
+		secretsCfg.VaultConfig = &secrets.VaultConfig{
+			Address:    cfg.Secrets.Vault.Address,
+			MountPath:  cfg.Secrets.Vault.MountPath,
+			SecretPath: cfg.Secrets.Vault.SecretPath,
+		}
+	}
+	if cfg.Secrets.Local != nil {
+		secretsCfg.LocalConfig = &secrets.LocalConfig{
+			Path: cfg.Secrets.Local.Path,
+		}
+	}
+
+	mgr, err := secrets.NewFromConfig(secretsCfg)
+	if err != nil {
+		logger.Warn("secrets backend init failed, skipping", "backend", cfg.Secrets.Backend, "error", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	logger.Info("loading secrets", "backend", mgr.Backend())
+
+	// Map of secret key -> pointer to config field
+	type secretMapping struct {
+		key  string
+		dest *string
+		name string
+	}
+
+	mappings := []secretMapping{
+		{secrets.KeyEncryptionKey, &cfg.Security.EncryptionKey, "encryption_key"},
+		{secrets.KeyAnthropicAPIKey, &cfg.LLM.Anthropic.APIKey, "anthropic_api_key"},
+		{secrets.KeyOpenAIAPIKey, &cfg.LLM.OpenAI.APIKey, "openai_api_key"},
+		{secrets.KeyGeminiAPIKey, &cfg.LLM.Gemini.APIKey, "gemini_api_key"},
+		{secrets.KeyGLMAPIKey, &cfg.LLM.GLM.APIKey, "glm_api_key"},
+		{secrets.KeyDeepSeekAPIKey, &cfg.LLM.DeepSeek.APIKey, "deepseek_api_key"},
+	}
+
+	// Platform secrets need nil-safe handling
+	if cfg.Platforms.Telegram != nil {
+		mappings = append(mappings, secretMapping{secrets.KeyTelegramToken, &cfg.Platforms.Telegram.BotToken, "telegram_bot_token"})
+	}
+	if cfg.Platforms.Slack != nil {
+		mappings = append(mappings,
+			secretMapping{secrets.KeySlackBotToken, &cfg.Platforms.Slack.BotToken, "slack_bot_token"},
+			secretMapping{secrets.KeySlackAppToken, &cfg.Platforms.Slack.AppToken, "slack_app_token"},
+		)
+	}
+
+	var loaded int
+	for _, m := range mappings {
+		if *m.dest != "" {
+			continue // config value already set, skip
+		}
+		val, err := mgr.Get(ctx, m.key)
+		if err != nil {
+			continue // not found or error, skip silently
+		}
+		*m.dest = val
+		loaded++
+		logger.Debug("loaded secret", "key", m.name)
+	}
+
+	if loaded > 0 {
+		logger.Info("secrets loaded", "count", loaded, "backend", mgr.Backend())
+	}
+}
+
+// buildContentBlocks creates multi-modal content blocks from text and media paths.
+// allowedDir restricts which directory files may be read from (path traversal protection).
+func buildContentBlocks(text string, mediaPaths []string, allowedDir string, logger *slog.Logger) []llm.ContentBlock {
 	var blocks []llm.ContentBlock
 
 	// Add text block if present
@@ -392,13 +516,25 @@ func buildContentBlocks(text string, mediaPaths []string, logger *slog.Logger) [
 
 	// Add image blocks
 	for _, path := range mediaPaths {
-		data, err := os.ReadFile(path)
+		// Validate path is within allowed directory to prevent directory traversal
+		absPath, err := filepath.Abs(path)
 		if err != nil {
-			logger.Warn("read media file failed", "path", path, "error", err)
+			logger.Warn("invalid media path", "path", path, "error", err)
+			continue
+		}
+		absDir, err := filepath.Abs(allowedDir)
+		if err != nil || !strings.HasPrefix(absPath, absDir+string(filepath.Separator)) {
+			logger.Warn("media path outside allowed directory", "path", path, "allowed", allowedDir)
 			continue
 		}
 
-		mimeType := mime.TypeByExtension(filepath.Ext(path))
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			logger.Warn("read media file failed", "path", absPath, "error", err)
+			continue
+		}
+
+		mimeType := mime.TypeByExtension(filepath.Ext(absPath))
 		if mimeType == "" {
 			mimeType = "image/jpeg"
 		}

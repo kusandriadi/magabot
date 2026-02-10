@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/storage"
 )
@@ -50,7 +51,8 @@ type Router struct {
 	platforms    map[string]Platform
 	store        *storage.Store
 	vault        *security.Vault
-	authorizer   *security.Authorizer
+	cfg          *config.Config
+	authorizer   *security.Authorizer // fallback for legacy security.allowed_users
 	rateLimiter  *security.RateLimiter
 	sessionMgr   *security.SessionManager
 	authAttempts *security.AuthAttempts
@@ -61,11 +63,12 @@ type Router struct {
 }
 
 // NewRouter creates a new router
-func NewRouter(store *storage.Store, vault *security.Vault, authorizer *security.Authorizer, rateLimiter *security.RateLimiter, logger *slog.Logger) *Router {
+func NewRouter(store *storage.Store, vault *security.Vault, cfg *config.Config, authorizer *security.Authorizer, rateLimiter *security.RateLimiter, logger *slog.Logger) *Router {
 	return &Router{
 		platforms:    make(map[string]Platform),
 		store:        store,
 		vault:        vault,
+		cfg:          cfg,
 		authorizer:   authorizer,
 		rateLimiter:  rateLimiter,
 		sessionMgr:   security.NewSessionManager(),
@@ -142,8 +145,15 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 		return "", security.ErrAccountLocked
 	}
 
-	// Authorization check
-	if !r.authorizer.IsAuthorized(msg.Platform, msg.UserID) {
+	// Authorization check: use config (per-platform rules) with authorizer fallback
+	isAllowed := false
+	if r.cfg != nil {
+		isAllowed = r.cfg.IsAllowed(msg.Platform, msg.UserID, msg.ChatID, msg.ChatID != msg.UserID)
+	}
+	if !isAllowed && r.authorizer != nil {
+		isAllowed = r.authorizer.IsAuthorized(msg.Platform, msg.UserID)
+	}
+	if !isAllowed {
 		r.logger.Warn("unauthorized user", 
 			"platform", msg.Platform, 
 			"user_hash", hashedUser,
@@ -186,8 +196,11 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 	}
 
 	// Log incoming message (encrypted)
-	encryptedContent, _ := r.vault.Encrypt([]byte(msg.Text))
-	r.store.SaveMessage(&storage.Message{
+	encryptedContent, encErr := r.vault.Encrypt([]byte(msg.Text))
+	if encErr != nil {
+		r.logger.Error("encrypt message failed", "error", encErr, "direction", "in")
+	}
+	if err := r.store.SaveMessage(&storage.Message{
 		Platform:  msg.Platform,
 		ChatID:    msg.ChatID,
 		UserID:    hashedUser,
@@ -195,7 +208,9 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 		Content:   encryptedContent,
 		Timestamp: msg.Timestamp,
 		Direction: "in",
-	})
+	}); err != nil {
+		r.logger.Error("save message failed", "error", err, "direction", "in")
+	}
 
 	// Process message
 	r.mu.RLock()
@@ -214,15 +229,20 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 
 	// Log outgoing message
 	if response != "" {
-		encryptedResponse, _ := r.vault.Encrypt([]byte(response))
-		r.store.SaveMessage(&storage.Message{
+		encryptedResponse, encErr := r.vault.Encrypt([]byte(response))
+		if encErr != nil {
+			r.logger.Error("encrypt message failed", "error", encErr, "direction", "out")
+		}
+		if err := r.store.SaveMessage(&storage.Message{
 			Platform:  msg.Platform,
 			ChatID:    msg.ChatID,
 			UserID:    "bot",
 			Content:   encryptedResponse,
 			Timestamp: time.Now(),
 			Direction: "out",
-		})
+		}); err != nil {
+			r.logger.Error("save message failed", "error", err, "direction", "out")
+		}
 	}
 
 	return response, nil

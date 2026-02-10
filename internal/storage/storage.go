@@ -41,6 +41,10 @@ func New(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	// SQLite only supports one writer; limit pool accordingly
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
 	// Set pragmas for security and performance
 	pragmas := []string{
 		"PRAGMA secure_delete = ON",
@@ -247,13 +251,19 @@ func (s *Store) Stats() (map[string]interface{}, error) {
 
 	// Sessions
 	var sessionCount int
-	s.db.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&sessionCount)
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&sessionCount); err != nil {
+		return nil, fmt.Errorf("count sessions: %w", err)
+	}
 	stats["sessions"] = sessionCount
 
 	// Database size
 	var pageCount, pageSize int64
-	s.db.QueryRow(`PRAGMA page_count`).Scan(&pageCount)
-	s.db.QueryRow(`PRAGMA page_size`).Scan(&pageSize)
+	if err := s.db.QueryRow(`PRAGMA page_count`).Scan(&pageCount); err != nil {
+		return nil, fmt.Errorf("page_count: %w", err)
+	}
+	if err := s.db.QueryRow(`PRAGMA page_size`).Scan(&pageSize); err != nil {
+		return nil, fmt.Errorf("page_size: %w", err)
+	}
 	stats["db_size_bytes"] = pageCount * pageSize
 
 	return stats, nil

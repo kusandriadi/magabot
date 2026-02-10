@@ -20,6 +20,7 @@ import (
 type Bot struct {
 	api          *tgbotapi.BotAPI
 	handler      router.MessageHandler
+	handlerMu    sync.RWMutex
 	logger       *slog.Logger
 	downloadsDir string
 	updates      tgbotapi.UpdatesChannel
@@ -100,7 +101,9 @@ func (b *Bot) Send(chatID, message string) error {
 
 // SetHandler sets the message handler
 func (b *Bot) SetHandler(h router.MessageHandler) {
+	b.handlerMu.Lock()
 	b.handler = h
+	b.handlerMu.Unlock()
 }
 
 // processUpdates processes incoming updates
@@ -187,13 +190,17 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		Raw:       update,
 	}
 
-	if b.handler == nil {
+	b.handlerMu.RLock()
+	handler := b.handler
+	b.handlerMu.RUnlock()
+
+	if handler == nil {
 		return
 	}
 
-	response, err := b.handler(ctx, routerMsg)
+	response, err := handler(ctx, routerMsg)
 	if err != nil {
-		b.logger.Debug("handler error", "error", err)
+		b.logger.Warn("handler error", "error", err)
 		return
 	}
 

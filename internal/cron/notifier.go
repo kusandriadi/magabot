@@ -21,10 +21,6 @@ type NotifierConfig struct {
 	DiscordWebhook  string `json:"discord_webhook,omitempty"`  // Webhook URL fallback
 	WhatsAppAPIURL  string `json:"whatsapp_api_url,omitempty"`
 	WhatsAppAPIKey  string `json:"whatsapp_api_key,omitempty"`
-	LarkAppID       string `json:"lark_app_id,omitempty"`
-	LarkAppSecret   string `json:"lark_app_secret,omitempty"`
-	larkToken       string // cached access token
-	larkTokenExpiry int64  // unix timestamp
 }
 
 // Notifier sends messages to various channels
@@ -54,8 +50,6 @@ func (n *Notifier) Send(ctx context.Context, ch NotifyChannel, message string) e
 		return n.sendSlack(ctx, ch.Target, message)
 	case "discord":
 		return n.sendDiscord(ctx, ch.Target, message)
-	case "lark", "feishu":
-		return n.sendLark(ctx, ch.Target, message)
 	case "webhook":
 		return n.sendWebhook(ctx, ch.Target, message)
 	default:
@@ -95,31 +89,34 @@ func (n *Notifier) sendWhatsApp(ctx context.Context, phone, message string) erro
 		"phone":   phone,
 		"message": message,
 	}
-	
-	req, err := http.NewRequestWithContext(ctx, "POST", n.config.WhatsAppAPIURL, nil)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", n.config.WhatsAppAPIURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	
-	body, _ := json.Marshal(payload)
-	req.Body = io.NopCloser(bytes.NewReader(body))
+
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	if n.config.WhatsAppAPIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+n.config.WhatsAppAPIKey)
 	}
-	
+
 	resp, err := n.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("whatsapp request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("whatsapp error %d: %s", resp.StatusCode, string(body))
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("whatsapp error %d: %s", resp.StatusCode, string(respBody))
 	}
-	
+
 	return nil
 }
 
@@ -135,13 +132,17 @@ func (n *Notifier) sendSlack(ctx context.Context, channel, message string) error
 		"channel": channel,
 		"text":    message,
 	}
-	
-	body, _ := json.Marshal(payload)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+n.config.SlackToken)
 	
@@ -208,7 +209,11 @@ func (n *Notifier) sendDiscordBot(ctx context.Context, channelID, message string
 		"content": message,
 	}
 
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -229,101 +234,6 @@ func (n *Notifier) sendDiscordBot(ctx context.Context, channelID, message string
 	}
 
 	return nil
-}
-
-// sendLark sends a message via Lark (Feishu) API
-func (n *Notifier) sendLark(ctx context.Context, chatID, message string) error {
-	if n.config.LarkAppID == "" || n.config.LarkAppSecret == "" {
-		return fmt.Errorf("lark app_id and app_secret not configured")
-	}
-
-	// Get or refresh access token
-	token, err := n.getLarkToken(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get lark token: %w", err)
-	}
-
-	// Send message
-	apiURL := "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id"
-	
-	content, _ := json.Marshal(map[string]string{"text": message})
-	payload := map[string]interface{}{
-		"receive_id": chatID,
-		"msg_type":   "text",
-		"content":    string(content),
-	}
-
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := n.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("lark request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("lark error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return nil
-}
-
-// getLarkToken gets or refreshes the Lark access token
-func (n *Notifier) getLarkToken(ctx context.Context) (string, error) {
-	// Check if we have a valid cached token
-	now := time.Now().Unix()
-	if n.config.larkToken != "" && n.config.larkTokenExpiry > now {
-		return n.config.larkToken, nil
-	}
-
-	// Get new token
-	tokenURL := "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-	payload := map[string]string{
-		"app_id":     n.config.LarkAppID,
-		"app_secret": n.config.LarkAppSecret,
-	}
-
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := n.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Code              int    `json:"code"`
-		Msg               string `json:"msg"`
-		TenantAccessToken string `json:"tenant_access_token"`
-		Expire            int    `json:"expire"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-
-	if result.Code != 0 {
-		return "", fmt.Errorf("lark token error: %s", result.Msg)
-	}
-
-	// Cache token (expire 1 minute early for safety)
-	n.config.larkToken = result.TenantAccessToken
-	n.config.larkTokenExpiry = now + int64(result.Expire) - 60
-
-	return n.config.larkToken, nil
 }
 
 // sendWebhook sends a POST request to a custom webhook

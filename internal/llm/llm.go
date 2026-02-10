@@ -44,7 +44,6 @@ type Request struct {
 	Messages    []Message
 	MaxTokens   int
 	Temperature float64
-	Platform    string // For platform-specific overrides
 }
 
 // Response represents an LLM response
@@ -100,6 +99,11 @@ func NewRouter(cfg *Config) *Router {
 		cfg.RateLimit = 10
 	}
 
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Router{
 		providers:     make(map[string]Provider),
 		defaultName:   cfg.Default,
@@ -108,7 +112,7 @@ func NewRouter(cfg *Config) *Router {
 		maxInput:      cfg.MaxInput,
 		timeout:       cfg.Timeout,
 		rateLimiter:   newRateLimiter(cfg.RateLimit),
-		logger:        cfg.Logger,
+		logger:        logger,
 	}
 }
 
@@ -187,10 +191,13 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 		return nil, ErrRateLimited
 	}
 
-	// Calculate total input length
+	// Calculate total input length (including multi-modal block data)
 	totalLen := 0
 	for _, m := range messages {
 		totalLen += len(m.Content)
+		for _, b := range m.Blocks {
+			totalLen += len(b.Text) + len(b.ImageData)
+		}
 	}
 	if totalLen > r.maxInput {
 		return nil, ErrInputTooLong
@@ -251,22 +258,26 @@ func (r *Router) tryProviders(ctx context.Context, req *Request) (*Response, err
 
 	// Last resort: try any available provider
 	r.mu.RLock()
+	type candidate struct {
+		name     string
+		provider Provider
+	}
+	var candidates []candidate
 	for name, provider := range r.providers {
-		if name == r.defaultName {
-			continue
-		}
-		if provider.Available() {
-			r.mu.RUnlock()
-			resp, err := provider.Complete(ctx, req)
-			if err == nil {
-				r.logger.Info("used available provider", "provider", name)
-				return resp, nil
-			}
-			lastErr = fmt.Errorf("%s: %w", name, err)
-			r.mu.RLock()
+		if name != r.defaultName && provider.Available() {
+			candidates = append(candidates, candidate{name, provider})
 		}
 	}
 	r.mu.RUnlock()
+
+	for _, c := range candidates {
+		resp, err := c.provider.Complete(ctx, req)
+		if err == nil {
+			r.logger.Info("used available provider", "provider", c.name)
+			return resp, nil
+		}
+		lastErr = fmt.Errorf("%s: %w", c.name, err)
+	}
 
 	if lastErr != nil {
 		return nil, fmt.Errorf("%w: %w", ErrNoProvider, lastErr)
@@ -316,10 +327,11 @@ func (r *Router) Stats() map[string]interface{} {
 
 // Simple rate limiter
 type rateLimiter struct {
-	requests map[string][]time.Time
-	limit    int
-	window   time.Duration
-	mu       sync.Mutex
+	requests  map[string][]time.Time
+	limit     int
+	window    time.Duration
+	mu        sync.Mutex
+	callCount int // tracks calls for periodic cleanup
 }
 
 func newRateLimiter(limit int) *rateLimiter {
@@ -337,7 +349,27 @@ func (r *rateLimiter) allow(userID string) bool {
 	now := time.Now()
 	cutoff := now.Add(-r.window)
 
-	// Clean old entries
+	// Periodic cleanup: every 100 calls, purge stale entries
+	r.callCount++
+	if r.callCount%100 == 0 {
+		for uid, times := range r.requests {
+			if uid == userID {
+				continue
+			}
+			hasRecent := false
+			for _, t := range times {
+				if t.After(cutoff) {
+					hasRecent = true
+					break
+				}
+			}
+			if !hasRecent {
+				delete(r.requests, uid)
+			}
+		}
+	}
+
+	// Clean old entries for current user
 	var fresh []time.Time
 	for _, t := range r.requests[userID] {
 		if t.After(cutoff) {
@@ -346,10 +378,12 @@ func (r *rateLimiter) allow(userID string) bool {
 	}
 
 	if len(fresh) >= r.limit {
+		r.requests[userID] = fresh
 		return false
 	}
 
-	r.requests[userID] = append(fresh, now)
+	fresh = append(fresh, now)
+	r.requests[userID] = fresh
 	return true
 }
 

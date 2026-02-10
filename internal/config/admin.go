@@ -28,12 +28,12 @@ func (c *Config) AddGlobalAdmin(requesterID, newAdminID string) AdminAction {
 		TargetID: newAdminID,
 	}
 
-	if !c.IsGlobalAdmin(requesterID) {
+	c.mu.Lock()
+	if !c.isGlobalAdmin(requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only global admins can add global admins"
 		return result
 	}
-
-	c.mu.Lock()
 	c.Access.GlobalAdmins = addUnique(c.Access.GlobalAdmins, newAdminID)
 	c.mu.Unlock()
 
@@ -56,21 +56,17 @@ func (c *Config) RemoveGlobalAdmin(requesterID, adminID string) AdminAction {
 		TargetID: adminID,
 	}
 
-	if !c.IsGlobalAdmin(requesterID) {
+	c.mu.Lock()
+	if !c.isGlobalAdmin(requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only global admins can remove global admins"
 		return result
 	}
-
-	// Prevent removing self if last admin
-	c.mu.RLock()
 	if len(c.Access.GlobalAdmins) == 1 && c.Access.GlobalAdmins[0] == adminID {
-		c.mu.RUnlock()
+		c.mu.Unlock()
 		result.Message = "❌ Cannot remove the last global admin"
 		return result
 	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
 	c.Access.GlobalAdmins = remove(c.Access.GlobalAdmins, adminID)
 	c.mu.Unlock()
 
@@ -94,44 +90,28 @@ func (c *Config) AddPlatformAdmin(platform, requesterID, newAdminID string) Admi
 		TargetID: newAdminID,
 	}
 
-	if !c.IsPlatformAdmin(platform, requesterID) {
+	c.mu.Lock()
+	if !c.isPlatformAdmin(platform, requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only platform admins can add platform admins"
 		return result
 	}
+	c.mu.Unlock()
 
-	// New admin must be in allowlist first
+	// New admin must be in allowlist first (IsAllowed acquires its own lock)
 	if !c.IsAllowed(platform, newAdminID, "", false) {
 		result.Message = "❌ User must be in allowlist first. Use /allow user " + newAdminID
 		return result
 	}
 
 	c.mu.Lock()
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			c.Platforms.Telegram.Admins = addUnique(c.Platforms.Telegram.Admins, newAdminID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			c.Platforms.Discord.Admins = addUnique(c.Platforms.Discord.Admins, newAdminID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			c.Platforms.Slack.Admins = addUnique(c.Platforms.Slack.Admins, newAdminID)
-		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			c.Platforms.Lark.Admins = addUnique(c.Platforms.Lark.Admins, newAdminID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			c.Platforms.WhatsApp.Admins = addUnique(c.Platforms.WhatsApp.Admins, newAdminID)
-		}
-	default:
+	admins := c.platformAdmins(platform)
+	if admins == nil {
 		c.mu.Unlock()
 		result.Message = fmt.Sprintf("❌ Unknown platform: %s", platform)
 		return result
 	}
+	*admins = addUnique(*admins, newAdminID)
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
@@ -154,33 +134,14 @@ func (c *Config) RemovePlatformAdmin(platform, requesterID, adminID string) Admi
 		TargetID: adminID,
 	}
 
-	if !c.IsPlatformAdmin(platform, requesterID) {
+	c.mu.Lock()
+	if !c.isPlatformAdmin(platform, requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only platform admins can remove platform admins"
 		return result
 	}
-
-	c.mu.Lock()
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			c.Platforms.Telegram.Admins = remove(c.Platforms.Telegram.Admins, adminID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			c.Platforms.Discord.Admins = remove(c.Platforms.Discord.Admins, adminID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			c.Platforms.Slack.Admins = remove(c.Platforms.Slack.Admins, adminID)
-		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			c.Platforms.Lark.Admins = remove(c.Platforms.Lark.Admins, adminID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			c.Platforms.WhatsApp.Admins = remove(c.Platforms.WhatsApp.Admins, adminID)
-		}
+	if admins := c.platformAdmins(platform); admins != nil {
+		*admins = remove(*admins, adminID)
 	}
 	c.mu.Unlock()
 
@@ -204,33 +165,14 @@ func (c *Config) AllowUser(platform, requesterID, userID string) AdminAction {
 		TargetID: userID,
 	}
 
-	if !c.IsPlatformAdmin(platform, requesterID) {
+	c.mu.Lock()
+	if !c.isPlatformAdmin(platform, requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only platform admins can modify allowlist"
 		return result
 	}
-
-	c.mu.Lock()
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			c.Platforms.Telegram.AllowedUsers = addUnique(c.Platforms.Telegram.AllowedUsers, userID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			c.Platforms.Discord.AllowedUsers = addUnique(c.Platforms.Discord.AllowedUsers, userID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			c.Platforms.Slack.AllowedUsers = addUnique(c.Platforms.Slack.AllowedUsers, userID)
-		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			c.Platforms.Lark.AllowedUsers = addUnique(c.Platforms.Lark.AllowedUsers, userID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			c.Platforms.WhatsApp.AllowedUsers = addUnique(c.Platforms.WhatsApp.AllowedUsers, userID)
-		}
+	if users := c.platformAllowedUsers(platform); users != nil {
+		*users = addUnique(*users, userID)
 	}
 	c.mu.Unlock()
 
@@ -254,39 +196,20 @@ func (c *Config) RemoveUser(platform, requesterID, userID string) AdminAction {
 		TargetID: userID,
 	}
 
-	if !c.IsPlatformAdmin(platform, requesterID) {
+	c.mu.Lock()
+	if !c.isPlatformAdmin(platform, requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only platform admins can modify allowlist"
 		return result
 	}
-
 	// Cannot remove platform admin from allowlist
-	if c.IsPlatformAdmin(platform, userID) && userID != requesterID {
+	if c.isPlatformAdmin(platform, userID) && userID != requesterID {
+		c.mu.Unlock()
 		result.Message = "❌ Cannot remove a platform admin. Remove admin status first."
 		return result
 	}
-
-	c.mu.Lock()
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			c.Platforms.Telegram.AllowedUsers = remove(c.Platforms.Telegram.AllowedUsers, userID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			c.Platforms.Discord.AllowedUsers = remove(c.Platforms.Discord.AllowedUsers, userID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			c.Platforms.Slack.AllowedUsers = remove(c.Platforms.Slack.AllowedUsers, userID)
-		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			c.Platforms.Lark.AllowedUsers = remove(c.Platforms.Lark.AllowedUsers, userID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			c.Platforms.WhatsApp.AllowedUsers = remove(c.Platforms.WhatsApp.AllowedUsers, userID)
-		}
+	if users := c.platformAllowedUsers(platform); users != nil {
+		*users = remove(*users, userID)
 	}
 	c.mu.Unlock()
 
@@ -310,33 +233,14 @@ func (c *Config) AllowChat(platform, requesterID, chatID string) AdminAction {
 		TargetID: chatID,
 	}
 
-	if !c.IsPlatformAdmin(platform, requesterID) {
+	c.mu.Lock()
+	if !c.isPlatformAdmin(platform, requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only platform admins can modify allowlist"
 		return result
 	}
-
-	c.mu.Lock()
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			c.Platforms.Telegram.AllowedChats = addUnique(c.Platforms.Telegram.AllowedChats, chatID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			c.Platforms.Discord.AllowedChats = addUnique(c.Platforms.Discord.AllowedChats, chatID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			c.Platforms.Slack.AllowedChats = addUnique(c.Platforms.Slack.AllowedChats, chatID)
-		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			c.Platforms.Lark.AllowedChats = addUnique(c.Platforms.Lark.AllowedChats, chatID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			c.Platforms.WhatsApp.AllowedChats = addUnique(c.Platforms.WhatsApp.AllowedChats, chatID)
-		}
+	if chats := c.platformAllowedChats(platform); chats != nil {
+		*chats = addUnique(*chats, chatID)
 	}
 	c.mu.Unlock()
 
@@ -360,33 +264,14 @@ func (c *Config) RemoveChat(platform, requesterID, chatID string) AdminAction {
 		TargetID: chatID,
 	}
 
-	if !c.IsPlatformAdmin(platform, requesterID) {
+	c.mu.Lock()
+	if !c.isPlatformAdmin(platform, requesterID) {
+		c.mu.Unlock()
 		result.Message = "❌ Only platform admins can modify allowlist"
 		return result
 	}
-
-	c.mu.Lock()
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			c.Platforms.Telegram.AllowedChats = remove(c.Platforms.Telegram.AllowedChats, chatID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			c.Platforms.Discord.AllowedChats = remove(c.Platforms.Discord.AllowedChats, chatID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			c.Platforms.Slack.AllowedChats = remove(c.Platforms.Slack.AllowedChats, chatID)
-		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			c.Platforms.Lark.AllowedChats = remove(c.Platforms.Lark.AllowedChats, chatID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			c.Platforms.WhatsApp.AllowedChats = remove(c.Platforms.WhatsApp.AllowedChats, chatID)
-		}
+	if chats := c.platformAllowedChats(platform); chats != nil {
+		*chats = remove(*chats, chatID)
 	}
 	c.mu.Unlock()
 
@@ -409,11 +294,6 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 		TargetID: mode,
 	}
 
-	if !c.IsGlobalAdmin(requesterID) {
-		result.Message = "❌ Only global admins can change access mode"
-		return result
-	}
-
 	mode = strings.ToLower(mode)
 	if mode != "allowlist" && mode != "denylist" && mode != "open" {
 		result.Message = "❌ Invalid mode. Use: allowlist, denylist, or open"
@@ -421,6 +301,11 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 	}
 
 	c.mu.Lock()
+	if !c.isGlobalAdmin(requesterID) {
+		c.mu.Unlock()
+		result.Message = "❌ Only global admins can change access mode"
+		return result
+	}
 	c.Access.Mode = mode
 	c.mu.Unlock()
 
@@ -433,6 +318,75 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 	result.NeedRestart = true
 	result.Message = fmt.Sprintf("✅ Access mode set to: %s", mode)
 	return result
+}
+
+// platformAdmins returns a pointer to the platform's Admins slice, or nil if unknown
+func (c *Config) platformAdmins(platform string) *[]string {
+	switch platform {
+	case "telegram":
+		if c.Platforms.Telegram != nil {
+			return &c.Platforms.Telegram.Admins
+		}
+	case "discord":
+		if c.Platforms.Discord != nil {
+			return &c.Platforms.Discord.Admins
+		}
+	case "slack":
+		if c.Platforms.Slack != nil {
+			return &c.Platforms.Slack.Admins
+		}
+	case "whatsapp":
+		if c.Platforms.WhatsApp != nil {
+			return &c.Platforms.WhatsApp.Admins
+		}
+	}
+	return nil
+}
+
+// platformAllowedUsers returns a pointer to the platform's AllowedUsers slice, or nil
+func (c *Config) platformAllowedUsers(platform string) *[]string {
+	switch platform {
+	case "telegram":
+		if c.Platforms.Telegram != nil {
+			return &c.Platforms.Telegram.AllowedUsers
+		}
+	case "discord":
+		if c.Platforms.Discord != nil {
+			return &c.Platforms.Discord.AllowedUsers
+		}
+	case "slack":
+		if c.Platforms.Slack != nil {
+			return &c.Platforms.Slack.AllowedUsers
+		}
+	case "whatsapp":
+		if c.Platforms.WhatsApp != nil {
+			return &c.Platforms.WhatsApp.AllowedUsers
+		}
+	}
+	return nil
+}
+
+// platformAllowedChats returns a pointer to the platform's AllowedChats slice, or nil
+func (c *Config) platformAllowedChats(platform string) *[]string {
+	switch platform {
+	case "telegram":
+		if c.Platforms.Telegram != nil {
+			return &c.Platforms.Telegram.AllowedChats
+		}
+	case "discord":
+		if c.Platforms.Discord != nil {
+			return &c.Platforms.Discord.AllowedChats
+		}
+	case "slack":
+		if c.Platforms.Slack != nil {
+			return &c.Platforms.Slack.AllowedChats
+		}
+	case "whatsapp":
+		if c.Platforms.WhatsApp != nil {
+			return &c.Platforms.WhatsApp.AllowedChats
+		}
+	}
+	return nil
 }
 
 // RestartBot restarts the magabot process

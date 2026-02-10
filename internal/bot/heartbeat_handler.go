@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/heartbeat"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // HeartbeatHandler handles heartbeat-related commands
@@ -78,7 +79,7 @@ func (h *HeartbeatHandler) showStatus() string {
 		}
 		
 		if check.LastMessage != "" {
-			sb.WriteString(fmt.Sprintf("   Message: %s\n", truncateHB(check.LastMessage, 50)))
+			sb.WriteString(fmt.Sprintf("   Message: %s\n", util.Truncate(check.LastMessage, 50)))
 		}
 		
 		sb.WriteString(fmt.Sprintf("   Runs: %d | Alerts: %d\n\n", check.RunCount, check.AlertCount))
@@ -180,11 +181,4 @@ func (h *HeartbeatHandler) RegisterDefaultChecks() {
 	)
 	
 	// Add more default checks as needed
-}
-
-func truncateHB(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
 }

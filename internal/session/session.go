@@ -4,9 +4,12 @@ package session
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Status represents session status
@@ -37,6 +40,7 @@ type Session struct {
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
 	CompletedAt *time.Time             `json:"completed_at,omitempty"`
+	cancelFunc  context.CancelFunc     // internal: cancels the sub-session goroutine
 }
 
 // Message represents a chat message
@@ -59,6 +63,8 @@ type Manager struct {
 	notify     NotifyFunc
 	taskRunner TaskRunner
 	maxHistory int // Max messages to keep per session
+	subCounter atomic.Int64 // monotonic counter for unique sub-session IDs
+	logger     *slog.Logger
 }
 
 // TaskRunner executes tasks (usually LLM calls)
@@ -67,15 +73,19 @@ type TaskRunner interface {
 }
 
 // NewManager creates a new session manager
-func NewManager(notify NotifyFunc, maxHistory int) *Manager {
+func NewManager(notify NotifyFunc, maxHistory int, logger *slog.Logger) *Manager {
 	if maxHistory <= 0 {
 		maxHistory = 50
 	}
-	
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Manager{
 		sessions:   make(map[string]*Session),
 		notify:     notify,
 		maxHistory: maxHistory,
+		logger:     logger,
 	}
 }
 
@@ -155,7 +165,7 @@ func (m *Manager) GetHistory(session *Session, limit int) []Message {
 
 // Spawn creates a sub-session for background task
 func (m *Manager) Spawn(parent *Session, task string) (*Session, error) {
-	subID := fmt.Sprintf("%s:sub:%d", parent.ID, time.Now().UnixNano())
+	subID := fmt.Sprintf("%s:sub:%d", parent.ID, m.subCounter.Add(1))
 	
 	sub := &Session{
 		ID:        subID,
@@ -182,14 +192,15 @@ func (m *Manager) Spawn(parent *Session, task string) (*Session, error) {
 
 // runSubSession executes a sub-session task
 func (m *Manager) runSubSession(session *Session) {
-	log.Printf("[SESSION] Starting sub-session %s: %s", session.ID, session.Task)
-	
-	m.mu.Lock()
-	session.Status = StatusRunning
-	m.mu.Unlock()
-	
+	m.logger.Info("starting sub-session", "id", session.ID, "task", session.Task)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+
+	m.mu.Lock()
+	session.Status = StatusRunning
+	session.cancelFunc = cancel
+	m.mu.Unlock()
 	
 	var result string
 	var err error
@@ -216,11 +227,11 @@ func (m *Manager) runSubSession(session *Session) {
 	if err != nil {
 		session.Status = StatusFailed
 		session.Error = err.Error()
-		log.Printf("[SESSION] Sub-session %s failed: %v", session.ID, err)
+		m.logger.Warn("sub-session failed", "id", session.ID, "error", err)
 	} else {
 		session.Status = StatusComplete
 		session.Result = result
-		log.Printf("[SESSION] Sub-session %s completed", session.ID)
+		m.logger.Info("sub-session completed", "id", session.ID)
 	}
 	m.mu.Unlock()
 	
@@ -237,16 +248,16 @@ func (m *Manager) notifyCompletion(session *Session) {
 	var message string
 	if session.Status == StatusComplete {
 		message = fmt.Sprintf("✅ *Task Complete*\n\n📋 %s\n\n%s", 
-			truncate(session.Task, 100), 
-			truncate(session.Result, 1000))
+			util.Truncate(session.Task, 100), 
+			util.Truncate(session.Result, 1000))
 	} else {
 		message = fmt.Sprintf("❌ *Task Failed*\n\n📋 %s\n\n⚠️ %s",
-			truncate(session.Task, 100),
+			util.Truncate(session.Task, 100),
 			session.Error)
 	}
 	
 	if err := m.notify(session.Platform, session.ChatID, message); err != nil {
-		log.Printf("[SESSION] Failed to notify: %v", err)
+		m.logger.Error("failed to notify", "error", err)
 	}
 }
 
@@ -288,21 +299,26 @@ func (m *Manager) ListSubSessions(parentID string) []*Session {
 func (m *Manager) Cancel(sessionID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	session, ok := m.sessions[sessionID]
 	if !ok {
 		return fmt.Errorf("session not found")
 	}
-	
+
 	if session.Status != StatusRunning && session.Status != StatusPending {
 		return fmt.Errorf("session not running")
 	}
-	
+
+	// Cancel the context to stop the goroutine
+	if session.cancelFunc != nil {
+		session.cancelFunc()
+	}
+
 	session.Status = StatusCanceled
 	now := time.Now()
 	session.CompletedAt = &now
 	session.UpdatedAt = now
-	
+
 	return nil
 }
 
@@ -346,11 +362,4 @@ func (m *Manager) GetContext(session *Session, key string) interface{} {
 		return nil
 	}
 	return session.Context[key]
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
 }

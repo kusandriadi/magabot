@@ -461,7 +461,6 @@ Channel Types:
   whatsapp:PHONE        WhatsApp phone number (+62...)
   slack:#channel        Slack channel name
   discord:CHANNEL_ID    Discord channel ID (or webhook URL)
-  lark:CHAT_ID          Lark (Feishu) chat ID
   webhook:URL           Custom webhook URL
 
 Schedule Examples:

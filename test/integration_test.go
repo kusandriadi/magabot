@@ -108,7 +108,7 @@ func TestSessionWorkflow(t *testing.T) {
 		return nil
 	}
 
-	manager := session.NewManager(notify, 50)
+	manager := session.NewManager(notify, 50, nil)
 
 	// Create session
 	sess := manager.GetOrCreate("telegram", "chat123", "user456")

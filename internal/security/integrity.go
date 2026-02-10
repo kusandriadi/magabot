@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -179,7 +180,9 @@ func (iv *IntegrityVault) VerifyAndDecrypt(signedCiphertext string) ([]byte, err
 // GenerateSigningKey generates a new random signing key
 func GenerateSigningKey() string {
 	key := make([]byte, 32)
-	rand.Read(key)
+	if _, err := rand.Read(key); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	return base64.StdEncoding.EncodeToString(key)
 }
 
@@ -197,6 +200,7 @@ func VerifyHash(data []byte, expectedHash string) bool {
 
 // FileIntegrity provides file integrity checking
 type FileIntegrity struct {
+	mu     sync.RWMutex
 	hashes map[string]string // path -> hash
 }
 
@@ -209,12 +213,16 @@ func NewFileIntegrity() *FileIntegrity {
 
 // RecordHash records the hash of file content
 func (fi *FileIntegrity) RecordHash(path string, content []byte) {
+	fi.mu.Lock()
 	fi.hashes[path] = HashForIntegrity(content)
+	fi.mu.Unlock()
 }
 
 // VerifyFile checks if file content matches recorded hash
 func (fi *FileIntegrity) VerifyFile(path string, content []byte) bool {
+	fi.mu.RLock()
 	expected, ok := fi.hashes[path]
+	fi.mu.RUnlock()
 	if !ok {
 		return false
 	}
@@ -223,6 +231,8 @@ func (fi *FileIntegrity) VerifyFile(path string, content []byte) bool {
 
 // GetHash returns the recorded hash for a path
 func (fi *FileIntegrity) GetHash(path string) (string, bool) {
+	fi.mu.RLock()
 	h, ok := fi.hashes[path]
+	fi.mu.RUnlock()
 	return h, ok
 }

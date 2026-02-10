@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -75,7 +75,7 @@ func checkFilePermissions(path string) error {
 	mode := info.Mode().Perm()
 	// Reject if group or others have any access (should be 0600 or stricter)
 	if mode&0077 != 0 {
-		log.Printf("[SECURITY] WARNING: credential file %s has unsafe permissions %o, expected 0600", path, mode)
+		slog.Warn("credential file has unsafe permissions", "path", path, "mode", fmt.Sprintf("%o", mode))
 		return fmt.Errorf("credential file %s has unsafe permissions %o (should be 0600)", path, mode)
 	}
 	return nil
@@ -185,24 +185,42 @@ func (m *OAuthManager) LoadCodexCliCredentials() (*OAuthCredentials, error) {
 func (m *OAuthManager) GetAccessToken(provider string) (string, error) {
 	m.mu.RLock()
 	creds, ok := m.credentials[provider]
-	m.mu.RUnlock()
-
 	if !ok {
+		m.mu.RUnlock()
 		return "", fmt.Errorf("no credentials for provider: %s", provider)
 	}
 
 	// Check if token is expired or about to expire (5 min buffer)
 	bufferMs := int64(5 * 60 * 1000) // 5 minutes
-	if time.Now().UnixMilli()+bufferMs >= creds.ExpiresAt {
-		// Need to refresh
-		newCreds, err := m.refreshToken(provider, creds)
-		if err != nil {
-			return "", fmt.Errorf("refresh token: %w", err)
-		}
-		creds = newCreds
+	needsRefresh := time.Now().UnixMilli()+bufferMs >= creds.ExpiresAt
+	token := creds.AccessToken
+	m.mu.RUnlock()
+
+	if !needsRefresh {
+		return token, nil
 	}
 
-	return creds.AccessToken, nil
+	// Upgrade to write lock for refresh to prevent duplicate refreshes
+	m.mu.Lock()
+	// Re-check under write lock — another goroutine may have refreshed already
+	creds = m.credentials[provider]
+	if creds == nil {
+		m.mu.Unlock()
+		return "", fmt.Errorf("credentials removed for provider: %s", provider)
+	}
+	if time.Now().UnixMilli()+bufferMs < creds.ExpiresAt {
+		token = creds.AccessToken
+		m.mu.Unlock()
+		return token, nil
+	}
+	m.mu.Unlock()
+
+	// Refresh outside the lock (network call)
+	newCreds, err := m.refreshToken(provider, creds)
+	if err != nil {
+		return "", fmt.Errorf("refresh token: %w", err)
+	}
+	return newCreds.AccessToken, nil
 }
 
 // refreshToken refreshes OAuth token for a provider
@@ -239,7 +257,10 @@ func (m *OAuthManager) refreshAnthropicToken(creds *OAuthCredentials) (*OAuthCre
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read refresh response: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))
@@ -269,7 +290,9 @@ func (m *OAuthManager) refreshAnthropicToken(creds *OAuthCredentials) (*OAuthCre
 	m.mu.Unlock()
 
 	// Also update the file
-	m.saveClaudeCliCredentials(newCreds)
+	if err := m.saveClaudeCliCredentials(newCreds); err != nil {
+		slog.Warn("failed to save refreshed credentials to file", "error", err)
+	}
 
 	return newCreds, nil
 }
@@ -296,7 +319,10 @@ func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCreden
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read refresh response: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))
@@ -359,7 +385,11 @@ func (m *OAuthManager) saveClaudeCliCredentials(creds *OAuthCredentials) error {
 		return err
 	}
 
-	return os.WriteFile(credPath, newData, 0600)
+	tmpPath := credPath + ".tmp"
+	if err := os.WriteFile(tmpPath, newData, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, credPath)
 }
 
 // IsTokenExpired checks if the token is expired

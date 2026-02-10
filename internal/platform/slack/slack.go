@@ -16,12 +16,13 @@ import (
 
 // Bot represents a Slack bot
 type Bot struct {
-	api      *slack.Client
-	socket   *socketmode.Client
-	handler  router.MessageHandler
-	logger   *slog.Logger
-	done     chan struct{}
-	wg       sync.WaitGroup
+	api       *slack.Client
+	socket    *socketmode.Client
+	handler   router.MessageHandler
+	handlerMu sync.RWMutex
+	logger    *slog.Logger
+	done      chan struct{}
+	wg        sync.WaitGroup
 }
 
 // Config for Slack bot
@@ -85,7 +86,9 @@ func (b *Bot) Send(chatID, message string) error {
 
 // SetHandler sets the message handler
 func (b *Bot) SetHandler(h router.MessageHandler) {
+	b.handlerMu.Lock()
 	b.handler = h
+	b.handlerMu.Unlock()
 }
 
 // processEvents processes socket mode events
@@ -139,7 +142,11 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 
 // handleMessage handles an incoming message
 func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
-	if b.handler == nil {
+	b.handlerMu.RLock()
+	handler := b.handler
+	b.handlerMu.RUnlock()
+
+	if handler == nil {
 		return
 	}
 
@@ -157,7 +164,7 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		msg.Username = user.Name
 	}
 
-	response, err := b.handler(ctx, msg)
+	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)
 		return
@@ -167,15 +174,21 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		return
 	}
 
-	b.api.PostMessage(ev.Channel, 
+	if _, _, err := b.api.PostMessage(ev.Channel,
 		slack.MsgOptionText(response, false),
 		slack.MsgOptionTS(ev.TimeStamp),
-	)
+	); err != nil {
+		b.logger.Error("send message failed", "channel", ev.Channel, "error", err)
+	}
 }
 
 // handleSlashCommand handles a slash command
 func (b *Bot) handleSlashCommand(ctx context.Context, cmd *slack.SlashCommand) {
-	if b.handler == nil {
+	b.handlerMu.RLock()
+	handler := b.handler
+	b.handlerMu.RUnlock()
+
+	if handler == nil {
 		return
 	}
 
@@ -189,14 +202,16 @@ func (b *Bot) handleSlashCommand(ctx context.Context, cmd *slack.SlashCommand) {
 		Raw:       cmd,
 	}
 
-	response, err := b.handler(ctx, msg)
+	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)
 		return
 	}
 
 	if response != "" {
-		b.api.PostMessage(cmd.ChannelID, slack.MsgOptionText(response, false))
+		if _, _, err := b.api.PostMessage(cmd.ChannelID, slack.MsgOptionText(response, false)); err != nil {
+			b.logger.Error("send slash response failed", "channel", cmd.ChannelID, "error", err)
+		}
 	}
 }
 

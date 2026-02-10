@@ -57,6 +57,9 @@ type Config struct {
 	// Skills settings
 	Skills SkillsConfig `yaml:"skills"`
 
+	// Secrets backend
+	Secrets SecretsConfig `yaml:"secrets"`
+
 	// Server settings
 	Server ServerConfig `yaml:"server"`
 
@@ -78,7 +81,6 @@ type PlatformsConfig struct {
 	Telegram  *TelegramConfig  `yaml:"telegram,omitempty"`
 	Discord   *DiscordConfig   `yaml:"discord,omitempty"`
 	Slack     *SlackConfig     `yaml:"slack,omitempty"`
-	Lark      *LarkConfig      `yaml:"lark,omitempty"`
 	WhatsApp  *WhatsAppConfig  `yaml:"whatsapp,omitempty"`
 	Webhook   *WebhookConfig   `yaml:"webhook,omitempty"`
 }
@@ -113,21 +115,6 @@ type SlackConfig struct {
 	Enabled      bool     `yaml:"enabled"`
 	BotToken     string   `yaml:"bot_token"`
 	AppToken     string   `yaml:"app_token"`
-	Admins       []string `yaml:"admins"`
-	AllowedUsers []string `yaml:"allowed_users"`
-	AllowedChats []string `yaml:"allowed_chats"`
-	AllowGroups  bool     `yaml:"allow_groups"`
-	AllowDMs     bool     `yaml:"allow_dms"`
-}
-
-// LarkConfig for Lark/Feishu platform
-type LarkConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	AppID        string   `yaml:"app_id"`
-	AppSecret    string   `yaml:"app_secret"`
-	VerifyToken  string   `yaml:"verify_token"`
-	EncryptKey   string   `yaml:"encrypt_key,omitempty"`
-	WebhookPort  int      `yaml:"webhook_port"`
 	Admins       []string `yaml:"admins"`
 	AllowedUsers []string `yaml:"allowed_users"`
 	AllowedChats []string `yaml:"allowed_chats"`
@@ -305,6 +292,25 @@ type BackupConfig struct {
 	KeepCount int    `yaml:"keep_count"`
 }
 
+// SecretsConfig holds secrets backend settings
+type SecretsConfig struct {
+	Backend string              `yaml:"backend"` // local, vault
+	Vault   *VaultSecretsConfig `yaml:"vault,omitempty"`
+	Local   *LocalSecretsConfig `yaml:"local,omitempty"`
+}
+
+// VaultSecretsConfig holds Vault-specific secrets settings
+type VaultSecretsConfig struct {
+	Address    string `yaml:"address"`
+	MountPath  string `yaml:"mount_path"`
+	SecretPath string `yaml:"secret_path"`
+}
+
+// LocalSecretsConfig holds local file-based secrets settings
+type LocalSecretsConfig struct {
+	Path string `yaml:"path"`
+}
+
 // Load reads config from file
 func Load(filePath string) (*Config, error) {
 	cfg := &Config{
@@ -354,7 +360,10 @@ func expandEnvVars(input string) string {
 
 // setDefaults sets default values for missing fields
 func (c *Config) setDefaults() {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
 
 	if c.Bot.Prefix == "" {
 		c.Bot.Prefix = "/"
@@ -427,7 +436,10 @@ func (c *Config) setDefaults() {
 // expandPath expands ~ to home directory
 func expandPath(path string) string {
 	if len(path) > 0 && path[0] == '~' {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = os.TempDir()
+		}
 		return filepath.Join(home, path[1:])
 	}
 	return path
@@ -474,7 +486,11 @@ func (c *Config) SaveBy(updatedBy string) error {
 func (c *Config) IsGlobalAdmin(userID string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	return c.isGlobalAdmin(userID)
+}
 
+// isGlobalAdmin is the lock-free internal version (caller must hold mu)
+func (c *Config) isGlobalAdmin(userID string) bool {
 	for _, admin := range c.Access.GlobalAdmins {
 		if admin == userID {
 			return true
@@ -487,9 +503,12 @@ func (c *Config) IsGlobalAdmin(userID string) bool {
 func (c *Config) IsPlatformAdmin(platform, userID string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	return c.isPlatformAdmin(platform, userID)
+}
 
-	// Global admins are admins everywhere
-	if c.IsGlobalAdmin(userID) {
+// isPlatformAdmin is the lock-free internal version (caller must hold mu)
+func (c *Config) isPlatformAdmin(platform, userID string) bool {
+	if c.isGlobalAdmin(userID) {
 		return true
 	}
 
@@ -506,10 +525,6 @@ func (c *Config) IsPlatformAdmin(platform, userID string) bool {
 		if c.Platforms.Slack != nil {
 			return contains(c.Platforms.Slack.Admins, userID)
 		}
-	case "lark":
-		if c.Platforms.Lark != nil {
-			return contains(c.Platforms.Lark.Admins, userID)
-		}
 	case "whatsapp":
 		if c.Platforms.WhatsApp != nil {
 			return contains(c.Platforms.WhatsApp.Admins, userID)
@@ -524,7 +539,7 @@ func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
 	defer c.mu.RUnlock()
 
 	// Global admins always allowed
-	if c.IsGlobalAdmin(userID) {
+	if c.isGlobalAdmin(userID) {
 		return true
 	}
 
@@ -533,115 +548,78 @@ func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
 		return true
 	}
 
+	var pa *platformAccess
 	switch platform {
 	case "telegram":
-		return c.isAllowedTelegram(userID, chatID, isGroup)
+		if c.Platforms.Telegram != nil {
+			pa = &platformAccess{
+				Enabled: c.Platforms.Telegram.Enabled, Admins: c.Platforms.Telegram.Admins,
+				AllowedUsers: c.Platforms.Telegram.AllowedUsers, AllowedChats: c.Platforms.Telegram.AllowedChats,
+				AllowGroups: c.Platforms.Telegram.AllowGroups, AllowDMs: c.Platforms.Telegram.AllowDMs,
+			}
+		}
 	case "discord":
-		return c.isAllowedDiscord(userID, chatID, isGroup)
+		if c.Platforms.Discord != nil {
+			pa = &platformAccess{
+				Enabled: c.Platforms.Discord.Enabled, Admins: c.Platforms.Discord.Admins,
+				AllowedUsers: c.Platforms.Discord.AllowedUsers, AllowedChats: c.Platforms.Discord.AllowedChats,
+				AllowGroups: c.Platforms.Discord.AllowGroups, AllowDMs: c.Platforms.Discord.AllowDMs,
+			}
+		}
 	case "slack":
-		return c.isAllowedSlack(userID, chatID, isGroup)
-	case "lark":
-		return c.isAllowedLark(userID, chatID, isGroup)
+		if c.Platforms.Slack != nil {
+			pa = &platformAccess{
+				Enabled: c.Platforms.Slack.Enabled, Admins: c.Platforms.Slack.Admins,
+				AllowedUsers: c.Platforms.Slack.AllowedUsers, AllowedChats: c.Platforms.Slack.AllowedChats,
+				AllowGroups: c.Platforms.Slack.AllowGroups, AllowDMs: c.Platforms.Slack.AllowDMs,
+			}
+		}
 	case "whatsapp":
-		return c.isAllowedWhatsApp(userID, chatID, isGroup)
+		if c.Platforms.WhatsApp != nil {
+			pa = &platformAccess{
+				Enabled: c.Platforms.WhatsApp.Enabled, Admins: c.Platforms.WhatsApp.Admins,
+				AllowedUsers: c.Platforms.WhatsApp.AllowedUsers, AllowedChats: c.Platforms.WhatsApp.AllowedChats,
+				AllowGroups: c.Platforms.WhatsApp.AllowGroups, AllowDMs: c.Platforms.WhatsApp.AllowDMs,
+			}
+		}
 	}
-	return false
+	if pa == nil {
+		return false
+	}
+	return c.isAllowedPlatform(pa, userID, chatID, isGroup)
 }
 
-func (c *Config) isAllowedTelegram(userID, chatID string, isGroup bool) bool {
-	cfg := c.Platforms.Telegram
-	if cfg == nil || !cfg.Enabled {
-		return false
-	}
-	if isGroup && !cfg.AllowGroups {
-		return false
-	}
-	if !isGroup && !cfg.AllowDMs {
-		return false
-	}
-	// Platform admins always allowed
-	if contains(cfg.Admins, userID) {
-		return true
-	}
-	// Check allowlist
-	userOK := len(cfg.AllowedUsers) == 0 || contains(cfg.AllowedUsers, userID)
-	chatOK := !isGroup || len(cfg.AllowedChats) == 0 || contains(cfg.AllowedChats, chatID)
-	return userOK && chatOK
+// platformAccess holds the common access control fields for any platform
+type platformAccess struct {
+	Enabled      bool
+	Admins       []string
+	AllowedUsers []string
+	AllowedChats []string
+	AllowGroups  bool
+	AllowDMs     bool
 }
 
-func (c *Config) isAllowedDiscord(userID, chatID string, isGroup bool) bool {
-	cfg := c.Platforms.Discord
-	if cfg == nil || !cfg.Enabled {
+func (c *Config) isAllowedPlatform(pa *platformAccess, userID, chatID string, isGroup bool) bool {
+	if !pa.Enabled {
 		return false
 	}
-	if isGroup && !cfg.AllowGroups {
+	if isGroup && !pa.AllowGroups {
 		return false
 	}
-	if !isGroup && !cfg.AllowDMs {
+	if !isGroup && !pa.AllowDMs {
 		return false
 	}
-	if contains(cfg.Admins, userID) {
+	if contains(pa.Admins, userID) {
 		return true
 	}
-	userOK := len(cfg.AllowedUsers) == 0 || contains(cfg.AllowedUsers, userID)
-	chatOK := !isGroup || len(cfg.AllowedChats) == 0 || contains(cfg.AllowedChats, chatID)
-	return userOK && chatOK
-}
-
-func (c *Config) isAllowedSlack(userID, chatID string, isGroup bool) bool {
-	cfg := c.Platforms.Slack
-	if cfg == nil || !cfg.Enabled {
-		return false
+	userOK := contains(pa.AllowedUsers, userID)
+	if len(pa.AllowedUsers) == 0 {
+		userOK = c.Access.Mode != "allowlist"
 	}
-	if isGroup && !cfg.AllowGroups {
-		return false
+	chatOK := !isGroup || contains(pa.AllowedChats, chatID)
+	if isGroup && len(pa.AllowedChats) == 0 {
+		chatOK = c.Access.Mode != "allowlist"
 	}
-	if !isGroup && !cfg.AllowDMs {
-		return false
-	}
-	if contains(cfg.Admins, userID) {
-		return true
-	}
-	userOK := len(cfg.AllowedUsers) == 0 || contains(cfg.AllowedUsers, userID)
-	chatOK := !isGroup || len(cfg.AllowedChats) == 0 || contains(cfg.AllowedChats, chatID)
-	return userOK && chatOK
-}
-
-func (c *Config) isAllowedLark(userID, chatID string, isGroup bool) bool {
-	cfg := c.Platforms.Lark
-	if cfg == nil || !cfg.Enabled {
-		return false
-	}
-	if isGroup && !cfg.AllowGroups {
-		return false
-	}
-	if !isGroup && !cfg.AllowDMs {
-		return false
-	}
-	if contains(cfg.Admins, userID) {
-		return true
-	}
-	userOK := len(cfg.AllowedUsers) == 0 || contains(cfg.AllowedUsers, userID)
-	chatOK := !isGroup || len(cfg.AllowedChats) == 0 || contains(cfg.AllowedChats, chatID)
-	return userOK && chatOK
-}
-
-func (c *Config) isAllowedWhatsApp(userID, chatID string, isGroup bool) bool {
-	cfg := c.Platforms.WhatsApp
-	if cfg == nil || !cfg.Enabled {
-		return false
-	}
-	if isGroup && !cfg.AllowGroups {
-		return false
-	}
-	if !isGroup && !cfg.AllowDMs {
-		return false
-	}
-	if contains(cfg.Admins, userID) {
-		return true
-	}
-	userOK := len(cfg.AllowedUsers) == 0 || contains(cfg.AllowedUsers, userID)
-	chatOK := !isGroup || len(cfg.AllowedChats) == 0 || contains(cfg.AllowedChats, chatID)
 	return userOK && chatOK
 }
 

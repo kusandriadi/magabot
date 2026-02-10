@@ -217,8 +217,8 @@ func TestNewDeepSeekDefaults(t *testing.T) {
 	if p.config.Model != "deepseek-chat" {
 		t.Errorf("unexpected default model: %s", p.config.Model)
 	}
-	if p.config.Temperature != 0.7 {
-		t.Errorf("unexpected default temperature: %f", p.config.Temperature)
+	if p.config.Temperature != 0 {
+		t.Errorf("expected default temperature=0 (let API decide), got %f", p.config.Temperature)
 	}
 	models := p.Models()
 	if len(models) != 3 {

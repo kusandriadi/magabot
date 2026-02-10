@@ -29,24 +29,24 @@ type DeepSeek struct {
 
 // NewDeepSeek creates a new DeepSeek provider
 func NewDeepSeek(config *DeepSeekConfig) *DeepSeek {
-	if config.APIKey == "" {
-		config.APIKey = os.Getenv("DEEPSEEK_API_KEY")
+	// Copy to avoid mutating caller's config
+	cfg := *config
+
+	if cfg.APIKey == "" {
+		cfg.APIKey = os.Getenv("DEEPSEEK_API_KEY")
 	}
-	if config.Model == "" {
-		config.Model = "deepseek-chat"
+	if cfg.Model == "" {
+		cfg.Model = "deepseek-chat"
 	}
-	if config.MaxTokens == 0 {
-		config.MaxTokens = 4096
+	if cfg.MaxTokens == 0 {
+		cfg.MaxTokens = 4096
 	}
-	if config.Temperature == 0 {
-		config.Temperature = 0.7
-	}
-	if config.BaseURL == "" {
-		config.BaseURL = deepseekAPIURL
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = deepseekAPIURL
 	}
 
 	return &DeepSeek{
-		config: *config,
+		config: cfg,
 	}
 }
 

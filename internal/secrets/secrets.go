@@ -95,6 +95,7 @@ const (
 	KeyOpenAIAPIKey     = "magabot/llm/openai_api_key"
 	KeyGeminiAPIKey     = "magabot/llm/gemini_api_key"
 	KeyGLMAPIKey        = "magabot/llm/glm_api_key"
+	KeyDeepSeekAPIKey   = "magabot/llm/deepseek_api_key"
 	KeyBraveAPIKey      = "magabot/tools/brave_api_key"
 )
 

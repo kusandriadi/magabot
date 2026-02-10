@@ -81,24 +81,34 @@ func (m *Manager) Create(dataDir string, platforms []string) (*BackupInfo, error
 		"timestamp":  timestamp,
 		"platforms":  platforms,
 	}
-	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
-	
+	manifestData, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal manifest: %w", err)
+	}
+
 	header := &tar.Header{
 		Name:    "manifest.json",
 		Mode:    0600,
 		Size:    int64(len(manifestData)),
 		ModTime: timestamp,
 	}
-	tw.WriteHeader(header)
-	tw.Write(manifestData)
+	if err := tw.WriteHeader(header); err != nil {
+		return nil, fmt.Errorf("write manifest header: %w", err)
+	}
+	if _, err := tw.Write(manifestData); err != nil {
+		return nil, fmt.Errorf("write manifest: %w", err)
+	}
 
 	// Get final size
 	tw.Close()
 	gw.Close()
 	f.Close()
 
-	stat, _ := os.Stat(backupFile)
-	
+	stat, err := os.Stat(backupFile)
+	if err != nil {
+		return nil, fmt.Errorf("stat backup: %w", err)
+	}
+
 	info := &BackupInfo{
 		Filename:  filename,
 		Timestamp: timestamp,
@@ -199,7 +209,8 @@ func (m *Manager) Restore(filename, dataDir string) error {
 				return err
 			}
 
-			if _, err := io.Copy(outFile, tr); err != nil {
+			// Limit extraction to 500MB per file to prevent decompression bombs
+			if _, err := io.Copy(outFile, io.LimitReader(tr, 500*1024*1024)); err != nil {
 				outFile.Close()
 				return err
 			}

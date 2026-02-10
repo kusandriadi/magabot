@@ -2,6 +2,7 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -24,6 +25,7 @@ import (
 type Server struct {
 	server    *http.Server
 	handler   router.MessageHandler
+	handlerMu sync.RWMutex
 	logger    *slog.Logger
 	config    *Config
 	done      chan struct{}
@@ -121,7 +123,9 @@ func (s *Server) Send(chatID, message string) error {
 
 // SetHandler sets the message handler
 func (s *Server) SetHandler(h router.MessageHandler) {
+	s.handlerMu.Lock()
 	s.handler = h
+	s.handlerMu.Unlock()
 }
 
 // handleWebhook handles incoming webhook requests
@@ -176,10 +180,14 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process
-	if s.handler != nil {
-		response, err := s.handler(context.Background(), msg)
+	s.handlerMu.RLock()
+	handler := s.handler
+	s.handlerMu.RUnlock()
+
+	if handler != nil {
+		response, err := handler(r.Context(), msg)
 		if err != nil {
-			s.logger.Debug("handler error", "error", err)
+			s.logger.Warn("handler error", "error", err)
 		}
 		
 		w.Header().Set("Content-Type", "application/json")
@@ -220,6 +228,9 @@ func (s *Server) authenticate(r *http.Request) bool {
 			subtle.ConstantTimeCompare([]byte(pass), []byte(s.config.BasicPass)) == 1
 			
 	case "hmac":
+		if s.config.HMACSecret == "" {
+			return false
+		}
 		// Check X-Hub-Signature-256 (GitHub style)
 		sig := r.Header.Get("X-Hub-Signature-256")
 		if sig == "" {
@@ -228,14 +239,18 @@ func (s *Server) authenticate(r *http.Request) bool {
 		if sig == "" {
 			return false
 		}
-		
-		body, _ := io.ReadAll(r.Body)
-		r.Body = io.NopCloser(strings.NewReader(string(body)))
-		
+
+		// Apply same body size limit as handleWebhook to prevent OOM
+		body, err := io.ReadAll(io.LimitReader(r.Body, s.config.MaxBodySize))
+		if err != nil {
+			return false
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+
 		mac := hmac.New(sha256.New, []byte(s.config.HMACSecret))
 		mac.Write(body)
 		expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-		
+
 		return subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
 	}
 	
@@ -302,19 +317,10 @@ func (s *Server) parsePayload(body []byte, r *http.Request) string {
 	return string(body)
 }
 
+// getClientIP returns the direct TCP peer address for security checks.
+// Proxy headers (X-Forwarded-For, X-Real-IP) are NOT trusted since they
+// can be spoofed by clients to bypass IP allowlists.
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	
-	// Check X-Real-IP
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-	
-	// Fallback to remote addr
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
 	return host
 }

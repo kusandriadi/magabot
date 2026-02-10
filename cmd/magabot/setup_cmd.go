@@ -11,6 +11,7 @@ import (
 	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // cmdSetup handles setup commands
@@ -32,8 +33,6 @@ func cmdSetup() {
 		setupSlack()
 	case "whatsapp":
 		setupWhatsApp()
-	case "lark", "feishu":
-		setupLark()
 	case "webhook":
 		setupWebhook()
 	case "llm":
@@ -77,7 +76,6 @@ Targets:
     discord       Configure Discord bot
     slack         Configure Slack bot
     whatsapp      Configure WhatsApp (beta)
-    lark          Configure Lark/Feishu bot
     webhook       Configure Webhook endpoint
 
   LLM Providers:
@@ -141,9 +139,9 @@ func setupTelegram() {
 
 	userID := askString(reader, "Your Telegram User ID", "")
 	if userID != "" {
-		cfg.Platforms.Telegram.Admins = addUnique(cfg.Platforms.Telegram.Admins, userID)
-		cfg.Platforms.Telegram.AllowedUsers = addUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
-		cfg.Access.GlobalAdmins = addUnique(cfg.Access.GlobalAdmins, userID)
+		cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
+		cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
+		cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 	}
 
 	// Settings
@@ -199,9 +197,9 @@ func setupDiscord() {
 
 	userID := askString(reader, "Your Discord User ID", "")
 	if userID != "" {
-		cfg.Platforms.Discord.Admins = addUnique(cfg.Platforms.Discord.Admins, userID)
-		cfg.Platforms.Discord.AllowedUsers = addUnique(cfg.Platforms.Discord.AllowedUsers, userID)
-		cfg.Access.GlobalAdmins = addUnique(cfg.Access.GlobalAdmins, userID)
+		cfg.Platforms.Discord.Admins = util.AddUnique(cfg.Platforms.Discord.Admins, userID)
+		cfg.Platforms.Discord.AllowedUsers = util.AddUnique(cfg.Platforms.Discord.AllowedUsers, userID)
+		cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 	}
 
 	cfg.Platforms.Discord.AllowGroups = askYesNo(reader, "Allow server channels?", true)
@@ -308,47 +306,6 @@ func setupWhatsApp() {
 	fmt.Println()
 	fmt.Println("✅ WhatsApp enabled!")
 	fmt.Println("   QR code will appear on first start")
-
-	askRestart(reader)
-}
-
-// setupLark configures Lark/Feishu
-func setupLark() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🐦 Lark/Feishu Setup")
-	fmt.Println("────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	if cfg.Platforms.Lark == nil {
-		cfg.Platforms.Lark = &config.LarkConfig{}
-	}
-	cfg.Platforms.Lark.Enabled = true
-
-	fmt.Println("📝 Create a Lark bot:")
-	fmt.Println("   1. Go to https://open.larksuite.com/")
-	fmt.Println("   2. Create an app → Get App ID and App Secret")
-	fmt.Println("   3. Add bot capability")
-	fmt.Println()
-
-	appID := askString(reader, "App ID", "")
-	if appID != "" {
-		saveSecret("lark/app_id", appID)
-	}
-
-	appSecret := askString(reader, "App Secret", "")
-	if appSecret != "" {
-		saveSecret("lark/app_secret", appSecret)
-	}
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Lark configured!")
 
 	askRestart(reader)
 }
@@ -719,7 +676,7 @@ func setupGLM() {
 func setupAdmin(userID string) {
 	cfg := loadOrCreateConfig()
 
-	cfg.Access.GlobalAdmins = addUnique(cfg.Access.GlobalAdmins, userID)
+	cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 
 	if err := cfg.Save(); err != nil {
 		fmt.Printf("❌ Failed to save config: %v\n", err)
@@ -856,15 +813,6 @@ func restartDaemon() {
 	cmdStop()
 	time.Sleep(1 * time.Second)
 	cmdStart()
-}
-
-func addUnique(slice []string, item string) []string {
-	for _, s := range slice {
-		if s == item {
-			return slice
-		}
-	}
-	return append(slice, item)
 }
 
 // isRunning, processExists, getPID are defined in commands.go / commands_unix.go / commands_windows.go

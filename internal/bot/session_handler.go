@@ -3,8 +3,10 @@ package bot
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kusa/magabot/internal/session"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // SessionHandler handles session-related commands
@@ -64,7 +66,7 @@ func (h *SessionHandler) spawnTask(userID, platform, chatID string, args []strin
 	}
 	
 	return fmt.Sprintf("🚀 *Task Spawned*\n\n📋 %s\n🔑 ID: %s\n\nI'll notify you when it's done!",
-		truncate(task, 100), subSession.ID[:16]), nil
+		util.Truncate(task, 100), subSession.ID[:16]), nil
 }
 
 // listSessions lists active sessions
@@ -93,7 +95,7 @@ func (h *SessionHandler) listSessions(userID string) (string, error) {
 		
 		sb.WriteString(fmt.Sprintf("%s `%s` [%s]\n", icon, s.ID[:12], s.Type))
 		if s.Task != "" {
-			sb.WriteString(fmt.Sprintf("   📋 %s\n", truncate(s.Task, 50)))
+			sb.WriteString(fmt.Sprintf("   📋 %s\n", util.Truncate(s.Task, 50)))
 		}
 	}
 	
@@ -145,7 +147,7 @@ func (h *SessionHandler) formatSessionStatus(s *session.Session) string {
 	}
 	
 	if s.Result != "" {
-		sb.WriteString(fmt.Sprintf("\n✅ *Result:*\n%s\n", truncate(s.Result, 500)))
+		sb.WriteString(fmt.Sprintf("\n✅ *Result:*\n%s\n", util.Truncate(s.Result, 500)))
 	}
 	
 	if s.Error != "" {
@@ -184,8 +186,7 @@ func (h *SessionHandler) cancelSession(args []string) (string, error) {
 
 // clearSessions clears completed sessions
 func (h *SessionHandler) clearSessions() (string, error) {
-	// Clear sessions older than 1 hour
-	count := h.manager.Clear(1 * 60 * 60 * 1000000000) // 1 hour in nanoseconds
+	count := h.manager.Clear(time.Hour)
 	return fmt.Sprintf("🗑️ Cleared %d completed sessions.", count), nil
 }
 
@@ -207,11 +208,4 @@ func (h *SessionHandler) showHelp() string {
 • /task cancel abc123
 
 💡 Background tasks run independently and notify you when done.`
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
 }

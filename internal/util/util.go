@@ -35,7 +35,9 @@ func TruncateRunes(s string, max int) string {
 // RandomID generates a random hex ID
 func RandomID(length int) string {
 	bytes := make([]byte, length/2+1)
-	rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	return hex.EncodeToString(bytes)[:length]
 }
 

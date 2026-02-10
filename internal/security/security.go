@@ -88,7 +88,9 @@ func (v *Vault) Decrypt(ciphertextBase64 string) ([]byte, error) {
 // GenerateKey generates a new random encryption key
 func GenerateKey() string {
 	key := make([]byte, 32)
-	rand.Read(key)
+	if _, err := rand.Read(key); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	return base64.StdEncoding.EncodeToString(key)
 }
 
@@ -142,11 +144,12 @@ func (a *Authorizer) IsAuthorized(platform, userID string) bool {
 
 // RateLimiter implements sliding window rate limiting
 type RateLimiter struct {
-	limits   map[string]*userLimit
-	maxMsg   int
-	maxCmd   int
-	window   time.Duration
-	mu       sync.Mutex
+	limits    map[string]*userLimit
+	maxMsg    int
+	maxCmd    int
+	window    time.Duration
+	mu        sync.Mutex
+	callCount int // for periodic cleanup
 }
 
 type userLimit struct {
@@ -180,6 +183,35 @@ func (r *RateLimiter) allow(userKey string, isCommand bool) bool {
 
 	now := time.Now()
 	cutoff := now.Add(-r.window)
+
+	// Periodic cleanup: every 200 calls, purge stale entries to prevent unbounded growth
+	r.callCount++
+	if r.callCount%200 == 0 {
+		staleThreshold := now.Add(-r.window * 2)
+		for key, limit := range r.limits {
+			if key == userKey {
+				continue
+			}
+			hasRecent := false
+			for _, t := range limit.messages {
+				if t.After(staleThreshold) {
+					hasRecent = true
+					break
+				}
+			}
+			if !hasRecent {
+				for _, t := range limit.commands {
+					if t.After(staleThreshold) {
+						hasRecent = true
+						break
+					}
+				}
+			}
+			if !hasRecent {
+				delete(r.limits, key)
+			}
+		}
+	}
 
 	limit, ok := r.limits[userKey]
 	if !ok {

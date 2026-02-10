@@ -119,14 +119,6 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 			allowGroups = h.cfg.Platforms.Slack.AllowGroups
 			allowDMs = h.cfg.Platforms.Slack.AllowDMs
 		}
-	case "lark":
-		if h.cfg.Platforms.Lark != nil {
-			admins = h.cfg.Platforms.Lark.Admins
-			users = h.cfg.Platforms.Lark.AllowedUsers
-			chats = h.cfg.Platforms.Lark.AllowedChats
-			allowGroups = h.cfg.Platforms.Lark.AllowGroups
-			allowDMs = h.cfg.Platforms.Lark.AllowDMs
-		}
 	case "whatsapp":
 		if h.cfg.Platforms.WhatsApp != nil {
 			admins = h.cfg.Platforms.WhatsApp.Admins

@@ -27,10 +27,11 @@ type Bot struct {
 	client    *whatsmeow.Client
 	container *sqlstore.Container
 	handler   router.MessageHandler
+	handlerMu sync.RWMutex
 	logger    *slog.Logger
 	dbPath    string
 	done      chan struct{}
-	mu        sync.RWMutex
+	mu        sync.RWMutex // protects client
 	wg        sync.WaitGroup
 }
 
@@ -163,7 +164,9 @@ func (b *Bot) Send(chatID, message string) error {
 
 // SetHandler sets the message handler
 func (b *Bot) SetHandler(h router.MessageHandler) {
+	b.handlerMu.Lock()
 	b.handler = h
+	b.handlerMu.Unlock()
 }
 
 // IsConnected returns connection status
@@ -190,7 +193,11 @@ func (b *Bot) eventHandler(evt interface{}) {
 
 // handleMessage processes an incoming WhatsApp message
 func (b *Bot) handleMessage(evt *events.Message) {
-	if b.handler == nil {
+	b.handlerMu.RLock()
+	handler := b.handler
+	b.handlerMu.RUnlock()
+
+	if handler == nil {
 		return
 	}
 
@@ -222,7 +229,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 
 	ctx := context.Background()
-	response, err := b.handler(ctx, msg)
+	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)
 		return

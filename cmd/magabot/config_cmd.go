@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/kusa/magabot/internal/config"
 	"gopkg.in/yaml.v3"
@@ -81,14 +80,6 @@ func cmdConfigShow() {
 			len(cfg.Platforms.Slack.AllowedChats))
 	} else {
 		fmt.Println("  Slack: ❌")
-	}
-	if cfg.Platforms.Lark != nil && cfg.Platforms.Lark.Enabled {
-		fmt.Printf("  Lark: ✅ (admins: %d, users: %d, chats: %d)\n",
-			len(cfg.Platforms.Lark.Admins),
-			len(cfg.Platforms.Lark.AllowedUsers),
-			len(cfg.Platforms.Lark.AllowedChats))
-	} else {
-		fmt.Println("  Lark: ❌")
 	}
 	if cfg.Platforms.WhatsApp != nil && cfg.Platforms.WhatsApp.Enabled {
 		fmt.Printf("  WhatsApp: ✅ (admins: %d, users: %d, chats: %d)\n",
@@ -298,30 +289,3 @@ Note: Config changes via chat trigger auto-restart.
 File: ` + configFile)
 }
 
-// Removed: Old functions that used separate allowlist.json
-// Now everything is in config.yaml
-
-func formatPlatformConfig(enabled bool, admins, users, chats []string) string {
-	if !enabled {
-		return "❌ disabled"
-	}
-	return fmt.Sprintf("✅ (admins: %d, users: %d, chats: %d)",
-		len(admins), len(users), len(chats))
-}
-
-func platformEnabledIcon(enabled bool) string {
-	if enabled {
-		return "✅"
-	}
-	return "❌"
-}
-
-// Helper to reload config on SIGHUP
-func reloadConfig() (*config.Config, error) {
-	return config.Load(configFile)
-}
-
-// Helper to format platform list
-func formatPlatformList(names []string) string {
-	return strings.Join(names, ", ")
-}
