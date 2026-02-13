@@ -146,21 +146,25 @@ func (m *Manager) AddMessage(session *Session, role, content string) {
 	}
 }
 
-// GetHistory returns recent messages for context
+// GetHistory returns recent messages for context (returns a copy to avoid races)
 func (m *Manager) GetHistory(session *Session, limit int) []Message {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	if limit <= 0 || limit > len(session.Messages) {
 		limit = len(session.Messages)
 	}
-	
+
 	start := len(session.Messages) - limit
 	if start < 0 {
 		start = 0
 	}
-	
-	return session.Messages[start:]
+
+	// Return a copy so callers don't hold a reference to the mutable slice
+	src := session.Messages[start:]
+	dst := make([]Message, len(src))
+	copy(dst, src)
+	return dst
 }
 
 // Spawn creates a sub-session for background task

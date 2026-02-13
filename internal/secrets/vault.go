@@ -1,45 +1,66 @@
-// HashiCorp Vault secrets backend
+// HashiCorp Vault secrets backend (using official SDK)
 package secrets
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"log/slog"
 	"os"
+	"strconv"
 	"strings"
-	"time"
+
+	vaultapi "github.com/hashicorp/vault/api"
 )
 
 // Vault is a HashiCorp Vault secrets backend
 type Vault struct {
-	address    string
-	token      string
+	client     *vaultapi.Client
+	kv         *vaultapi.KVv2
 	mountPath  string
 	secretPath string
-	client     *http.Client
+	watcher    *vaultapi.LifetimeWatcher
+	logger     *slog.Logger
 }
 
 // VaultConfig for Vault backend
 type VaultConfig struct {
-	Address    string `yaml:"address"`     // Vault server address (default: http://127.0.0.1:8200)
-	Token      string `yaml:"token"`       // Vault token (or use VAULT_TOKEN env)
-	MountPath  string `yaml:"mount_path"`  // KV secrets engine mount (default: secret)
-	SecretPath string `yaml:"secret_path"` // Base path for secrets (default: magabot)
+	Address       string `yaml:"address"`                   // Vault server address (default: http://127.0.0.1:8200)
+	Token         string `yaml:"token"`                     // Vault token (or use VAULT_TOKEN env)
+	MountPath     string `yaml:"mount_path"`                // KV secrets engine mount (default: secret)
+	SecretPath    string `yaml:"secret_path"`               // Base path for secrets (default: magabot)
+	TLSCACert     string `yaml:"tls_ca_cert,omitempty"`     // CA cert file for TLS verification
+	TLSClientCert string `yaml:"tls_client_cert,omitempty"` // Client cert for mTLS
+	TLSClientKey  string `yaml:"tls_client_key,omitempty"`  // Client key for mTLS
+	TLSSkipVerify bool   `yaml:"tls_skip_verify,omitempty"` // Skip TLS verification (insecure)
+	Logger        *slog.Logger
 }
 
-// NewVault creates a new Vault secrets backend
+// NewVault creates a new Vault secrets backend using the official HashiCorp SDK.
+// The SDK automatically reads VAULT_ADDR, VAULT_TOKEN, VAULT_CACERT, etc.
 func NewVault(cfg *VaultConfig) (*Vault, error) {
-	address := cfg.Address
-	if address == "" {
-		address = os.Getenv("VAULT_ADDR")
-		if address == "" {
-			address = "http://127.0.0.1:8200"
-		}
+	vaultCfg := vaultapi.DefaultConfig()
+
+	if cfg.Address != "" {
+		vaultCfg.Address = cfg.Address
 	}
 
+	// Configure TLS
+	tlsCfg := &vaultapi.TLSConfig{
+		CACert:     cfg.TLSCACert,
+		ClientCert: cfg.TLSClientCert,
+		ClientKey:  cfg.TLSClientKey,
+		Insecure:   cfg.TLSSkipVerify,
+	}
+	if err := vaultCfg.ConfigureTLS(tlsCfg); err != nil {
+		return nil, fmt.Errorf("vault TLS config: %w", err)
+	}
+
+	client, err := vaultapi.NewClient(vaultCfg)
+	if err != nil {
+		return nil, fmt.Errorf("vault client: %w", err)
+	}
+
+	// Set token: explicit config > env var (SDK reads VAULT_TOKEN automatically)
 	token := cfg.Token
 	if token == "" {
 		token = os.Getenv("VAULT_TOKEN")
@@ -47,6 +68,7 @@ func NewVault(cfg *VaultConfig) (*Vault, error) {
 	if token == "" {
 		return nil, fmt.Errorf("vault token required (set VAULT_TOKEN or config)")
 	}
+	client.SetToken(token)
 
 	mountPath := cfg.MountPath
 	if mountPath == "" {
@@ -58,13 +80,78 @@ func NewVault(cfg *VaultConfig) (*Vault, error) {
 		secretPath = "magabot"
 	}
 
-	return &Vault{
-		address:    strings.TrimSuffix(address, "/"),
-		token:      token,
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	v := &Vault{
+		client:     client,
+		kv:         client.KVv2(mountPath),
 		mountPath:  mountPath,
 		secretPath: secretPath,
-		client:     &http.Client{Timeout: 30 * time.Second},
-	}, nil
+		logger:     logger,
+	}
+
+	return v, nil
+}
+
+// StartRenewal begins background token renewal. Call this after NewVault if
+// the token is renewable (non-root, has a TTL). Safe to call on non-renewable
+// tokens — it returns nil without starting anything.
+func (v *Vault) StartRenewal() error {
+	secret, err := v.client.Auth().Token().LookupSelf()
+	if err != nil {
+		return fmt.Errorf("token lookup: %w", err)
+	}
+
+	// Check if token is renewable
+	renewable, _ := secret.TokenIsRenewable()
+	ttl, _ := secret.TokenTTL()
+	if !renewable || ttl == 0 {
+		v.logger.Debug("vault token is not renewable, skipping auto-renewal",
+			"renewable", renewable, "ttl", ttl)
+		return nil
+	}
+
+	watcher, err := v.client.NewLifetimeWatcher(&vaultapi.LifetimeWatcherInput{
+		Secret: secret,
+	})
+	if err != nil {
+		return fmt.Errorf("lifetime watcher: %w", err)
+	}
+
+	v.watcher = watcher
+	go watcher.Start()
+	go v.watchRenewal()
+
+	v.logger.Info("vault token auto-renewal started", "ttl", ttl)
+	return nil
+}
+
+// watchRenewal monitors the lifetime watcher channels for renewals and expiry.
+func (v *Vault) watchRenewal() {
+	for {
+		select {
+		case err := <-v.watcher.DoneCh():
+			if err != nil {
+				v.logger.Error("vault token renewal failed", "error", err)
+			} else {
+				v.logger.Warn("vault token lifetime ended, secrets may become unavailable")
+			}
+			return
+		case r := <-v.watcher.RenewCh():
+			v.logger.Debug("vault token renewed",
+				"ttl", r.Secret.LeaseDuration)
+		}
+	}
+}
+
+// Stop halts the background token renewal goroutine.
+func (v *Vault) Stop() {
+	if v.watcher != nil {
+		v.watcher.Stop()
+	}
 }
 
 // Name returns the backend name
@@ -72,43 +159,25 @@ func (v *Vault) Name() string {
 	return "vault"
 }
 
-// Get retrieves a secret from Vault
+// fullPath returns the full secret path for a key.
+func (v *Vault) fullPath(key string) string {
+	return v.secretPath + "/" + key
+}
+
+// Get retrieves a secret from Vault KV v2.
 func (v *Vault) Get(ctx context.Context, key string) (string, error) {
-	// KV v2 API: GET /v1/{mount}/data/{path}
-	url := fmt.Sprintf("%s/v1/%s/data/%s/%s", v.address, v.mountPath, v.secretPath, key)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	secret, err := v.kv.Get(ctx, v.fullPath(key))
 	if err != nil {
-		return "", err
-	}
-	req.Header.Set("X-Vault-Token", v.token)
-
-	resp, err := v.client.Do(req)
-	if err != nil {
+		if isVaultNotFound(err) {
+			return "", ErrNotFound
+		}
 		return "", fmt.Errorf("%w: %v", ErrBackendError, err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
+	if secret == nil || secret.Data == nil {
 		return "", ErrNotFound
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("%w: %s", ErrBackendError, string(body))
-	}
-
-	var result struct {
-		Data struct {
-			Data map[string]interface{} `json:"data"`
-		} `json:"data"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-
-	value, ok := result.Data.Data["value"].(string)
+	value, ok := secret.Data["value"].(string)
 	if !ok {
 		return "", ErrNotFound
 	}
@@ -116,126 +185,78 @@ func (v *Vault) Get(ctx context.Context, key string) (string, error) {
 	return value, nil
 }
 
-// Set stores a secret in Vault
+// Set stores a secret in Vault KV v2.
 func (v *Vault) Set(ctx context.Context, key, value string) error {
-	// KV v2 API: POST /v1/{mount}/data/{path}
-	url := fmt.Sprintf("%s/v1/%s/data/%s/%s", v.address, v.mountPath, v.secretPath, key)
-
-	payload := map[string]interface{}{
-		"data": map[string]string{
-			"value": value,
-		},
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Vault-Token", v.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := v.client.Do(req)
+	_, err := v.kv.Put(ctx, v.fullPath(key), map[string]interface{}{
+		"value": value,
+	})
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrBackendError, err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%w: %s", ErrBackendError, string(respBody))
-	}
-
 	return nil
 }
 
-// Delete removes a secret from Vault
+// Delete removes a secret (all versions and metadata) from Vault KV v2.
 func (v *Vault) Delete(ctx context.Context, key string) error {
-	// KV v2 API: DELETE /v1/{mount}/metadata/{path}
-	url := fmt.Sprintf("%s/v1/%s/metadata/%s/%s", v.address, v.mountPath, v.secretPath, key)
-
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Vault-Token", v.token)
-
-	resp, err := v.client.Do(req)
+	err := v.kv.DeleteMetadata(ctx, v.fullPath(key))
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrBackendError, err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%w: %s", ErrBackendError, string(respBody))
-	}
-
 	return nil
 }
 
-// List returns all secret keys
+// List returns all secret keys under the configured path.
+// The KVv2 helper doesn't expose List, so we use Logical().ListWithContext.
 func (v *Vault) List(ctx context.Context) ([]string, error) {
-	// KV v2 API: LIST /v1/{mount}/metadata/{path}
-	url := fmt.Sprintf("%s/v1/%s/metadata/%s", v.address, v.mountPath, v.secretPath)
-
-	req, err := http.NewRequestWithContext(ctx, "LIST", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Vault-Token", v.token)
-
-	resp, err := v.client.Do(req)
+	path := fmt.Sprintf("%s/metadata/%s", v.mountPath, v.secretPath)
+	secret, err := v.client.Logical().ListWithContext(ctx, path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrBackendError, err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
+	if secret == nil || secret.Data == nil {
 		return []string{}, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("%w: %s", ErrBackendError, string(respBody))
+	keysRaw, ok := secret.Data["keys"]
+	if !ok {
+		return []string{}, nil
 	}
 
-	var result struct {
-		Data struct {
-			Keys []string `json:"keys"`
-		} `json:"data"`
+	keysList, ok := keysRaw.([]interface{})
+	if !ok {
+		return []string{}, nil
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	keys := make([]string, 0, len(keysList))
+	for _, k := range keysList {
+		if s, ok := k.(string); ok {
+			keys = append(keys, s)
+		}
 	}
 
-	return result.Data.Keys, nil
+	return keys, nil
 }
 
-// Ping checks if Vault is available and authenticated
+// Ping checks if Vault is available and the token is authenticated.
 func (v *Vault) Ping(ctx context.Context) error {
-	url := fmt.Sprintf("%s/v1/auth/token/lookup-self", v.address)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	_, err := v.client.Auth().Token().LookupSelfWithContext(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("vault authentication failed: %w", err)
 	}
-	req.Header.Set("X-Vault-Token", v.token)
-
-	resp, err := v.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrBackendError, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("vault authentication failed")
-	}
-
 	return nil
+}
+
+// isVaultNotFound checks if a Vault API error is a 404 (secret not found).
+func isVaultNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	// The SDK returns a *vaultapi.ResponseError for HTTP errors.
+	if respErr, ok := err.(*vaultapi.ResponseError); ok {
+		return respErr.StatusCode == 404
+	}
+	// Fallback: check error message for common patterns
+	msg := err.Error()
+	return strings.Contains(msg, "secret not found") ||
+		strings.Contains(msg, strconv.Itoa(404))
 }

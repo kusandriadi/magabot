@@ -85,6 +85,18 @@ func (m *Manager) Ping(ctx context.Context) error {
 	return m.primary.Ping(ctx)
 }
 
+// Stoppable is implemented by backends that have background goroutines.
+type Stoppable interface {
+	Stop()
+}
+
+// Stop stops the primary backend if it implements Stoppable (e.g., Vault token renewal).
+func (m *Manager) Stop() {
+	if s, ok := m.primary.(Stoppable); ok {
+		s.Stop()
+	}
+}
+
 // Common secret keys
 const (
 	KeyEncryptionKey    = "magabot/encryption_key"
@@ -137,22 +149,8 @@ func NewFromConfig(cfg *Config) (*Manager, error) {
 
 	mgr := NewManager(backend)
 
-	// Set up fallback chain:
-	// 1. Try Claude Code credentials (~/.claude/.credentials.json)
-	// 2. Fall back to environment variables (ANTHROPIC_API_KEY, etc.)
-	// This allows using Claude Code's OAuth tokens or standard env vars
-	var fallbackBackends []Backend
-
-	claudeBackend, err := NewClaude()
-	if err == nil {
-		fallbackBackends = append(fallbackBackends, claudeBackend)
-	}
-
-	fallbackBackends = append(fallbackBackends, NewEnv())
-
-	if len(fallbackBackends) > 0 {
-		mgr.SetFallback(NewChain(fallbackBackends...))
-	}
+	// Fall back to environment variables (ANTHROPIC_API_KEY, etc.)
+	mgr.SetFallback(NewEnv())
 
 	return mgr, nil
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
+	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/util"
@@ -442,67 +443,29 @@ func setupAnthropic() {
 
 	cfg := loadOrCreateConfig()
 
-	fmt.Println("Choose authentication method:")
-	fmt.Println("  1. claude-cli  - Use Claude CLI token (from: claude setup-token)")
-	fmt.Println("  2. api-key     - Use API key (from: https://console.anthropic.com/)")
+	fmt.Println("📝 Get your API key from https://console.anthropic.com/")
+	fmt.Println("   (Requires an Anthropic API key starting with sk-ant-)")
 	fmt.Println()
 
-	method := askString(reader, "Auth method (claude-cli/api-key)", "claude-cli")
-
-	if method == "api-key" || method == "2" {
-		fmt.Println()
-		fmt.Println("📝 Get your API key from https://console.anthropic.com/")
-		fmt.Println()
-
-		key := askString(reader, "API Key (sk-ant-...)", "")
-		if key == "" {
-			fmt.Println("❌ API key is required")
-			return
-		}
-
-		saveSecret("llm/anthropic_api_key", key)
-		cfg.LLM.Anthropic.APIKey = key
-	} else {
-		// Claude CLI OAuth - clear any existing API key
-		cfg.LLM.Anthropic.APIKey = ""
-		fmt.Println()
-		fmt.Println("📝 Using Claude CLI OAuth token from ~/.claude/.credentials.json")
-		fmt.Println("   Run 'claude setup-token' if you haven't already.")
+	key := askString(reader, "API Key (sk-ant-...)", "")
+	if key == "" {
+		fmt.Println("❌ API key is required")
+		return
 	}
 
+	if !strings.HasPrefix(key, "sk-ant-") {
+		fmt.Println("⚠️  Warning: key doesn't start with 'sk-ant-'. Are you sure this is an Anthropic API key?")
+		if !askYesNo(reader, "Use this key anyway?", false) {
+			return
+		}
+	}
+
+	saveSecret("llm/anthropic_api_key", key)
+	cfg.LLM.Anthropic.APIKey = key
 	cfg.LLM.Anthropic.Enabled = true
 	cfg.LLM.Default = "anthropic"
 
-	fmt.Println()
-	fmt.Println("Available models:")
-	anthropicModels := []string{
-		"claude-opus-4-6",
-		"claude-sonnet-4-5-20250929",
-		"claude-haiku-4-5-20251001",
-		"claude-opus-4-20250514",
-		"claude-sonnet-4-20250514",
-		"claude-3-5-sonnet-20241022",
-		"claude-3-5-haiku-20241022",
-	}
-	for i, m := range anthropicModels {
-		fmt.Printf("  %d. %s\n", i+1, m)
-	}
-	fmt.Println()
-
-	model := askString(reader, "Model", "claude-sonnet-4-20250514")
-
-	// Allow numeric selection
-	if idx := parseNumericChoice(model, len(anthropicModels)); idx > 0 {
-		model = anthropicModels[idx-1]
-	}
-
-	// Validate model name (must start with "claude-")
-	if !strings.HasPrefix(model, "claude-") {
-		fmt.Printf("⚠️  '%s' doesn't look like a valid Claude model name\n", model)
-		fmt.Println("   Using default: claude-sonnet-4-20250514")
-		model = "claude-sonnet-4-20250514"
-	}
-
+	model := askModel(reader, "anthropic", key, cfg.LLM.Anthropic.BaseURL, "claude-sonnet-4-20250514")
 	cfg.LLM.Anthropic.Model = model
 
 	if err := cfg.Save(); err != nil {
@@ -541,7 +504,7 @@ func setupOpenAI() {
 		cfg.LLM.Default = "openai"
 	}
 
-	model := askString(reader, "Model", "gpt-4o")
+	model := askModel(reader, "openai", key, cfg.LLM.OpenAI.BaseURL, "gpt-4o")
 	cfg.LLM.OpenAI.Model = model
 
 	if err := cfg.Save(); err != nil {
@@ -580,7 +543,7 @@ func setupGemini() {
 		cfg.LLM.Default = "gemini"
 	}
 
-	model := askString(reader, "Model", "gemini-1.5-pro")
+	model := askModel(reader, "gemini", key, "", "gemini-2.0-flash")
 	cfg.LLM.Gemini.Model = model
 
 	if err := cfg.Save(); err != nil {
@@ -619,7 +582,7 @@ func setupDeepSeek() {
 		cfg.LLM.Default = "deepseek"
 	}
 
-	model := askString(reader, "Model", "deepseek-chat")
+	model := askModel(reader, "deepseek", key, cfg.LLM.DeepSeek.BaseURL, "deepseek-chat")
 	cfg.LLM.DeepSeek.Model = model
 
 	if err := cfg.Save(); err != nil {
@@ -658,7 +621,7 @@ func setupGLM() {
 		cfg.LLM.Default = "glm"
 	}
 
-	model := askString(reader, "Model", "glm-4")
+	model := askModel(reader, "glm", key, cfg.LLM.GLM.BaseURL, "glm-4.7")
 	cfg.LLM.GLM.Model = model
 
 	if err := cfg.Save(); err != nil {
@@ -773,6 +736,47 @@ func saveSecret(key, value string) {
 	if err := mgr.Set(ctx, fullKey, value); err != nil {
 		fmt.Printf("⚠️  Warning: could not save secret: %v\n", err)
 	}
+}
+
+// askModel fetches available models from the provider API (using the given key),
+// shows a numbered list, and lets the user pick. If the API call fails, shows the
+// error and asks the user to enter a model name manually.
+func askModel(reader *bufio.Reader, provider, apiKey, baseURL, defaultModel string) string {
+	fmt.Println()
+	fmt.Print("🔄 Fetching available models... ")
+	models, err := llm.FetchModels(provider, apiKey, baseURL)
+	if err != nil {
+		fmt.Println("failed")
+		fmt.Printf("❌ Could not fetch models: %v\n", err)
+		fmt.Println("   Please verify your API key is valid and has access to list models.")
+		fmt.Println()
+		return askString(reader, "Model (enter manually)", defaultModel)
+	}
+	fmt.Println("done")
+
+	fmt.Println()
+	fmt.Println("Available models:")
+	for i, m := range models {
+		desc := ""
+		if m.Description != "" {
+			desc = " - " + m.Description
+		}
+		marker := " "
+		if m.ID == defaultModel {
+			marker = "*"
+		}
+		fmt.Printf("  %s%d. %s%s\n", marker, i+1, m.ID, desc)
+	}
+	fmt.Println()
+
+	input := askString(reader, "Model (number or name)", defaultModel)
+
+	// Try numeric selection
+	if idx := parseNumericChoice(input, len(models)); idx > 0 {
+		return models[idx-1].ID
+	}
+
+	return input
 }
 
 // askString, askInt, askYesNo are defined in wizard.go

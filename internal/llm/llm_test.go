@@ -144,12 +144,9 @@ func TestNewAnthropicDefaults(t *testing.T) {
 	if p.maxTokens != 4096 {
 		t.Errorf("unexpected default maxTokens: %d", p.maxTokens)
 	}
-	if p.useOAuth {
-		t.Error("sk-ant-api key should not trigger OAuth")
-	}
 }
 
-func TestNewAnthropicOAuthDetection(t *testing.T) {
+func TestNewAnthropicAPIKeyOnly(t *testing.T) {
 	orig := os.Getenv("ANTHROPIC_API_KEY")
 	os.Unsetenv("ANTHROPIC_API_KEY")
 	defer func() {
@@ -158,10 +155,19 @@ func TestNewAnthropicOAuthDetection(t *testing.T) {
 		}
 	}()
 
-	// Non-standard key triggers OAuth
-	p := NewAnthropic(&AnthropicConfig{APIKey: "eyJhbGciOi..."})
-	if !p.useOAuth {
-		t.Error("non-sk-ant-api key should trigger OAuth")
+	// Any key is stored as-is (no OAuth auto-detection)
+	p := NewAnthropic(&AnthropicConfig{APIKey: "sk-ant-api03-test"})
+	if p.apiKey != "sk-ant-api03-test" {
+		t.Errorf("expected API key to be stored, got %q", p.apiKey)
+	}
+	if !p.Available() {
+		t.Error("should be available with API key set")
+	}
+
+	// Without key, not available
+	p2 := NewAnthropic(&AnthropicConfig{})
+	if p2.Available() {
+		t.Error("should not be available without API key")
 	}
 }
 
@@ -220,9 +226,8 @@ func TestNewDeepSeekDefaults(t *testing.T) {
 	if p.config.Temperature != 0 {
 		t.Errorf("expected default temperature=0 (let API decide), got %f", p.config.Temperature)
 	}
-	models := p.Models()
-	if len(models) != 3 {
-		t.Errorf("expected 3 models, got %d", len(models))
+	if !p.Available() {
+		t.Error("expected DeepSeek to be available with test key")
 	}
 }
 
@@ -490,41 +495,21 @@ func TestRouterProviders(t *testing.T) {
 
 // --- Model listing tests ---
 
-func TestListAnthropicModels(t *testing.T) {
-	models := listAnthropicModels()
-	if len(models) == 0 {
-		t.Fatal("expected at least one Anthropic model")
-	}
-	for _, m := range models {
-		if m.Provider != "anthropic" {
-			t.Errorf("model %s has wrong provider: %s", m.ID, m.Provider)
-		}
-		if m.ID == "" || m.Name == "" {
-			t.Errorf("model has empty ID or Name: %+v", m)
+func TestFetchModelsInvalidKey(t *testing.T) {
+	// All providers should return errors with invalid keys (no hardcoded fallback)
+	providers := []string{"anthropic", "openai", "gemini", "deepseek", "glm"}
+	for _, p := range providers {
+		_, err := FetchModels(p, "invalid-key", "")
+		if err == nil {
+			t.Errorf("FetchModels(%s) with invalid key should return error", p)
 		}
 	}
 }
 
-func TestListGLMModels(t *testing.T) {
-	models, err := listGLMModels(context.Background(), &GLM{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(models) == 0 {
-		t.Fatal("expected at least one GLM model")
-	}
-	for _, m := range models {
-		if m.Provider != "glm" {
-			t.Errorf("model %s has wrong provider: %s", m.ID, m.Provider)
-		}
-	}
-}
-
-func TestListDeepSeekModels(t *testing.T) {
-	d := NewDeepSeek(&DeepSeekConfig{APIKey: "test"})
-	models := listDeepSeekModels(d)
-	if len(models) != 3 {
-		t.Errorf("expected 3 DeepSeek models, got %d", len(models))
+func TestFetchModelsUnsupportedProvider(t *testing.T) {
+	_, err := FetchModels("unknown", "key", "")
+	if err == nil {
+		t.Error("FetchModels with unknown provider should return error")
 	}
 }
 

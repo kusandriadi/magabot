@@ -113,26 +113,33 @@ func (a *AuditLogger) rotateIfNeeded() {
 	if err != nil {
 		return
 	}
-	
+
 	sizeMB := info.Size() / (1024 * 1024)
 	if sizeMB < int64(a.maxSizeMB) {
 		return
 	}
-	
-	// Close current file
-	if closer, ok := a.writer.(io.Closer); ok {
-		closer.Close()
-	}
-	
-	// Rotate
+
+	// Rotate: rename first, then open new file, then close old writer.
+	// This avoids a window where a.writer points to a closed file.
 	timestamp := time.Now().Format("20060102-150405")
 	rotatedPath := fmt.Sprintf("%s.%s", a.logPath, timestamp)
-	os.Rename(a.logPath, rotatedPath)
-	
+	if err := os.Rename(a.logPath, rotatedPath); err != nil {
+		return // keep writing to current file
+	}
+
 	// Open new file
 	file, err := os.OpenFile(a.logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if err == nil {
-		a.writer = file
+	if err != nil {
+		// Undo rotation so the old path is restored
+		os.Rename(rotatedPath, a.logPath)
+		return
+	}
+
+	// Close old writer after new one is ready
+	oldWriter := a.writer
+	a.writer = file
+	if closer, ok := oldWriter.(io.Closer); ok {
+		closer.Close()
 	}
 }
 

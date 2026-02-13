@@ -80,8 +80,7 @@ func mapSecretToEnvVar(key string) string {
 		// Generic fallback: convert "magabot/llm/provider_api_key" to "PROVIDER_API_KEY"
 		parts := strings.Split(key, "/")
 		if len(parts) > 0 {
-			lastPart := parts[len(parts)-1]
-			return strings.ToUpper(strings.ReplaceAll(lastPart, "_", "_"))
+			return strings.ToUpper(parts[len(parts)-1])
 		}
 		return strings.ToUpper(strings.ReplaceAll(key, "/", "_"))
 	}

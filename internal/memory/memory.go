@@ -117,7 +117,7 @@ func (s *Store) Add(memType, content, source, platform string, keywords []string
 	}
 	
 	mem := &Memory{
-		ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:         util.RandomID(16),
 		Type:       memType,
 		Content:    content,
 		Keywords:   keywords,
@@ -148,31 +148,31 @@ func (s *Store) Search(query string, limit int) []*Memory {
 	if limit <= 0 {
 		limit = 5
 	}
-	
+
 	queryWords := strings.Fields(strings.ToLower(query))
-	
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	type scored struct {
 		mem   *Memory
 		score float64
 	}
-	
+
 	var results []scored
-	
+
 	for _, mem := range s.memories {
 		score := calculateRelevance(mem, queryWords)
 		if score > 0 {
 			results = append(results, scored{mem, score})
 		}
 	}
-	
+
 	// Sort by score (descending)
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].score > results[j].score
 	})
-	
+
 	// Take top N
 	memories := make([]*Memory, 0, limit)
 	for i := 0; i < len(results) && i < limit; i++ {
@@ -180,7 +180,7 @@ func (s *Store) Search(query string, limit int) []*Memory {
 		mem.AccessCount++
 		memories = append(memories, mem)
 	}
-	
+
 	return memories
 }
 

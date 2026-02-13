@@ -301,9 +301,13 @@ type SecretsConfig struct {
 
 // VaultSecretsConfig holds Vault-specific secrets settings
 type VaultSecretsConfig struct {
-	Address    string `yaml:"address"`
-	MountPath  string `yaml:"mount_path"`
-	SecretPath string `yaml:"secret_path"`
+	Address       string `yaml:"address"`
+	MountPath     string `yaml:"mount_path"`
+	SecretPath    string `yaml:"secret_path"`
+	TLSCACert     string `yaml:"tls_ca_cert,omitempty"`
+	TLSClientCert string `yaml:"tls_client_cert,omitempty"`
+	TLSClientKey  string `yaml:"tls_client_key,omitempty"`
+	TLSSkipVerify bool   `yaml:"tls_skip_verify,omitempty"`
 }
 
 // LocalSecretsConfig holds local file-based secrets settings
@@ -417,18 +421,14 @@ func (c *Config) setDefaults() {
 
 	// Platform defaults
 	if c.Platforms.Telegram != nil {
-		if c.Platforms.Telegram.AllowGroups == false && c.Platforms.Telegram.AllowDMs == false {
-			c.Platforms.Telegram.AllowGroups = true
-			c.Platforms.Telegram.AllowDMs = true
+		// Coalesce Token / BotToken so either YAML key works
+		if c.Platforms.Telegram.BotToken == "" && c.Platforms.Telegram.Token != "" {
+			c.Platforms.Telegram.BotToken = c.Platforms.Telegram.Token
 		}
 	}
 	if c.Platforms.Discord != nil {
 		if c.Platforms.Discord.Prefix == "" {
 			c.Platforms.Discord.Prefix = "!"
-		}
-		if c.Platforms.Discord.AllowGroups == false && c.Platforms.Discord.AllowDMs == false {
-			c.Platforms.Discord.AllowGroups = true
-			c.Platforms.Discord.AllowDMs = true
 		}
 	}
 }

@@ -105,7 +105,7 @@ func (l *Local) load() error {
 	return json.Unmarshal(data, &l.secrets)
 }
 
-// save writes secrets to file
+// save writes secrets to file atomically (write-to-temp-then-rename)
 func (l *Local) save() error {
 	// Ensure directory exists
 	dir := filepath.Dir(l.path)
@@ -118,5 +118,26 @@ func (l *Local) save() error {
 		return err
 	}
 
-	return os.WriteFile(l.path, data, 0600)
+	// Atomic write: write to temp file then rename to prevent partial writes
+	tmp, err := os.CreateTemp(dir, ".secrets-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, 0600); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+
+	return os.Rename(tmpName, l.path)
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -14,13 +13,11 @@ import (
 
 // Anthropic provider
 type Anthropic struct {
-	apiKey       string
-	model        string
-	maxTokens    int
-	temperature  float64
-	baseURL      string
-	useOAuth     bool
-	oauthManager *OAuthManager
+	apiKey      string
+	model       string
+	maxTokens   int
+	temperature float64
+	baseURL     string
 }
 
 // AnthropicConfig for Anthropic provider
@@ -30,40 +27,15 @@ type AnthropicConfig struct {
 	MaxTokens   int
 	Temperature float64
 	BaseURL     string
-	UseOAuth    bool // Use Claude CLI OAuth tokens
 }
 
 // NewAnthropic creates a new Anthropic provider
 func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 	apiKey := cfg.APIKey
-	useOAuth := cfg.UseOAuth
 
 	// Try to load from environment
 	if apiKey == "" {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
-	}
-
-	// Auto-detect token format:
-	// sk-ant-api* = standard API key (uses x-api-key header)
-	// anything else = OAuth token (uses Bearer header)
-	var oauthManager *OAuthManager
-	if apiKey != "" && !strings.HasPrefix(apiKey, "sk-ant-api") {
-		useOAuth = true
-	}
-
-	// If no API key found, try loading Claude CLI OAuth credentials
-	if apiKey == "" {
-		oauthManager = GetOAuthManager()
-		creds, err := oauthManager.LoadClaudeCliCredentials()
-		if err == nil && creds != nil {
-			apiKey = creds.AccessToken
-			useOAuth = true
-		}
-	}
-
-	// Use OAuth manager if using OAuth tokens
-	if useOAuth && oauthManager == nil {
-		oauthManager = GetOAuthManager()
 	}
 
 	model := cfg.Model
@@ -77,13 +49,11 @@ func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
 	}
 
 	return &Anthropic{
-		apiKey:       apiKey,
-		model:        model,
-		maxTokens:    maxTokens,
-		temperature:  cfg.Temperature,
-		baseURL:      cfg.BaseURL,
-		useOAuth:     useOAuth,
-		oauthManager: oauthManager,
+		apiKey:      apiKey,
+		model:       model,
+		maxTokens:   maxTokens,
+		temperature: cfg.Temperature,
+		baseURL:     cfg.BaseURL,
 	}
 }
 
@@ -94,60 +64,19 @@ func (a *Anthropic) Name() string {
 
 // Available checks if provider is available
 func (a *Anthropic) Available() bool {
-	if a.apiKey != "" {
-		return true
-	}
-	// Check if OAuth credentials are available
-	if a.oauthManager != nil && a.oauthManager.HasCredentials("anthropic") {
-		return true
-	}
-	return false
-}
-
-// getAPIKey returns the current API key, refreshing OAuth token if needed
-func (a *Anthropic) getAPIKey() (string, error) {
-	if !a.useOAuth {
-		return a.apiKey, nil
-	}
-
-	if a.oauthManager == nil {
-		return a.apiKey, nil
-	}
-
-	// Get token, auto-refresh if expired
-	token, err := a.oauthManager.GetAccessToken("anthropic")
-	if err != nil {
-		// Fall back to stored key if refresh fails
-		if a.apiKey != "" {
-			return a.apiKey, nil
-		}
-		return "", fmt.Errorf("get OAuth token: %w", err)
-	}
-
-	return token, nil
+	return a.apiKey != ""
 }
 
 // Complete sends a completion request
 func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, error) {
 	start := time.Now()
 
-	// Get API key (with OAuth refresh if needed)
-	apiKey, err := a.getAPIKey()
-	if err != nil {
-		return nil, err
-	}
-
 	// Build SDK client options
 	var clientOpts []option.RequestOption
 	if a.baseURL != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(a.baseURL))
 	}
-	if a.useOAuth {
-		clientOpts = append(clientOpts, option.WithAuthToken(apiKey))
-		clientOpts = append(clientOpts, option.WithHeader("anthropic-beta", "oauth-2025-04-20"))
-	} else {
-		clientOpts = append(clientOpts, option.WithAPIKey(apiKey))
-	}
+	clientOpts = append(clientOpts, option.WithAPIKey(a.apiKey))
 
 	client := anthropic.NewClient(clientOpts...)
 

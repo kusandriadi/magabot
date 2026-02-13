@@ -24,20 +24,6 @@ type OAuthCredentials struct {
 	Provider     string `json:"provider,omitempty"`
 }
 
-// ClaudeCliCredentials represents ~/.claude/.credentials.json format
-type ClaudeCliCredentials struct {
-	ClaudeAiOAuth *ClaudeAiOAuth `json:"claudeAiOauth"`
-}
-
-type ClaudeAiOAuth struct {
-	AccessToken      string   `json:"accessToken"`
-	RefreshToken     string   `json:"refreshToken"`
-	ExpiresAt        int64    `json:"expiresAt"`
-	Scopes           []string `json:"scopes"`
-	SubscriptionType string   `json:"subscriptionType"`
-	RateLimitTier    string   `json:"rateLimitTier"`
-}
-
 // CodexCliCredentials represents ~/.codex/auth.json format
 type CodexCliCredentials struct {
 	Tokens struct {
@@ -79,47 +65,6 @@ func checkFilePermissions(path string) error {
 		return fmt.Errorf("credential file %s has unsafe permissions %o (should be 0600)", path, mode)
 	}
 	return nil
-}
-
-// LoadClaudeCliCredentials loads credentials from ~/.claude/.credentials.json
-func (m *OAuthManager) LoadClaudeCliCredentials() (*OAuthCredentials, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
-	credPath := filepath.Join(home, ".claude", ".credentials.json")
-
-	if err := checkFilePermissions(credPath); err != nil {
-		return nil, fmt.Errorf("credential file security check failed: %w", err)
-	}
-
-	data, err := os.ReadFile(credPath)
-	if err != nil {
-		return nil, fmt.Errorf("read claude credentials: %w", err)
-	}
-
-	var creds ClaudeCliCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, fmt.Errorf("parse claude credentials: %w", err)
-	}
-
-	if creds.ClaudeAiOAuth == nil {
-		return nil, fmt.Errorf("no claudeAiOauth in credentials")
-	}
-
-	oauth := &OAuthCredentials{
-		AccessToken:  creds.ClaudeAiOAuth.AccessToken,
-		RefreshToken: creds.ClaudeAiOAuth.RefreshToken,
-		ExpiresAt:    creds.ClaudeAiOAuth.ExpiresAt,
-		Provider:     "anthropic",
-	}
-
-	m.mu.Lock()
-	m.credentials["anthropic"] = oauth
-	m.mu.Unlock()
-
-	return oauth, nil
 }
 
 // LoadCodexCliCredentials loads credentials from ~/.codex/auth.json
@@ -226,75 +171,11 @@ func (m *OAuthManager) GetAccessToken(provider string) (string, error) {
 // refreshToken refreshes OAuth token for a provider
 func (m *OAuthManager) refreshToken(provider string, creds *OAuthCredentials) (*OAuthCredentials, error) {
 	switch provider {
-	case "anthropic":
-		return m.refreshAnthropicToken(creds)
 	case "openai":
 		return m.refreshOpenAIToken(creds)
 	default:
 		return nil, fmt.Errorf("unsupported provider for refresh: %s", provider)
 	}
-}
-
-// refreshAnthropicToken refreshes Anthropic OAuth token
-func (m *OAuthManager) refreshAnthropicToken(creds *OAuthCredentials) (*OAuthCredentials, error) {
-	// Anthropic OAuth refresh endpoint
-	refreshURL := "https://console.anthropic.com/v1/oauth/token"
-
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("refresh_token", creds.RefreshToken)
-	data.Set("client_id", "claude-code") // Claude CLI client ID
-
-	req, err := http.NewRequest("POST", refreshURL, bytes.NewBufferString(data.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("refresh request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read refresh response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))
-	}
-
-	var result struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int64  `json:"expires_in"` // seconds
-		TokenType    string `json:"token_type"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parse refresh response: %w", err)
-	}
-
-	newCreds := &OAuthCredentials{
-		AccessToken:  result.AccessToken,
-		RefreshToken: result.RefreshToken,
-		ExpiresAt:    time.Now().UnixMilli() + (result.ExpiresIn * 1000),
-		Provider:     "anthropic",
-	}
-
-	// Update stored credentials
-	m.mu.Lock()
-	m.credentials["anthropic"] = newCreds
-	m.mu.Unlock()
-
-	// Also update the file
-	if err := m.saveClaudeCliCredentials(newCreds); err != nil {
-		slog.Warn("failed to save refreshed credentials to file", "error", err)
-	}
-
-	return newCreds, nil
 }
 
 // refreshOpenAIToken refreshes OpenAI Codex OAuth token
@@ -350,46 +231,6 @@ func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCreden
 	m.mu.Unlock()
 
 	return newCreds, nil
-}
-
-// saveClaudeCliCredentials saves updated credentials back to file
-func (m *OAuthManager) saveClaudeCliCredentials(creds *OAuthCredentials) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	credPath := filepath.Join(home, ".claude", ".credentials.json")
-
-	// Read existing file to preserve other fields
-	data, err := os.ReadFile(credPath)
-	if err != nil {
-		return err
-	}
-
-	var existing ClaudeCliCredentials
-	if err := json.Unmarshal(data, &existing); err != nil {
-		return err
-	}
-
-	if existing.ClaudeAiOAuth == nil {
-		existing.ClaudeAiOAuth = &ClaudeAiOAuth{}
-	}
-
-	existing.ClaudeAiOAuth.AccessToken = creds.AccessToken
-	existing.ClaudeAiOAuth.RefreshToken = creds.RefreshToken
-	existing.ClaudeAiOAuth.ExpiresAt = creds.ExpiresAt
-
-	newData, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	tmpPath := credPath + ".tmp"
-	if err := os.WriteFile(tmpPath, newData, 0600); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, credPath)
 }
 
 // IsTokenExpired checks if the token is expired

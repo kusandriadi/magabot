@@ -69,11 +69,3 @@ func (d *DeepSeek) Complete(ctx context.Context, req *Request) (*Response, error
 	return completeOpenAICompatible(ctx, client, "deepseek", d.config.Model, d.config.MaxTokens, d.config.Temperature, req)
 }
 
-// Models returns available DeepSeek models
-func (d *DeepSeek) Models() []string {
-	return []string{
-		"deepseek-chat",
-		"deepseek-coder",
-		"deepseek-reasoner",
-	}
-}

@@ -199,17 +199,18 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 	encryptedContent, encErr := r.vault.Encrypt([]byte(msg.Text))
 	if encErr != nil {
 		r.logger.Error("encrypt message failed", "error", encErr, "direction", "in")
-	}
-	if err := r.store.SaveMessage(&storage.Message{
-		Platform:  msg.Platform,
-		ChatID:    msg.ChatID,
-		UserID:    hashedUser,
-		Username:  msg.Username,
-		Content:   encryptedContent,
-		Timestamp: msg.Timestamp,
-		Direction: "in",
-	}); err != nil {
-		r.logger.Error("save message failed", "error", err, "direction", "in")
+	} else {
+		if err := r.store.SaveMessage(&storage.Message{
+			Platform:  msg.Platform,
+			ChatID:    msg.ChatID,
+			UserID:    hashedUser,
+			Username:  msg.Username,
+			Content:   encryptedContent,
+			Timestamp: msg.Timestamp,
+			Direction: "in",
+		}); err != nil {
+			r.logger.Error("save message failed", "error", err, "direction", "in")
+		}
 	}
 
 	// Process message
@@ -232,16 +233,17 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 		encryptedResponse, encErr := r.vault.Encrypt([]byte(response))
 		if encErr != nil {
 			r.logger.Error("encrypt message failed", "error", encErr, "direction", "out")
-		}
-		if err := r.store.SaveMessage(&storage.Message{
-			Platform:  msg.Platform,
-			ChatID:    msg.ChatID,
-			UserID:    "bot",
-			Content:   encryptedResponse,
-			Timestamp: time.Now(),
-			Direction: "out",
-		}); err != nil {
-			r.logger.Error("save message failed", "error", err, "direction", "out")
+		} else {
+			if err := r.store.SaveMessage(&storage.Message{
+				Platform:  msg.Platform,
+				ChatID:    msg.ChatID,
+				UserID:    "bot",
+				Content:   encryptedResponse,
+				Timestamp: time.Now(),
+				Direction: "out",
+			}); err != nil {
+				r.logger.Error("save message failed", "error", err, "direction", "out")
+			}
 		}
 	}
 

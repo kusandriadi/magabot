@@ -70,18 +70,25 @@ func (s *Session) Touch() {
 type SessionManager struct {
 	sessions map[string]*Session // key: platform:userID
 	mu       sync.RWMutex
+	done     chan struct{}
 }
 
 // NewSessionManager creates a new session manager
 func NewSessionManager() *SessionManager {
 	sm := &SessionManager{
 		sessions: make(map[string]*Session),
+		done:     make(chan struct{}),
 	}
-	
+
 	// Start cleanup goroutine
 	go sm.cleanupLoop()
-	
+
 	return sm
+}
+
+// Stop signals the cleanup goroutine to exit
+func (sm *SessionManager) Stop() {
+	close(sm.done)
 }
 
 func (sm *SessionManager) sessionKey(platform, userID string) string {
@@ -154,9 +161,14 @@ func (sm *SessionManager) Invalidate(platform, userID string) {
 func (sm *SessionManager) cleanupLoop() {
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
-	
-	for range ticker.C {
-		sm.cleanup()
+
+	for {
+		select {
+		case <-ticker.C:
+			sm.cleanup()
+		case <-sm.done:
+			return
+		}
 	}
 }
 

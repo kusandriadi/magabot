@@ -6,7 +6,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
+	anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/openai/openai-go/v3"
+	openaiOption "github.com/openai/openai-go/v3/option"
 	"google.golang.org/genai"
 )
 
@@ -19,7 +24,7 @@ type ModelInfo struct {
 	MaxTokens   int    `json:"max_tokens,omitempty"`
 }
 
-// ListModels lists available models from a provider
+// ListModels lists available models from a provider via API
 func (r *Router) ListModels(ctx context.Context, providerName string) ([]ModelInfo, error) {
 	r.mu.RLock()
 	provider, ok := r.providers[providerName]
@@ -39,11 +44,11 @@ func (r *Router) ListModels(ctx context.Context, providerName string) ([]ModelIn
 	case *Gemini:
 		return listGeminiModels(ctx, p)
 	case *GLM:
-		return listGLMModels(ctx, p)
+		return listGLMModelsAPI(ctx, p)
 	case *Anthropic:
-		return listAnthropicModels(), nil
+		return listAnthropicModelsAPI(ctx, p)
 	case *DeepSeek:
-		return listDeepSeekModels(p), nil
+		return listDeepSeekModelsAPI(ctx, p)
 	default:
 		return nil, fmt.Errorf("list models not supported for: %s", providerName)
 	}
@@ -73,17 +78,31 @@ func (r *Router) ListAllModels(ctx context.Context) map[string][]ModelInfo {
 	return result
 }
 
-// Anthropic models (hardcoded)
-func listAnthropicModels() []ModelInfo {
-	return []ModelInfo{
-		{ID: "claude-opus-4-6", Name: "Claude Opus 4.6", Provider: "anthropic", MaxTokens: 16384},
-		{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: "anthropic", MaxTokens: 16384},
-		{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: "anthropic", MaxTokens: 8192},
-		{ID: "claude-opus-4-20250514", Name: "Claude Opus 4", Provider: "anthropic", MaxTokens: 8192},
-		{ID: "claude-sonnet-4-20250514", Name: "Claude Sonnet 4", Provider: "anthropic", MaxTokens: 8192},
-		{ID: "claude-3-5-sonnet-20241022", Name: "Claude 3.5 Sonnet", Provider: "anthropic", MaxTokens: 8192},
-		{ID: "claude-3-5-haiku-20241022", Name: "Claude 3.5 Haiku", Provider: "anthropic", MaxTokens: 8192},
+// listAnthropicModelsAPI lists models from the Anthropic API using the SDK
+func listAnthropicModelsAPI(ctx context.Context, a *Anthropic) ([]ModelInfo, error) {
+	var opts []anthropicOption.RequestOption
+	if a.baseURL != "" {
+		opts = append(opts, anthropicOption.WithBaseURL(a.baseURL))
 	}
+	opts = append(opts, anthropicOption.WithAPIKey(a.apiKey))
+
+	client := anthropic.NewClient(opts...)
+	pager := client.Models.ListAutoPaging(ctx, anthropic.ModelListParams{})
+
+	var models []ModelInfo
+	for pager.Next() {
+		m := pager.Current()
+		models = append(models, ModelInfo{
+			ID:       m.ID,
+			Name:     m.DisplayName,
+			Provider: "anthropic",
+		})
+	}
+	if err := pager.Err(); err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
+
+	return models, nil
 }
 
 // OpenAI models via SDK
@@ -154,29 +173,154 @@ func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) {
 	return models, nil
 }
 
-// GLM models (hardcoded)
-func listGLMModels(ctx context.Context, g *GLM) ([]ModelInfo, error) {
-	return []ModelInfo{
-		{ID: "glm-4.7", Name: "GLM-4.7", Provider: "glm", Description: "Latest, most capable"},
-		{ID: "glm-4.6", Name: "GLM-4.6", Provider: "glm", Description: "Previous generation"},
-		{ID: "glm-4.5", Name: "GLM-4.5", Provider: "glm", Description: "Stable"},
-		{ID: "glm-4-plus", Name: "GLM-4 Plus", Provider: "glm", Description: "Most capable (legacy)"},
-		{ID: "glm-4-flash", Name: "GLM-4 Flash", Provider: "glm", Description: "Fast, free tier"},
-		{ID: "glm-4-long", Name: "GLM-4 Long", Provider: "glm", Description: "Long context"},
-	}, nil
+// listGLMModelsAPI lists models from the GLM/Z.AI API (OpenAI-compatible)
+func listGLMModelsAPI(ctx context.Context, g *GLM) ([]ModelInfo, error) {
+	return fetchOpenAICompatibleModels(ctx, g.apiKey, g.baseURL,
+		[]string{"glm", "chatglm"}, "glm")
 }
 
-// DeepSeek models (hardcoded)
-func listDeepSeekModels(d *DeepSeek) []ModelInfo {
+// listDeepSeekModelsAPI lists models from the DeepSeek API (OpenAI-compatible)
+func listDeepSeekModelsAPI(ctx context.Context, d *DeepSeek) ([]ModelInfo, error) {
+	return fetchOpenAICompatibleModels(ctx, d.config.APIKey, d.config.BaseURL,
+		[]string{"deepseek"}, "deepseek")
+}
+
+// FetchModels fetches available models from a provider's API using the given key.
+// Returns an error if the API call fails — callers should show the error to the user.
+func FetchModels(provider, apiKey, baseURL string) ([]ModelInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	switch provider {
+	case "anthropic":
+		return fetchAnthropicModels(ctx, apiKey, baseURL)
+	case "openai":
+		return fetchOpenAICompatibleModels(ctx, apiKey, baseURL,
+			[]string{"gpt-4", "gpt-3.5", "o1", "o3", "chatgpt"}, "openai")
+	case "gemini":
+		return fetchGeminiModels(ctx, apiKey)
+	case "deepseek":
+		if baseURL == "" {
+			baseURL = deepseekAPIURL
+		}
+		return fetchOpenAICompatibleModels(ctx, apiKey, baseURL,
+			[]string{"deepseek"}, "deepseek")
+	case "glm":
+		if baseURL == "" {
+			baseURL = glmAPIURL
+		}
+		return fetchOpenAICompatibleModels(ctx, apiKey, baseURL,
+			[]string{"glm", "chatglm"}, "glm")
+	default:
+		return nil, fmt.Errorf("unsupported provider: %s", provider)
+	}
+}
+
+// fetchAnthropicModels lists models from the Anthropic API
+func fetchAnthropicModels(ctx context.Context, apiKey, baseURL string) ([]ModelInfo, error) {
+	var opts []anthropicOption.RequestOption
+	if baseURL != "" {
+		opts = append(opts, anthropicOption.WithBaseURL(baseURL))
+	}
+	opts = append(opts, anthropicOption.WithAPIKey(apiKey))
+
+	client := anthropic.NewClient(opts...)
+	pager := client.Models.ListAutoPaging(ctx, anthropic.ModelListParams{})
+
 	var models []ModelInfo
-	for _, id := range d.Models() {
+	for pager.Next() {
+		m := pager.Current()
 		models = append(models, ModelInfo{
-			ID:       id,
-			Name:     id,
-			Provider: "deepseek",
+			ID:       m.ID,
+			Name:     m.DisplayName,
+			Provider: "anthropic",
 		})
 	}
-	return models
+	if err := pager.Err(); err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
+
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models returned — check your API key")
+	}
+
+	return models, nil
+}
+
+// fetchOpenAICompatibleModels lists models from an OpenAI-compatible API
+func fetchOpenAICompatibleModels(ctx context.Context, apiKey, baseURL string, prefixes []string, providerName string) ([]ModelInfo, error) {
+	opts := []openaiOption.RequestOption{
+		openaiOption.WithAPIKey(apiKey),
+	}
+	if baseURL != "" {
+		opts = append(opts, openaiOption.WithBaseURL(baseURL))
+	}
+	client := openai.NewClient(opts...)
+
+	pager := client.Models.ListAutoPaging(ctx)
+
+	var models []ModelInfo
+	for pager.Next() {
+		m := pager.Current()
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(strings.ToLower(m.ID), prefix) {
+				models = append(models, ModelInfo{
+					ID:       m.ID,
+					Name:     m.ID,
+					Provider: providerName,
+				})
+				break
+			}
+		}
+	}
+	if err := pager.Err(); err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
+
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models returned — check your API key")
+	}
+
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].ID > models[j].ID
+	})
+	return models, nil
+}
+
+// fetchGeminiModels lists models from the Gemini API
+func fetchGeminiModels(ctx context.Context, apiKey string) ([]ModelInfo, error) {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create client: %w", err)
+	}
+
+	var models []ModelInfo
+	for model, err := range client.Models.All(ctx) {
+		if err != nil {
+			return nil, fmt.Errorf("list models: %w", err)
+		}
+		for _, action := range model.SupportedActions {
+			if action == "generateContent" {
+				id := strings.TrimPrefix(model.Name, "models/")
+				models = append(models, ModelInfo{
+					ID:          id,
+					Name:        model.DisplayName,
+					Provider:    "gemini",
+					Description: model.Description,
+				})
+				break
+			}
+		}
+	}
+
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models returned — check your API key")
+	}
+
+	return models, nil
 }
 
 // FormatModelList formats models for display

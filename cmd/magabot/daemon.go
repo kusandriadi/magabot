@@ -66,7 +66,16 @@ func runDaemon() {
 	logger.Info("magabot starting", "version", version.Short())
 
 	// Load secrets from backend and overlay onto config
-	loadSecrets(cfg, logger)
+	secretsMgr := loadSecrets(cfg, logger)
+	if secretsMgr != nil {
+		defer secretsMgr.Stop()
+	}
+
+	// Ensure all configured directories exist before initializing subsystems
+	if err := cfg.EnsureDirectories(); err != nil {
+		logger.Error("ensure directories failed", "error", err)
+		os.Exit(1)
+	}
 
 	// Initialize vault
 	vault, err := security.NewVault(cfg.Security.EncryptionKey)
@@ -76,7 +85,7 @@ func runDaemon() {
 	}
 
 	// Initialize storage
-	store, err := storage.New(cfg.Storage.Database)
+	store, err := storage.New(cfg.GetDatabasePath())
 	if err != nil {
 		logger.Error("init storage failed", "error", err)
 		os.Exit(1)
@@ -84,7 +93,7 @@ func runDaemon() {
 	defer store.Close()
 
 	// Initialize backup manager
-	backupMgr := backup.New(cfg.Storage.Backup.Path, cfg.Storage.Backup.KeepCount)
+	backupMgr := backup.New(cfg.GetBackupDir(), cfg.Storage.Backup.KeepCount)
 
 	// Initialize security components
 	authorizer := security.NewAuthorizer()
@@ -167,13 +176,21 @@ func runDaemon() {
 	if maxHistory <= 0 {
 		maxHistory = 50
 	}
-	sessionMgr := session.NewManager(nil, maxHistory, logger)
 
 	// Initialize message router
 	rtr := router.NewRouter(store, vault, cfg, authorizer, rateLimiter, logger)
 
-	// Set session notify function after router is created
-	sessionMgr = session.NewManager(func(platform, chatID, message string) error {
+	// Initialize audit logger
+	auditLogger, err := security.NewAuditLogger(filepath.Dir(cfg.GetSecurityLogPath()))
+	if err != nil {
+		logger.Warn("init audit logger failed, continuing without it", "error", err)
+	} else {
+		rtr.SetAuditLogger(auditLogger)
+		defer auditLogger.Close()
+	}
+
+	// Create session manager with router's send function for background task notifications
+	sessionMgr := session.NewManager(func(platform, chatID, message string) error {
 		return rtr.Send(platform, chatID, message)
 	}, maxHistory, logger)
 	sessionHandler := bot.NewSessionHandler(sessionMgr)
@@ -421,10 +438,11 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 
 // loadSecrets loads secrets from the configured backend and overlays them onto
 // the config. Config values (from YAML/env vars) take precedence — secrets are
-// only applied when the config field is empty.
-func loadSecrets(cfg *config.Config, logger *slog.Logger) {
+// only applied when the config field is empty. Returns the Manager so the
+// caller can defer Stop() for background token renewal cleanup.
+func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 	if cfg.Secrets.Backend == "" {
-		return
+		return nil
 	}
 
 	// Convert config types to secrets package types
@@ -433,9 +451,14 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) {
 	}
 	if cfg.Secrets.Vault != nil {
 		secretsCfg.VaultConfig = &secrets.VaultConfig{
-			Address:    cfg.Secrets.Vault.Address,
-			MountPath:  cfg.Secrets.Vault.MountPath,
-			SecretPath: cfg.Secrets.Vault.SecretPath,
+			Address:       cfg.Secrets.Vault.Address,
+			MountPath:     cfg.Secrets.Vault.MountPath,
+			SecretPath:    cfg.Secrets.Vault.SecretPath,
+			TLSCACert:     cfg.Secrets.Vault.TLSCACert,
+			TLSClientCert: cfg.Secrets.Vault.TLSClientCert,
+			TLSClientKey:  cfg.Secrets.Vault.TLSClientKey,
+			TLSSkipVerify: cfg.Secrets.Vault.TLSSkipVerify,
+			Logger:        logger.With("component", "vault"),
 		}
 	}
 	if cfg.Secrets.Local != nil {
@@ -447,7 +470,7 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) {
 	mgr, err := secrets.NewFromConfig(secretsCfg)
 	if err != nil {
 		logger.Warn("secrets backend init failed, skipping", "backend", cfg.Secrets.Backend, "error", err)
-		return
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -499,6 +522,8 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) {
 	if loaded > 0 {
 		logger.Info("secrets loaded", "count", loaded, "backend", mgr.Backend())
 	}
+
+	return mgr
 }
 
 // buildContentBlocks creates multi-modal content blocks from text and media paths.

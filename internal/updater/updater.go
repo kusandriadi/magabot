@@ -111,7 +111,7 @@ func (u *Updater) getLatestRelease(ctx context.Context) (*Release, error) {
 	}
 	
 	var release Release
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 10*1024*1024)).Decode(&release); err != nil {
 		return nil, fmt.Errorf("failed to parse release: %w", err)
 	}
 	
