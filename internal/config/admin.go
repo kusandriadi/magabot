@@ -2,21 +2,18 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
-	"syscall"
 )
 
 // AdminAction represents a config change action
 type AdminAction struct {
-	Platform  string
-	UserID    string
-	Action    string
-	Target    string
-	TargetID  string
-	Success   bool
-	Message   string
+	Platform    string
+	UserID      string
+	Action      string
+	Target      string
+	TargetID    string
+	Success     bool
+	Message     string
 	NeedRestart bool
 }
 
@@ -31,20 +28,20 @@ func (c *Config) AddGlobalAdmin(requesterID, newAdminID string) AdminAction {
 	c.mu.Lock()
 	if !c.isGlobalAdmin(requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only global admins can add global admins"
+		result.Message = "Only global admins can add global admins"
 		return result
 	}
 	c.Access.GlobalAdmins = addUnique(c.Access.GlobalAdmins, newAdminID)
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Added global admin: %s", newAdminID)
+	result.Message = fmt.Sprintf("Added global admin: %s", newAdminID)
 	return result
 }
 
@@ -59,25 +56,25 @@ func (c *Config) RemoveGlobalAdmin(requesterID, adminID string) AdminAction {
 	c.mu.Lock()
 	if !c.isGlobalAdmin(requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only global admins can remove global admins"
+		result.Message = "Only global admins can remove global admins"
 		return result
 	}
 	if len(c.Access.GlobalAdmins) == 1 && c.Access.GlobalAdmins[0] == adminID {
 		c.mu.Unlock()
-		result.Message = "❌ Cannot remove the last global admin"
+		result.Message = "Cannot remove the last global admin"
 		return result
 	}
 	c.Access.GlobalAdmins = remove(c.Access.GlobalAdmins, adminID)
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Removed global admin: %s", adminID)
+	result.Message = fmt.Sprintf("Removed global admin: %s", adminID)
 	return result
 }
 
@@ -93,14 +90,14 @@ func (c *Config) AddPlatformAdmin(platform, requesterID, newAdminID string) Admi
 	c.mu.Lock()
 	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only platform admins can add platform admins"
+		result.Message = "Only platform admins can add platform admins"
 		return result
 	}
 	c.mu.Unlock()
 
 	// New admin must be in allowlist first (IsAllowed acquires its own lock)
 	if !c.IsAllowed(platform, newAdminID, "", false) {
-		result.Message = "❌ User must be in allowlist first. Use /allow user " + newAdminID
+		result.Message = "User must be in allowlist first. Use /allow user " + newAdminID
 		return result
 	}
 
@@ -108,20 +105,20 @@ func (c *Config) AddPlatformAdmin(platform, requesterID, newAdminID string) Admi
 	admins := c.platformAdmins(platform)
 	if admins == nil {
 		c.mu.Unlock()
-		result.Message = fmt.Sprintf("❌ Unknown platform: %s", platform)
+		result.Message = fmt.Sprintf("Unknown platform: %s", platform)
 		return result
 	}
 	*admins = addUnique(*admins, newAdminID)
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Added %s admin: %s", platform, newAdminID)
+	result.Message = fmt.Sprintf("Added %s admin: %s", platform, newAdminID)
 	return result
 }
 
@@ -137,7 +134,7 @@ func (c *Config) RemovePlatformAdmin(platform, requesterID, adminID string) Admi
 	c.mu.Lock()
 	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only platform admins can remove platform admins"
+		result.Message = "Only platform admins can remove platform admins"
 		return result
 	}
 	if admins := c.platformAdmins(platform); admins != nil {
@@ -146,13 +143,13 @@ func (c *Config) RemovePlatformAdmin(platform, requesterID, adminID string) Admi
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Removed %s admin: %s", platform, adminID)
+	result.Message = fmt.Sprintf("Removed %s admin: %s", platform, adminID)
 	return result
 }
 
@@ -168,7 +165,7 @@ func (c *Config) AllowUser(platform, requesterID, userID string) AdminAction {
 	c.mu.Lock()
 	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only platform admins can modify allowlist"
+		result.Message = "Only platform admins can modify allowlist"
 		return result
 	}
 	if users := c.platformAllowedUsers(platform); users != nil {
@@ -177,13 +174,13 @@ func (c *Config) AllowUser(platform, requesterID, userID string) AdminAction {
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Allowed user: %s", userID)
+	result.Message = fmt.Sprintf("Allowed user: %s", userID)
 	return result
 }
 
@@ -199,13 +196,13 @@ func (c *Config) RemoveUser(platform, requesterID, userID string) AdminAction {
 	c.mu.Lock()
 	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only platform admins can modify allowlist"
+		result.Message = "Only platform admins can modify allowlist"
 		return result
 	}
 	// Cannot remove platform admin from allowlist
 	if c.isPlatformAdmin(platform, userID) && userID != requesterID {
 		c.mu.Unlock()
-		result.Message = "❌ Cannot remove a platform admin. Remove admin status first."
+		result.Message = "Cannot remove a platform admin. Remove admin status first."
 		return result
 	}
 	if users := c.platformAllowedUsers(platform); users != nil {
@@ -214,13 +211,13 @@ func (c *Config) RemoveUser(platform, requesterID, userID string) AdminAction {
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Removed user: %s", userID)
+	result.Message = fmt.Sprintf("Removed user: %s", userID)
 	return result
 }
 
@@ -236,7 +233,7 @@ func (c *Config) AllowChat(platform, requesterID, chatID string) AdminAction {
 	c.mu.Lock()
 	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only platform admins can modify allowlist"
+		result.Message = "Only platform admins can modify allowlist"
 		return result
 	}
 	if chats := c.platformAllowedChats(platform); chats != nil {
@@ -245,13 +242,13 @@ func (c *Config) AllowChat(platform, requesterID, chatID string) AdminAction {
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Allowed chat: %s", chatID)
+	result.Message = fmt.Sprintf("Allowed chat: %s", chatID)
 	return result
 }
 
@@ -267,7 +264,7 @@ func (c *Config) RemoveChat(platform, requesterID, chatID string) AdminAction {
 	c.mu.Lock()
 	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only platform admins can modify allowlist"
+		result.Message = "Only platform admins can modify allowlist"
 		return result
 	}
 	if chats := c.platformAllowedChats(platform); chats != nil {
@@ -276,13 +273,13 @@ func (c *Config) RemoveChat(platform, requesterID, chatID string) AdminAction {
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Removed chat: %s", chatID)
+	result.Message = fmt.Sprintf("Removed chat: %s", chatID)
 	return result
 }
 
@@ -296,27 +293,27 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 
 	mode = strings.ToLower(mode)
 	if mode != "allowlist" && mode != "denylist" && mode != "open" {
-		result.Message = "❌ Invalid mode. Use: allowlist, denylist, or open"
+		result.Message = "Invalid mode. Use: allowlist, denylist, or open"
 		return result
 	}
 
 	c.mu.Lock()
 	if !c.isGlobalAdmin(requesterID) {
 		c.mu.Unlock()
-		result.Message = "❌ Only global admins can change access mode"
+		result.Message = "Only global admins can change access mode"
 		return result
 	}
 	c.Access.Mode = mode
 	c.mu.Unlock()
 
 	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("❌ Failed to save: %v", err)
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
 		return result
 	}
 
 	result.Success = true
 	result.NeedRestart = true
-	result.Message = fmt.Sprintf("✅ Access mode set to: %s", mode)
+	result.Message = fmt.Sprintf("Access mode set to: %s", mode)
 	return result
 }
 
@@ -387,38 +384,4 @@ func (c *Config) platformAllowedChats(platform string) *[]string {
 		}
 	}
 	return nil
-}
-
-// RestartBot restarts the magabot process
-func RestartBot(pidFile string) error {
-	// Read PID
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		return fmt.Errorf("failed to read PID file: %w", err)
-	}
-
-	var pid int
-	if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid); err != nil {
-		return fmt.Errorf("invalid PID: %w", err)
-	}
-
-	// Send SIGHUP to trigger graceful restart
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("process not found: %w", err)
-	}
-
-	if err := process.Signal(syscall.SIGHUP); err != nil {
-		return fmt.Errorf("failed to send restart signal: %w", err)
-	}
-
-	return nil
-}
-
-// RestartBotAsync restarts in background
-func RestartBotAsync(executable string) error {
-	cmd := exec.Command(executable, "restart")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	return cmd.Start()
 }

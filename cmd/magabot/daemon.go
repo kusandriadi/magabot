@@ -11,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kusa/magabot/internal/agent"
 	"github.com/kusa/magabot/internal/backup"
 	"github.com/kusa/magabot/internal/bot"
 	"github.com/kusa/magabot/internal/config"
+	"github.com/kusa/magabot/internal/hooks"
 	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/platform/slack"
 	"github.com/kusa/magabot/internal/platform/telegram"
@@ -167,6 +169,17 @@ func runDaemon() {
 		}))
 	}
 
+	if cfg.LLM.Local.Enabled {
+		llmRouter.Register(llm.NewLocal(&llm.LocalConfig{
+			Enabled:     true,
+			BaseURL:     cfg.LLM.Local.BaseURL,
+			Model:       cfg.LLM.Local.Model,
+			APIKey:      cfg.LLM.Local.APIKey,
+			MaxTokens:   cfg.LLM.Local.MaxTokens,
+			Temperature: cfg.LLM.Local.Temperature,
+		}))
+	}
+
 	// Initialize bot handlers
 	adminHandler := bot.NewAdminHandler(cfg, configDir)
 	memoryHandler := bot.NewMemoryHandler(cfg.Paths.MemoryDir)
@@ -189,6 +202,16 @@ func runDaemon() {
 		defer auditLogger.Close()
 	}
 
+	// Initialize hooks manager — load from config-hooks.yml, merge with inline config hooks
+	hooksMgr := hooks.NewManager(mergeHooksConfig(cfg, logger), logger.With("component", "hooks"))
+	rtr.SetHooks(hooksMgr)
+
+	// Initialize agent session manager
+	agentMgr := agent.NewManager(agent.Config{
+		Default: cfg.Agents.Default,
+		Timeout: cfg.Agents.Timeout,
+	}, logger.With("component", "agent"))
+
 	// Create session manager with router's send function for background task notifications
 	sessionMgr := session.NewManager(func(platform, chatID, message string) error {
 		return rtr.Send(platform, chatID, message)
@@ -202,9 +225,19 @@ func runDaemon() {
 			"user", security.HashUserID(msg.Platform, msg.UserID),
 		)
 
-		// Handle commands
+		// Handle bot commands
 		if strings.HasPrefix(msg.Text, "/") {
 			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler)
+		}
+
+		// Handle agent session commands (:new, :send, :quit, :status)
+		if strings.HasPrefix(msg.Text, ":") {
+			return handleAgentCommand(msg, agentMgr, cfg)
+		}
+
+		// Route to active agent session if one exists
+		if agentMgr.HasSession(msg.Platform, msg.ChatID) {
+			return routeToAgent(ctx, msg, agentMgr)
 		}
 
 		// Get or create session for this chat
@@ -321,6 +354,12 @@ func runDaemon() {
 		"llm_providers", llmRouter.Providers(),
 	)
 
+	// Fire on_start hooks
+	hooksMgr.FireAsync(hooks.OnStart, &hooks.EventData{
+		Version:   version.Short(),
+		Platforms: rtr.Platforms(),
+	})
+
 	// Wait for shutdown or restart signal (platform-specific)
 	sigCh := make(chan os.Signal, 1)
 	registerSignals(sigCh)
@@ -337,6 +376,13 @@ func runDaemon() {
 	}
 
 	logger.Info("shutting down...")
+
+	// Fire on_stop hooks (synchronous, give hooks a chance to run)
+	hooksMgr.Fire(hooks.OnStop, &hooks.EventData{
+		Version:   version.Short(),
+		Platforms: rtr.Platforms(),
+	})
+
 	done := make(chan struct{})
 	go func() {
 		rtr.Stop()
@@ -384,7 +430,13 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 • /config - Admin configuration
 • /memory - Memory management
 • /task - Background tasks
-• /help - Bantuan ini`, nil
+• /help - Bantuan ini
+
+*Agent Sessions:*
+• :new [agent] <dir> - Start coding agent (claude/codex/gemini)
+• :send <message> - Send message to active agent
+• :quit - Close agent session
+• :status - Show agent session info`, nil
 
 	case "/status":
 		stats, err := store.Stats()
@@ -572,4 +624,138 @@ func buildContentBlocks(text string, mediaPaths []string, allowedDir string, log
 	}
 
 	return blocks
+}
+
+// handleAgentCommand processes colon-prefixed agent session commands.
+// Only platform admins can use agent sessions (they execute code on the server).
+func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *config.Config) (string, error) {
+	// Agent sessions execute code on the server — restrict to admins
+	if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {
+		return "Agent sessions require admin access.", nil
+	}
+
+	parts := strings.Fields(msg.Text)
+	if len(parts) == 0 {
+		return "", nil
+	}
+
+	cmd := strings.ToLower(parts[0])
+
+	switch cmd {
+	case ":new":
+		if agentMgr.HasSession(msg.Platform, msg.ChatID) {
+			return "Agent session already active. Use :quit first.", nil
+		}
+
+		agentType := ""
+		dir := ""
+
+		switch len(parts) {
+		case 1:
+			return "Usage: :new [agent] <directory>\nAgents: claude, codex, gemini", nil
+		case 2:
+			dir = parts[1]
+		default:
+			if agent.ValidAgent(parts[1]) {
+				agentType = parts[1]
+				dir = parts[2]
+			} else {
+				dir = parts[1]
+			}
+		}
+
+		sess, err := agentMgr.NewSession(msg.Platform, msg.ChatID, msg.UserID, agentType, dir)
+		if err != nil {
+			return fmt.Sprintf("Failed to start agent session: %v", err), nil
+		}
+
+		return fmt.Sprintf("Agent session started: %s in %s\nSend messages to interact. Use :quit to end.", sess.Agent, sess.Dir), nil
+
+	case ":send":
+		if !agentMgr.HasSession(msg.Platform, msg.ChatID) {
+			return "No active agent session. Use :new to start one.", nil
+		}
+		if len(parts) < 2 {
+			return "Usage: :send <message>", nil
+		}
+		message := strings.TrimSpace(strings.TrimPrefix(msg.Text, parts[0]))
+		sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
+		ctx := context.Background()
+		output, err := agentMgr.Execute(ctx, sess, message)
+		if err != nil {
+			return fmt.Sprintf("Agent error: %v", err), nil
+		}
+		if output == "" {
+			return "(no output)", nil
+		}
+		return output, nil
+
+	case ":quit", ":exit", ":close":
+		if !agentMgr.HasSession(msg.Platform, msg.ChatID) {
+			return "No active agent session.", nil
+		}
+		agentMgr.CloseSession(msg.Platform, msg.ChatID)
+		return "Agent session closed.", nil
+
+	case ":status":
+		sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
+		if sess == nil {
+			return "No active agent session.", nil
+		}
+		return fmt.Sprintf("Agent: %s\nDirectory: %s\nMessages: %d", sess.Agent, sess.Dir, sess.GetMsgCount()), nil
+
+	default:
+		return fmt.Sprintf("Unknown agent command: %s\nAvailable: :new, :send, :quit, :status", cmd), nil
+	}
+}
+
+// routeToAgent sends a regular message to the active agent session.
+func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Manager) (string, error) {
+	sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
+	if sess == nil {
+		return "", nil
+	}
+
+	output, err := agentMgr.Execute(ctx, sess, msg.Text)
+	if err != nil {
+		return fmt.Sprintf("Agent error: %v", err), nil
+	}
+	if output == "" {
+		return "(no output)", nil
+	}
+	return output, nil
+}
+
+// mergeHooksConfig loads hooks from config-hooks.yml and merges with inline config hooks.
+// File hooks take precedence over inline hooks with the same name.
+func mergeHooksConfig(cfg *config.Config, logger *slog.Logger) []config.HookConfig {
+	hooksFile := filepath.Join(configDir, "config-hooks.yml")
+	fileHooks, err := config.LoadHooksFile(hooksFile)
+	if err != nil {
+		logger.Warn("failed to load hooks file", "path", hooksFile, "error", err)
+	}
+
+	if len(fileHooks) == 0 {
+		return cfg.Hooks
+	}
+
+	if len(cfg.Hooks) == 0 {
+		return fileHooks
+	}
+
+	// File hooks take precedence by name
+	seen := make(map[string]bool)
+	var merged []config.HookConfig
+	for _, h := range fileHooks {
+		seen[h.Name] = true
+		merged = append(merged, h)
+	}
+	for _, h := range cfg.Hooks {
+		if !seen[h.Name] {
+			merged = append(merged, h)
+		}
+	}
+
+	logger.Info("hooks loaded", "file", len(fileHooks), "inline", len(cfg.Hooks), "merged", len(merged))
+	return merged
 }

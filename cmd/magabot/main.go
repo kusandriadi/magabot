@@ -58,6 +58,8 @@ func main() {
 		cmdStatus()
 	case "log", "logs":
 		cmdLog()
+	case "init":
+		cmdInit()
 	case "setup":
 		cmdSetup()
 	case "reset":
@@ -96,7 +98,8 @@ Commands:
   restart     Restart magabot daemon
   status      Show magabot status
   log         View logs (tail -f)
-  setup       First-time setup wizard
+  init        Quick setup (auto-detects env vars, zero prompts)
+  setup       Interactive setup wizard (detailed configuration)
   reset       Reset config (keep platform connections)
   uninstall   Completely uninstall magabot
   genkey      Generate encryption key

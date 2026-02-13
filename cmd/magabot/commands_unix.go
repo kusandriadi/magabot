@@ -10,7 +10,12 @@ import (
 )
 
 func startDaemonProcess() (int, error) {
-	cmd := exec.Command(os.Args[0], "daemon")
+	exePath, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("cannot determine executable path: %w", err)
+	}
+
+	cmd := exec.Command(exePath, "daemon")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -40,14 +45,17 @@ func processExists(pid int) bool {
 }
 
 func tailLogFile(logFile string) {
-	cmd := exec.Command("tail", "-f", logFile)
+	cmd := exec.Command("tail", "-f", "--", logFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Run()
 }
 
 func readLastLines(filename string, n int) (string, error) {
-	cmd := exec.Command("tail", fmt.Sprintf("-%d", n), filename)
+	if n <= 0 {
+		n = 10
+	}
+	cmd := exec.Command("tail", fmt.Sprintf("-%d", n), "--", filename)
 	output, err := cmd.Output()
 	return string(output), err
 }

@@ -3,28 +3,74 @@
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A lightweight, security-first multi-platform chatbot with LLM integration. Single binary, zero runtime dependencies.
+A security-first, multi-platform chatbot with multi-LLM integration. Single binary, zero runtime dependencies.
 
 ---
 
 ## Table of Contents
 
+- [What is Magabot?](#what-is-magabot)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Setup](#setup)
+- [Uninstall](#uninstall)
+- [Supported LLM Providers](#supported-llm-providers)
+- [Supported Platforms](#supported-platforms)
+- [Hooks](#hooks)
+- [Setup Guides](#setup-guides)
+  - [Vault Setup](#vault-setup)
+  - [LLM Setup](#llm-setup)
+  - [Platform Setup](#platform-setup)
+  - [Hooks Setup](#hooks-setup)
+  - [Agent Sessions Setup](#agent-sessions-setup)
+- [Commands](#commands)
+  - [CLI Commands](#cli-commands)
+  - [Chat Commands](#chat-commands)
+  - [Agent Commands](#agent-commands)
 - [Configuration](#configuration)
 - [Secrets Management](#secrets-management)
-- [CLI Commands](#cli-commands)
-- [Chat Commands](#chat-commands)
-- [Platforms](#platforms)
-- [LLM Providers](#llm-providers)
 - [Cron Jobs](#cron-jobs)
-- [Update](#update)
-- [Uninstall](#uninstall)
-- [Security](#security)
+- [Maintenance](#maintenance)
 - [File Structure](#file-structure)
 - [Docker](#docker)
 - [Building from Source](#building-from-source)
+- [License](#license)
+
+---
+
+## What is Magabot?
+
+Magabot is a security-first multi-platform chatbot that connects your messaging platforms to large language models. It ships as a single static binary with zero runtime dependencies -- no Python, no Node.js, no containers required.
+
+### Security by Design
+
+Security is not an afterthought. Every layer of Magabot is built with defense in depth:
+
+- **AES-256-GCM encryption** for secrets at rest, chat history, and platform sessions
+- **Allowlist access control** with global admins, platform admins, and per-user/per-chat restrictions
+- **Per-user rate limiting** to prevent abuse and runaway costs
+- **Input sanitization** with control character stripping on all incoming messages
+- **Parameterized SQL queries** throughout -- no string concatenation in database operations
+- **Path traversal protection** on all file operations, downloads, and update extraction
+- **Secure delete** enabled on the SQLite database (`secure_delete = ON`)
+- **TLS 1.3** enforced on all outbound API calls to LLM providers and platform APIs
+- **Restrictive file permissions** -- config files `0600`, directories `0700`, no root required
+- **Decompression bomb protection** with size limits on archive extraction
+- **SHA-256 checksum verification** on binary updates before installation
+- **Limited response readers** (`io.LimitReader`) on all HTTP responses to prevent OOM
+
+### Multi-Platform
+
+Connect to users wherever they are:
+
+- Telegram, Discord, Slack, WhatsApp, and generic HTTP Webhooks
+
+### Multi-LLM with Fallback
+
+Use any combination of LLM providers with automatic failover:
+
+- Anthropic (Claude), OpenAI (GPT), Google Gemini, DeepSeek, Zhipu GLM, and Local/self-hosted models (Ollama, vLLM, llama.cpp, LocalAI)
+
+If the primary provider is down or rate-limited, Magabot automatically tries the next provider in the fallback chain.
 
 ---
 
@@ -82,59 +128,809 @@ mv magabot ~/bin/
 # 1. Install
 curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/master/install.sh | bash
 
-# 2. Interactive setup
+# 2. Quick init (auto-detects env vars, minimal prompts)
+magabot init
+
+# 3. Or use the full interactive wizard
 magabot setup
 
-# 3. Start
+# 4. Start
 magabot start
 
-# 4. Check status
+# 5. Check status
 magabot status
+```
+
+The `init` command auto-detects API keys from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, etc.), generates an encryption key, and writes a minimal working config. Use `setup` instead for full interactive configuration of every option.
+
+---
+
+## Uninstall
+
+### Linux
+
+```bash
+# 1. Stop the daemon and remove config directory (~/.magabot)
+magabot uninstall
+
+# 2. Remove the binary
+sudo rm /usr/local/bin/magabot
+
+# 3. Remove the data directory
+rm -rf ~/data/magabot
+```
+
+### macOS
+
+```bash
+# 1. Stop the daemon and remove config directory (~/.magabot)
+magabot uninstall
+
+# 2. Remove the binary
+sudo rm /usr/local/bin/magabot
+
+# 3. Remove the data directory
+rm -rf ~/data/magabot
+```
+
+### Windows
+
+```powershell
+# 1. Stop the daemon and remove config directory
+magabot.exe uninstall
+
+# 2. Remove the binary from your PATH location
+
+# 3. Remove the data directory
+Remove-Item -Recurse -Force "$env:USERPROFILE\.magabot"
 ```
 
 ---
 
-## Setup
+## Supported LLM Providers
 
-The interactive wizard guides you through the full configuration:
+| Provider | Default Model | Auth Method |
+|----------|--------------|-------------|
+| Anthropic | `claude-sonnet-4-20250514` | API key or Claude CLI OAuth |
+| OpenAI | `gpt-4o` | API key |
+| Gemini | `gemini-2.0-flash` | API key |
+| DeepSeek | `deepseek-chat` | API key |
+| GLM (Zhipu) | `glm-4` | API key |
+| Local/self-hosted | `llama3` | None (or optional API key) |
 
-```bash
-magabot setup                # Full wizard (all platforms + LLM)
+The Local provider works with any server that exposes an OpenAI-compatible chat completions API:
+
+- [Ollama](https://ollama.com) (`http://localhost:11434/v1`)
+- [vLLM](https://docs.vllm.ai) (`http://localhost:8000/v1`)
+- [llama.cpp server](https://github.com/ggerganov/llama.cpp) (`http://localhost:8080/v1`)
+- [LocalAI](https://localai.io) (`http://localhost:8080/v1`)
+- text-generation-webui with OpenAI extension
+
+### Fallback Chain
+
+If the default provider fails, Magabot automatically tries the next provider in the chain:
+
+```yaml
+llm:
+  default: anthropic
+  fallback_chain:
+    - anthropic
+    - deepseek
+    - openai
 ```
 
-You can also set up individual components:
+---
+
+## Supported Platforms
+
+| Platform | Method | Group Chat | DMs | Status |
+|----------|--------|:----------:|:---:|:------:|
+| Telegram | Long Polling | Yes | Yes | Stable |
+| Discord | Gateway | Yes | Yes | Stable |
+| Slack | Socket Mode | Yes | Yes | Stable |
+| WhatsApp | WebSocket (whatsmeow) | Yes | Yes | Beta |
+| Webhook | HTTP POST | N/A | N/A | Stable |
+
+---
+
+## Hooks
+
+Hooks are event-driven shell commands that run in response to bot lifecycle events. They allow you to extend Magabot with custom scripts for logging, moderation, notifications, analytics, and more.
+
+### Event Types
+
+| Event | Trigger | Can Modify? | Description |
+|-------|---------|:-----------:|-------------|
+| `pre_message` | Before a message is sent to the LLM | Yes (stdout replaces message) | Filter, transform, or block incoming messages |
+| `post_response` | After the LLM responds | Yes (stdout replaces response) | Filter, transform, or augment LLM responses |
+| `on_command` | When a chat command is executed | No | Log or react to commands like /help, /status |
+| `on_start` | When the bot daemon starts | No | Send startup notifications, initialize resources |
+| `on_stop` | When the bot daemon stops | No | Send shutdown notifications, cleanup resources |
+| `on_error` | When an error occurs | No | Alert on errors, log to external systems |
+
+Each hook receives event data as JSON on stdin. For `pre_message` and `post_response`, the hook can return modified text on stdout. If a synchronous hook exits with a non-zero status code, the message is blocked.
+
+---
+
+## Setup Guides
+
+### Vault Setup
+
+Magabot integrates with HashiCorp Vault (KV v2) to keep API keys and tokens out of config files.
+
+**1. Start a Vault server** (development mode for testing):
 
 ```bash
-# Platforms
-magabot setup telegram       # Telegram (needs bot token from @BotFather)
-magabot setup discord        # Discord (needs bot token from Developer Portal)
-magabot setup slack          # Slack (needs bot token + app token for Socket Mode)
-magabot setup whatsapp       # WhatsApp (QR code scan, beta)
-magabot setup webhook        # HTTP webhook endpoint
-
-# LLM Providers
-magabot setup llm            # All LLM providers
-magabot setup anthropic      # Anthropic Claude (API key or Claude CLI OAuth)
-magabot setup openai         # OpenAI GPT (API key)
-magabot setup gemini         # Google Gemini (API key)
-magabot setup deepseek       # DeepSeek (API key)
-magabot setup glm            # Zhipu GLM (API key)
-
-# Other
-magabot setup admin <id>     # Add a global admin by user ID
-magabot setup paths          # Configure data/logs/memory directories
-magabot setup skills         # Configure skills directory and auto-reload
+vault server -dev -dev-root-token-id="dev-token"
 ```
 
-### Anthropic OAuth
+**2. Store your secrets in Vault:**
 
-If you have Claude CLI installed, magabot can use its OAuth credentials:
+```bash
+export VAULT_ADDR="http://127.0.0.1:8200"
+export VAULT_TOKEN="dev-token"
+
+vault kv put secret/magabot/magabot/llm/anthropic_api_key value="sk-ant-..."
+vault kv put secret/magabot/magabot/llm/openai_api_key value="sk-..."
+vault kv put secret/magabot/magabot/telegram/bot_token value="123456:ABC-DEF..."
+vault kv put secret/magabot/magabot/encryption_key value="your-key-here"
+```
+
+**3. Configure Magabot to use Vault:**
+
+```yaml
+# config.yaml
+secrets:
+  backend: "vault"
+  vault:
+    address: "http://127.0.0.1:8200"   # or set VAULT_ADDR env var
+    mount_path: "secret"                 # KV v2 mount point
+    secret_path: "magabot"               # base path for secrets
+```
+
+**4. Set the Vault token:**
+
+```bash
+export VAULT_TOKEN="hvs.your-vault-token"
+```
+
+**TLS options for production:**
+
+For production Vault deployments, use HTTPS and configure TLS:
+
+```yaml
+secrets:
+  backend: "vault"
+  vault:
+    address: "https://vault.example.com:8200"
+    mount_path: "secret"
+    secret_path: "magabot"
+```
+
+The Vault client respects standard environment variables: `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, `VAULT_SKIP_VERIFY`.
+
+---
+
+### LLM Setup
+
+#### Anthropic (Claude)
+
+**Option A: API Key**
+
+1. Get an API key from [console.anthropic.com](https://console.anthropic.com/)
+2. Configure:
+
+```bash
+magabot setup anthropic
+```
+
+Or set manually in `config.yaml`:
+
+```yaml
+llm:
+  default: "anthropic"
+  anthropic:
+    enabled: true
+    api_key: "sk-ant-api03-..."
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 4096
+    temperature: 0.7
+```
+
+**Option B: Claude CLI OAuth**
+
+If you have Claude CLI installed and authenticated:
 
 ```bash
 magabot setup anthropic
 # Select "Claude CLI OAuth" when prompted
 # Tokens are loaded from ~/.claude/.credentials.json
 ```
+
+#### OpenAI (GPT)
+
+1. Get an API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. Configure:
+
+```bash
+magabot setup openai
+```
+
+Or set manually:
+
+```yaml
+llm:
+  openai:
+    enabled: true
+    api_key: "sk-..."
+    model: "gpt-4o"
+    max_tokens: 4096
+```
+
+#### Google Gemini
+
+1. Get an API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+2. Configure:
+
+```bash
+magabot setup gemini
+```
+
+Or set manually:
+
+```yaml
+llm:
+  gemini:
+    enabled: true
+    api_key: "AIza..."
+    model: "gemini-2.0-flash"
+```
+
+#### DeepSeek
+
+1. Get an API key from [platform.deepseek.com](https://platform.deepseek.com/)
+2. Configure:
+
+```bash
+magabot setup deepseek
+```
+
+Or set manually:
+
+```yaml
+llm:
+  deepseek:
+    enabled: true
+    api_key: "sk-..."
+    model: "deepseek-chat"
+```
+
+#### GLM (Zhipu)
+
+1. Get an API key from [open.bigmodel.cn](https://open.bigmodel.cn/)
+2. Configure:
+
+```bash
+magabot setup glm
+```
+
+Or set manually:
+
+```yaml
+llm:
+  glm:
+    enabled: true
+    api_key: "your-glm-key"
+    model: "glm-4"
+```
+
+#### Local/Self-hosted
+
+No API key required. Start your local LLM server, then configure Magabot to connect to it.
+
+**Ollama example:**
+
+```bash
+# Start Ollama and pull a model
+ollama pull llama3
+ollama serve
+```
+
+```yaml
+llm:
+  default: "local"
+  local:
+    enabled: true
+    base_url: "http://localhost:11434/v1"
+    model: "llama3"
+    max_tokens: 4096
+```
+
+**vLLM example:**
+
+```yaml
+llm:
+  local:
+    enabled: true
+    base_url: "http://localhost:8000/v1"
+    model: "meta-llama/Llama-3-8B-Instruct"
+```
+
+**llama.cpp server example:**
+
+```yaml
+llm:
+  local:
+    enabled: true
+    base_url: "http://localhost:8080/v1"
+    model: "default"
+```
+
+You can also configure the local provider via environment variables:
+
+```bash
+export LOCAL_LLM_URL="http://localhost:11434/v1"
+export LOCAL_LLM_MODEL="llama3"
+export LOCAL_LLM_API_KEY="optional-key"   # if your server requires one
+```
+
+---
+
+### Platform Setup
+
+#### Telegram
+
+1. Open Telegram and message [@BotFather](https://t.me/BotFather)
+2. Send `/newbot` and follow the prompts to create your bot
+3. Copy the bot token (format: `123456789:ABCdefGHI...`)
+4. Configure:
+
+```bash
+magabot setup telegram
+```
+
+Or set manually:
+
+```yaml
+platforms:
+  telegram:
+    enabled: true
+    token: "123456789:ABCdefGHI..."
+    admins: ["your_telegram_user_id"]
+    allowed_users: []
+    allowed_chats: []
+    allow_groups: true
+    allow_dms: true
+```
+
+To find your Telegram user ID, message [@userinfobot](https://t.me/userinfobot) on Telegram.
+
+#### Discord
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click "New Application" and give it a name
+3. Go to "Bot" in the left sidebar and click "Add Bot"
+4. Copy the bot token
+5. Under "Privileged Gateway Intents", enable "Message Content Intent"
+6. Go to "OAuth2" > "URL Generator", select `bot` scope with `Send Messages` + `Read Message History` permissions
+7. Use the generated URL to invite the bot to your server
+8. Configure:
+
+```bash
+magabot setup discord
+```
+
+Or set manually:
+
+```yaml
+platforms:
+  discord:
+    enabled: true
+    token: "your-discord-bot-token"
+    prefix: "!"
+    admins: ["your_discord_user_id"]
+    allowed_users: []
+    allowed_chats: []
+```
+
+#### Slack
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click "Create New App"
+2. Choose "From scratch" and name your app
+3. Under "Socket Mode", enable it and generate an app-level token (starts with `xapp-`)
+4. Under "OAuth & Permissions", add these Bot Token Scopes: `chat:write`, `app_mentions:read`, `im:history`, `im:read`, `im:write`
+5. Install the app to your workspace and copy the Bot User OAuth Token (starts with `xoxb-`)
+6. Under "Event Subscriptions", enable events and subscribe to: `message.im`, `app_mention`
+7. Configure:
+
+```bash
+magabot setup slack
+```
+
+Or set manually:
+
+```yaml
+platforms:
+  slack:
+    enabled: true
+    bot_token: "xoxb-..."
+    app_token: "xapp-..."
+    admins: ["your_slack_user_id"]
+    allowed_users: []
+    allowed_chats: []
+```
+
+#### WhatsApp
+
+WhatsApp uses the whatsmeow library (pure Go, multi-device protocol). No external bridge or Node.js required.
+
+1. Configure and start:
+
+```bash
+magabot setup whatsapp
+magabot start
+```
+
+2. A QR code will be displayed in the terminal. Scan it with WhatsApp on your phone (Settings > Linked Devices > Link a Device).
+
+```yaml
+platforms:
+  whatsapp:
+    enabled: true
+    admins: ["your_phone_number"]
+    allowed_users: []
+    allowed_chats: []
+```
+
+**Note:** WhatsApp support is in beta. The QR code must be scanned each time the session expires.
+
+#### Webhook
+
+The webhook platform exposes an HTTP endpoint that accepts POST requests with JSON payloads.
+
+```bash
+magabot setup webhook
+```
+
+Or set manually:
+
+```yaml
+platforms:
+  webhook:
+    enabled: true
+    port: 8080
+    path: "/webhook"
+    bind: "127.0.0.1"
+    auth_method: "bearer"     # none | bearer | hmac
+    bearer_token: "your-secret-token"
+    hmac_secret: ""
+```
+
+**Authentication methods:**
+
+| Method | Description |
+|--------|-------------|
+| `none` | No authentication (not recommended) |
+| `bearer` | Requires `Authorization: Bearer <token>` header |
+| `hmac` | Validates HMAC-SHA256 signature in `X-Signature` header |
+
+---
+
+### Hooks Setup
+
+Hooks are configured in a separate file: `~/.magabot/config-hooks.yml`. This keeps hook definitions independent from the main config.
+
+**File format:**
+
+```yaml
+# ~/.magabot/config-hooks.yml
+hooks:
+  - name: "log-messages"
+    event: "pre_message"
+    command: "/path/to/log-message.sh"
+    timeout: 10                        # seconds (default: 10)
+    platforms: ["telegram", "discord"]  # empty = all platforms
+    async: false                       # false = synchronous (can modify/block)
+
+  - name: "notify-startup"
+    event: "on_start"
+    command: "curl -s https://ntfy.sh/my-topic -d 'Magabot started'"
+    async: true                        # true = fire-and-forget
+
+  - name: "content-filter"
+    event: "post_response"
+    command: "/path/to/filter.py"
+    timeout: 5
+
+  - name: "command-audit"
+    event: "on_command"
+    command: "/path/to/audit.sh"
+    async: true
+
+  - name: "shutdown-cleanup"
+    event: "on_stop"
+    command: "/path/to/cleanup.sh"
+    timeout: 30
+
+  - name: "error-alert"
+    event: "on_error"
+    command: "/path/to/alert.sh"
+    async: true
+```
+
+You can also configure hooks interactively:
+
+```bash
+magabot setup hooks
+```
+
+**Event data (JSON on stdin):**
+
+Every hook receives a JSON object on stdin with the following fields (present depending on event type):
+
+```json
+{
+  "event": "pre_message",
+  "platform": "telegram",
+  "user_id": "123456",
+  "chat_id": "-100987654",
+  "text": "Hello bot",
+  "response": "",
+  "command": "",
+  "args": [],
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
+  "latency_ms": 0,
+  "error": "",
+  "version": "0.1.9",
+  "platforms": ["telegram", "discord"]
+}
+```
+
+**Example hook script** (content filter):
+
+```bash
+#!/bin/bash
+# filter.sh - Block messages containing banned words
+INPUT=$(cat)
+TEXT=$(echo "$INPUT" | jq -r '.text // .response')
+
+if echo "$TEXT" | grep -qi "banned-word"; then
+  echo "Message blocked by content filter."
+  exit 1  # non-zero exit = block the message
+fi
+
+# Output nothing to pass through unchanged, or echo modified text
+```
+
+**Sync vs Async:**
+
+- **Synchronous** (`async: false`): The bot waits for the hook to complete. For `pre_message` and `post_response`, stdout replaces the message/response. A non-zero exit code blocks the message.
+- **Asynchronous** (`async: true`): Fire-and-forget. The bot does not wait and cannot be blocked. Use for notifications, logging, and analytics.
+
+**Timeout:** Each hook has a configurable timeout (default 10 seconds). If a hook exceeds its timeout, it is killed.
+
+**Platform filtering:** Use the `platforms` list to restrict a hook to specific platforms. An empty list means the hook runs for all platforms.
+
+---
+
+### Agent Sessions Setup
+
+Agent sessions let admins interact with coding agents (Claude Code, Codex, Gemini CLI) directly through chat. Messages prefixed with `:` are routed to the active agent session instead of the LLM.
+
+**Supported agents:**
+
+| Agent | Binary | Description |
+|-------|--------|-------------|
+| Claude Code | `claude` | Anthropic's CLI coding agent |
+| Codex | `codex` | OpenAI's CLI coding agent |
+| Gemini CLI | `gemini` | Google's CLI coding agent |
+
+**Prerequisites:** The agent binary must be installed and available in `PATH` on the machine running Magabot.
+
+**Configuration:**
+
+```yaml
+# config.yaml
+agents:
+  default: "claude"    # default agent type
+  timeout: 120         # execution timeout in seconds
+```
+
+**Usage (from chat):**
+
+```
+:new claude ~/projects/myapp     Start a Claude Code session in ~/projects/myapp
+:new codex ~/projects/myapp      Start a Codex session
+:new gemini ~/projects/myapp     Start a Gemini CLI session
+:send Fix the failing tests      Send a message to the active agent
+:status                          Show the current agent session info
+:quit                            Close the agent session
+```
+
+Once a session is active, any message prefixed with `:send` is routed to the coding agent. The agent runs in the specified working directory with one-shot CLI invocations. Conversation continuity is maintained via `--continue` flags (for Claude Code).
+
+**Security notes:**
+
+- Agent sessions are restricted to admins only
+- Working directories are validated against an allowed path list (defaults to user's home directory)
+- Path traversal is prevented via absolute path resolution
+- Output is limited to 10 MB to prevent OOM
+- ANSI escape sequences are stripped from output before sending to chat
+- Each invocation has a configurable timeout (default 120 seconds)
+
+---
+
+## Commands
+
+### CLI Commands
+
+#### Daemon
+
+```bash
+magabot start                # Start daemon (foreground)
+magabot stop                 # Stop daemon
+magabot restart              # Restart daemon
+magabot status               # Show PID, uptime, config, DB size
+magabot log                  # Tail log file
+```
+
+#### Setup
+
+```bash
+magabot setup                # Full interactive wizard
+magabot setup telegram       # Setup Telegram
+magabot setup discord        # Setup Discord
+magabot setup slack          # Setup Slack
+magabot setup whatsapp       # Setup WhatsApp
+magabot setup webhook        # Setup webhook endpoint
+magabot setup llm            # Setup all LLM providers
+magabot setup anthropic      # Setup Anthropic
+magabot setup openai         # Setup OpenAI
+magabot setup gemini         # Setup Gemini
+magabot setup deepseek       # Setup DeepSeek
+magabot setup glm            # Setup GLM
+magabot setup admin <id>     # Add global admin
+magabot setup paths          # Configure directories
+magabot setup skills         # Configure skills
+magabot setup hooks          # Configure hooks
+```
+
+#### Config
+
+```bash
+magabot config show          # Show config summary
+magabot config edit          # Open in $EDITOR (nano/vim/vi)
+magabot config path          # Print config file path
+magabot config admin list          # List global admins
+magabot config admin add <id>      # Add global admin
+magabot config admin remove <id>   # Remove global admin
+```
+
+#### Cron
+
+```bash
+magabot cron list            # List jobs (-a to include disabled)
+magabot cron add             # Add new job (interactive)
+magabot cron edit <id>       # Edit a job
+magabot cron delete <id>     # Delete a job (-f to skip confirmation)
+magabot cron enable <id>     # Enable a job
+magabot cron disable <id>    # Disable a job
+magabot cron run <id>        # Run a job now
+magabot cron show <id>       # Show job details (-j for JSON)
+```
+
+#### Skills
+
+```bash
+magabot skill list           # List installed skills
+magabot skill info <name>    # Show skill details
+magabot skill create <name>  # Create skill template
+magabot skill enable <name>  # Enable a skill
+magabot skill disable <name> # Disable a skill
+magabot skill reload         # Reload all skills
+magabot skill builtin        # List built-in skills
+```
+
+#### Update
+
+```bash
+magabot update check         # Check for new version
+magabot update apply         # Download and install update
+magabot update rollback      # Restore previous version
+```
+
+#### Utilities
+
+```bash
+magabot init                 # Zero-config quick init (auto-detects env vars)
+magabot genkey               # Generate AES-256 encryption key
+magabot reset                # Reset config (keeps platform connections)
+magabot uninstall            # Remove magabot and all data
+magabot version              # Show version
+magabot help                 # Show help
+```
+
+---
+
+### Chat Commands
+
+Commands available when messaging the bot on any platform:
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message |
+| `/help` | Show available commands |
+| `/status` | Bot status (provider, message count) |
+| `/models` | List available AI models |
+| `/providers` | Show LLM providers and availability |
+
+Any other message is sent to the active LLM provider for a response.
+
+#### Admin Commands (in chat)
+
+Platform and global admins can manage the bot directly from chat:
+
+```
+/config status                    # Show access mode, role, platform info
+/config allow user <user_id>      # Add user to allowlist
+/config allow chat <chat_id>      # Add chat to allowlist (or "this" for current)
+/config remove user <user_id>     # Remove user from allowlist
+/config remove chat <chat_id>     # Remove chat from allowlist
+/config admin add <user_id>       # Add platform admin
+/config admin remove <user_id>    # Remove platform admin
+/config admin global add <id>     # Add global admin (global admins only)
+/config admin global rm <id>      # Remove global admin (global admins only)
+/config mode <allowlist|open>     # Set access mode (global admins only)
+/config help                      # Show help
+```
+
+#### Memory Commands
+
+```
+/memory add <text>                # Remember something
+/memory <text>                    # Shortcut to remember
+/memory search <query>            # Search memories
+/memory list [type]               # List memories (types: fact, preference, event, note)
+/memory delete <id>               # Delete a memory
+/memory clear                     # Clear all memories
+/memory stats                     # Show statistics
+```
+
+#### Task Commands
+
+```
+/task spawn <description>         # Run a background task
+/task list                        # List active sessions
+/task status <id>                 # Show session status
+/task cancel <id>                 # Cancel a running task
+/task clear                       # Clear completed tasks
+```
+
+#### Heartbeat Commands
+
+```
+/heartbeat status                 # Show check status
+/heartbeat run                    # Run all checks now
+/heartbeat enable <name>          # Enable a check
+/heartbeat disable <name>         # Disable a check
+/heartbeat list                   # List configured checks
+```
+
+---
+
+### Agent Commands
+
+Agent commands use the `:` prefix (not `/`) and are available to admins only:
+
+| Command | Description |
+|---------|-------------|
+| `:new <agent> <directory>` | Start a new agent session (e.g., `:new claude ~/myapp`) |
+| `:send <message>` | Send a message to the active agent session |
+| `:status` | Show current agent session info (agent type, directory, message count) |
+| `:quit` | Close the active agent session |
+
+If no agent type is specified, the default from config is used (defaults to `claude`).
 
 ---
 
@@ -148,14 +944,6 @@ Config file location: `~/.magabot/config.yaml`
 magabot config show          # Show config summary
 magabot config edit          # Open in $EDITOR (nano/vim/vi)
 magabot config path          # Print config file path
-```
-
-### Manage Global Admins
-
-```bash
-magabot config admin list          # List global admins
-magabot config admin add <id>      # Add global admin
-magabot config admin remove <id>   # Remove global admin
 ```
 
 ### Environment Variables
@@ -249,7 +1037,7 @@ llm:
   gemini:
     enabled: false
     api_key: ""
-    model: "gemini-1.5-pro"
+    model: "gemini-2.0-flash"
 
   deepseek:
     enabled: false
@@ -261,11 +1049,22 @@ llm:
     api_key: ""
     model: "glm-4"
 
+  local:
+    enabled: false
+    base_url: "http://localhost:11434/v1"
+    model: "llama3"
+    api_key: ""              # optional
+    max_tokens: 4096
+
 security:
   encryption_key: ""         # Generate with: magabot genkey
 
 secrets:
   backend: ""               # local | vault (see Secrets Management)
+
+agents:
+  default: "claude"          # claude | codex | gemini
+  timeout: 120               # seconds
 
 paths:
   data_dir: "~/data/magabot"
@@ -371,7 +1170,7 @@ secrets:
     secret_path: "magabot"             # base path for secrets
 ```
 
-The Vault token is read from `VAULT_TOKEN` environment variable or can be set in the vault config:
+The Vault token is read from `VAULT_TOKEN` environment variable:
 
 ```bash
 export VAULT_TOKEN="hvs.your-vault-token"
@@ -411,197 +1210,6 @@ If a config field already has a value, the secrets backend is not used for that 
 
 ---
 
-## CLI Commands
-
-### Daemon
-
-```bash
-magabot start                # Start daemon (foreground)
-magabot stop                 # Stop daemon
-magabot restart              # Restart daemon
-magabot status               # Show PID, uptime, config, DB size
-magabot log                  # Tail log file
-```
-
-### Config
-
-```bash
-magabot config show          # Show config summary
-magabot config edit          # Edit in $EDITOR
-magabot config path          # Print config file path
-magabot config admin list    # List global admins
-magabot config admin add <id>      # Add global admin
-magabot config admin remove <id>   # Remove global admin
-```
-
-### Setup
-
-```bash
-magabot setup                # Full interactive wizard
-magabot setup telegram       # Setup Telegram
-magabot setup discord        # Setup Discord
-magabot setup slack          # Setup Slack
-magabot setup whatsapp       # Setup WhatsApp
-magabot setup webhook        # Setup webhook endpoint
-magabot setup llm            # Setup all LLM providers
-magabot setup anthropic      # Setup Anthropic
-magabot setup openai         # Setup OpenAI
-magabot setup gemini         # Setup Gemini
-magabot setup deepseek       # Setup DeepSeek
-magabot setup glm            # Setup GLM
-magabot setup admin <id>     # Add global admin
-magabot setup paths          # Configure directories
-magabot setup skills         # Configure skills
-```
-
-### Cron
-
-```bash
-magabot cron list            # List jobs (-a to include disabled)
-magabot cron add             # Add new job (interactive)
-magabot cron edit <id>       # Edit a job
-magabot cron delete <id>     # Delete a job (-f to skip confirmation)
-magabot cron enable <id>     # Enable a job
-magabot cron disable <id>    # Disable a job
-magabot cron run <id>        # Run a job now
-magabot cron show <id>       # Show job details (-j for JSON)
-```
-
-### Skills
-
-```bash
-magabot skill list           # List installed skills
-magabot skill info <name>    # Show skill details
-magabot skill create <name>  # Create skill template
-magabot skill enable <name>  # Enable a skill
-magabot skill disable <name> # Disable a skill
-magabot skill reload         # Reload all skills
-magabot skill builtin        # List built-in skills
-```
-
-### Update
-
-```bash
-magabot update check         # Check for new version
-magabot update apply         # Download and install update
-magabot update rollback      # Restore previous version
-```
-
-### Utilities
-
-```bash
-magabot genkey               # Generate AES-256 encryption key
-magabot reset                # Reset config (keeps platform connections)
-magabot uninstall            # Remove magabot and all data
-magabot version              # Show version
-magabot help                 # Show help
-```
-
----
-
-## Chat Commands
-
-Commands available when messaging the bot on any platform:
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Welcome message |
-| `/help` | Show available commands |
-| `/status` | Bot status (provider, message count) |
-| `/models` | List available AI models |
-| `/providers` | Show LLM providers |
-
-Any other message is sent to the active LLM provider for a response.
-
-### Admin Commands (in chat)
-
-Platform and global admins can manage the bot directly from chat:
-
-```
-/config status                    # Show access mode, role, platform info
-/config allow user <user_id>      # Add user to allowlist
-/config allow chat <chat_id>      # Add chat to allowlist (or "this" for current)
-/config remove user <user_id>     # Remove user from allowlist
-/config remove chat <chat_id>     # Remove chat from allowlist
-/config admin add <user_id>       # Add platform admin
-/config admin remove <user_id>    # Remove platform admin
-/config admin global add <id>     # Add global admin (global admins only)
-/config admin global rm <id>      # Remove global admin (global admins only)
-/config mode <allowlist|open>     # Set access mode (global admins only)
-/config help                      # Show help
-```
-
-### Memory Commands
-
-```
-/memory add <text>                # Remember something
-/memory <text>                    # Shortcut to remember
-/memory search <query>            # Search memories
-/memory list [type]               # List memories (types: fact, preference, event, note)
-/memory delete <id>               # Delete a memory
-/memory clear                     # Clear all memories
-/memory stats                     # Show statistics
-```
-
-### Task Commands
-
-```
-/task spawn <description>         # Run a background task
-/task list                        # List active sessions
-/task status <id>                 # Show session status
-/task cancel <id>                 # Cancel a running task
-/task clear                       # Clear completed tasks
-```
-
-### Heartbeat Commands
-
-```
-/heartbeat status                 # Show check status
-/heartbeat run                    # Run all checks now
-/heartbeat enable <name>          # Enable a check
-/heartbeat disable <name>         # Disable a check
-/heartbeat list                   # List configured checks
-```
-
----
-
-## Platforms
-
-| Platform | Method | Group Chat | DMs | Status |
-|----------|--------|:----------:|:---:|:------:|
-| Telegram | Long Polling | Yes | Yes | Stable |
-| Discord | Gateway | Yes | Yes | Stable |
-| Slack | Socket Mode | Yes | Yes | Stable |
-| WhatsApp | WebSocket (whatsmeow) | Yes | Yes | Beta |
-| Webhook | HTTP POST | N/A | N/A | Stable |
-
----
-
-## LLM Providers
-
-| Provider | Default Model | Auth |
-|----------|--------------|------|
-| Anthropic | `claude-sonnet-4-20250514` | API key or Claude CLI OAuth |
-| OpenAI | `gpt-4o` | API key |
-| Gemini | `gemini-1.5-pro` | API key |
-| DeepSeek | `deepseek-chat` | API key |
-| GLM (Zhipu) | `glm-4` | API key |
-
-### Fallback Chain
-
-If the default provider fails, magabot tries the next provider in the chain:
-
-```yaml
-llm:
-  default: anthropic
-  fallback_chain:
-    - anthropic
-    - deepseek
-    - openai
-```
-
----
-
 ## Cron Jobs
 
 Schedule messages to any platform channel.
@@ -631,93 +1239,70 @@ Standard cron syntax or shortcuts:
 
 ---
 
-## Update
+## Maintenance
+
+### Stop the Daemon
 
 ```bash
-# Check for updates
+magabot stop
+```
+
+### View Logs
+
+```bash
+# Tail the log file in real time
+magabot log
+
+# Log file is at ~/data/magabot/logs/magabot.log (configurable)
+```
+
+### Reset Config
+
+```bash
+# Reset config to defaults (keeps platform connections like WhatsApp sessions)
+magabot reset
+```
+
+### Update
+
+```bash
+# Check if a new version is available
 magabot update check
 
 # Download and install (stops bot, verifies SHA-256 checksum, installs, backs up old binary)
 magabot update apply
 
-# Rollback to previous version if something goes wrong
+# Rollback to the previous version if something goes wrong
 magabot update rollback
 ```
 
 Updates are downloaded from [GitHub Releases](https://github.com/kusandriadi/magabot/releases). The previous binary is saved as a `.backup` file for rollback.
 
----
+### Complete Uninstall
 
-## Uninstall
+#### Linux
 
 ```bash
-# Interactive uninstall (stops daemon, removes ~/.magabot config directory)
 magabot uninstall
-```
-
-To also remove the binary:
-
-```bash
 sudo rm /usr/local/bin/magabot
-# or if installed to ~/bin:
-rm ~/bin/magabot
-```
-
-To remove data directory (if using non-default paths):
-
-```bash
 rm -rf ~/data/magabot
 ```
 
----
-
-## Security
-
-### Encryption
-
-| Layer | Method |
-|-------|--------|
-| Secrets at rest | AES-256-GCM |
-| Chat history | AES-256-GCM (SQLite) |
-| Platform sessions | AES-256-GCM |
-| Transport | TLS 1.3 (all API calls) |
-
-### Access Control
-
-```
-Global Admin    -> Can manage all platforms, add/remove global admins, change access mode
-Platform Admin  -> Can manage allowlist for their platform, add/remove platform admins
-Allowed User    -> Can use the bot
-```
-
-### Security Checklist
+#### macOS
 
 ```bash
-# Generate encryption key
-magabot genkey
-
-# Set restrictive file permissions
-chmod 600 ~/.magabot/config.yaml
-chmod 600 ~/.magabot/secrets.json
-chmod 700 ~/.magabot
-
-# Add yourself as admin first
-magabot config admin add YOUR_USER_ID
-
-# Start
-magabot start
+magabot uninstall
+sudo rm /usr/local/bin/magabot
+rm -rf ~/data/magabot
 ```
 
-### Other Security Features
+#### Windows
 
-- No root required
-- Config files: `0600`, directories: `0700`
-- SQLite `secure_delete = ON`
-- Per-user rate limiting
-- Input sanitization (control chars stripped)
-- Parameterized SQL queries
-- Path traversal protection
-- Decompression bomb protection (size limits on extraction)
+```powershell
+magabot.exe uninstall
+# Remove the binary from your PATH location
+Remove-Item -Recurse -Force "$env:USERPROFILE\.magabot"
+```
 
 ---
 
@@ -726,6 +1311,7 @@ magabot start
 ```
 ~/.magabot/
   config.yaml               # Configuration
+  config-hooks.yml           # Hooks configuration
   magabot.pid               # PID file (when running)
   secrets.json              # Local secrets (if using local backend)
 

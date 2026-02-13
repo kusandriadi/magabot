@@ -127,6 +127,12 @@ func DetectProvider(model string) string {
 		"gemini":  "gemini",
 		"glm":    "glm",
 		"deepseek": "deepseek",
+		"llama":   "local",
+		"mistral": "local",
+		"mixtral": "local",
+		"phi":     "local",
+		"qwen":    "local",
+		"codellama": "local",
 	}
 	for prefix, provider := range prefixes {
 		if strings.Contains(model, prefix) {

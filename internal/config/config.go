@@ -63,6 +63,12 @@ type Config struct {
 	// Server settings
 	Server ServerConfig `yaml:"server"`
 
+	// Hooks (event-driven shell commands)
+	Hooks []HookConfig `yaml:"hooks,omitempty"`
+
+	// Agent sessions (coding agents via chat)
+	Agents AgentConfig `yaml:"agents"`
+
 	// Metadata
 	Version     string    `yaml:"version"`
 	LastUpdated time.Time `yaml:"last_updated"`
@@ -164,6 +170,7 @@ type LLMConfig struct {
 	Gemini    LLMProviderConfig `yaml:"gemini"`
 	GLM       LLMProviderConfig `yaml:"glm"`
 	DeepSeek  LLMProviderConfig `yaml:"deepseek"`
+	Local     LLMProviderConfig `yaml:"local"` // Self-hosted (Ollama, vLLM, llama.cpp, etc.)
 }
 
 // LLMProviderConfig holds config for a single LLM provider
@@ -292,6 +299,27 @@ type BackupConfig struct {
 	KeepCount int    `yaml:"keep_count"`
 }
 
+// HookConfig defines an event-driven shell command hook.
+type HookConfig struct {
+	Name      string   `yaml:"name"`
+	Event     string   `yaml:"event"`                // pre_message, post_response, on_command, on_start, on_stop, on_error
+	Command   string   `yaml:"command"`
+	Timeout   int      `yaml:"timeout,omitempty"`     // seconds, default 10
+	Platforms []string `yaml:"platforms,omitempty"`    // empty = all platforms
+	Async     bool     `yaml:"async,omitempty"`        // fire-and-forget
+}
+
+// AgentConfig holds coding agent session settings
+type AgentConfig struct {
+	Default string `yaml:"default"` // "claude", "codex", "gemini"
+	Timeout int    `yaml:"timeout"` // seconds, default 120
+}
+
+// HooksFile is the top-level structure for config-hooks.yml
+type HooksFile struct {
+	Hooks []HookConfig `yaml:"hooks"`
+}
+
 // SecretsConfig holds secrets backend settings
 type SecretsConfig struct {
 	Backend string              `yaml:"backend"` // local, vault
@@ -418,6 +446,14 @@ func (c *Config) setDefaults() {
 	c.Skills.Dir = expandPath(c.Skills.Dir)
 	// Auto reload enabled by default
 	// (already false by default, set explicitly if needed)
+
+	// Agent defaults
+	if c.Agents.Default == "" {
+		c.Agents.Default = "claude"
+	}
+	if c.Agents.Timeout <= 0 {
+		c.Agents.Timeout = 120
+	}
 
 	// Platform defaults
 	if c.Platforms.Telegram != nil {
@@ -647,4 +683,50 @@ func addUnique(slice []string, item string) []string {
 		return append(slice, item)
 	}
 	return slice
+}
+
+// LoadHooksFile reads hooks from a separate YAML file.
+// Returns nil, nil if the file does not exist.
+func LoadHooksFile(filePath string) ([]HookConfig, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read hooks file: %w", err)
+	}
+
+	expanded := expandEnvVars(string(data))
+
+	var hf HooksFile
+	if err := yaml.Unmarshal([]byte(expanded), &hf); err != nil {
+		return nil, fmt.Errorf("parse hooks file: %w", err)
+	}
+
+	return hf.Hooks, nil
+}
+
+// SaveHooksFile writes hooks to a separate YAML file atomically.
+func SaveHooksFile(filePath string, hooks []HookConfig) error {
+	hf := HooksFile{Hooks: hooks}
+	data, err := yaml.Marshal(&hf)
+	if err != nil {
+		return fmt.Errorf("marshal hooks: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
+		return fmt.Errorf("create hooks dir: %w", err)
+	}
+
+	tmpFile := filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
+		return fmt.Errorf("write hooks file: %w", err)
+	}
+
+	if err := os.Rename(tmpFile, filePath); err != nil {
+		os.Remove(tmpFile)
+		return fmt.Errorf("save hooks file: %w", err)
+	}
+
+	return nil
 }

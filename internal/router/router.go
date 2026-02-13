@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
+	"github.com/kusa/magabot/internal/hooks"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/storage"
 )
@@ -57,6 +58,7 @@ type Router struct {
 	sessionMgr   *security.SessionManager
 	authAttempts *security.AuthAttempts
 	auditLogger  *security.AuditLogger
+	hooks        *hooks.Manager
 	handler      MessageHandler
 	logger       *slog.Logger
 	mu           sync.RWMutex
@@ -82,6 +84,13 @@ func (r *Router) SetAuditLogger(al *security.AuditLogger) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.auditLogger = al
+}
+
+// SetHooks sets the hooks manager for event-driven shell commands.
+func (r *Router) SetHooks(h *hooks.Manager) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hooks = h
 }
 
 // Register registers a platform
@@ -213,6 +222,27 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 		}
 	}
 
+	// Fire pre_message hook (can block or modify the message text)
+	r.mu.RLock()
+	hooksMgr := r.hooks
+	r.mu.RUnlock()
+
+	if hooksMgr != nil && hooksMgr.HasHooks(hooks.PreMessage) {
+		result := hooksMgr.Fire(hooks.PreMessage, &hooks.EventData{
+			Platform: msg.Platform,
+			UserID:   msg.UserID,
+			ChatID:   msg.ChatID,
+			Text:     msg.Text,
+		})
+		if result.Blocked {
+			r.logger.Info("message blocked by pre_message hook", "user_hash", hashedUser)
+			return "", nil
+		}
+		if result.Output != "" {
+			msg.Text = result.Output
+		}
+	}
+
 	// Process message
 	r.mu.RLock()
 	handler := r.handler
@@ -225,7 +255,31 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 	response, err := handler(ctx, msg)
 	if err != nil {
 		r.logger.Error("handler error", "error", err, "user_hash", hashedUser)
+		// Fire on_error hook
+		if hooksMgr != nil {
+			hooksMgr.FireAsync(hooks.OnError, &hooks.EventData{
+				Platform: msg.Platform,
+				UserID:   msg.UserID,
+				ChatID:   msg.ChatID,
+				Text:     msg.Text,
+				Error:    err.Error(),
+			})
+		}
 		return "", err
+	}
+
+	// Fire post_response hook (can modify the response text)
+	if hooksMgr != nil && response != "" && hooksMgr.HasHooks(hooks.PostResponse) {
+		result := hooksMgr.Fire(hooks.PostResponse, &hooks.EventData{
+			Platform: msg.Platform,
+			UserID:   msg.UserID,
+			ChatID:   msg.ChatID,
+			Text:     msg.Text,
+			Response: response,
+		})
+		if result.Output != "" {
+			response = result.Output
+		}
 	}
 
 	// Log outgoing message

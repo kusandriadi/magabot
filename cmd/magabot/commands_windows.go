@@ -7,11 +7,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
 func startDaemonProcess() (int, error) {
-	cmd := exec.Command(os.Args[0], "daemon")
+	exePath, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("cannot determine executable path: %w", err)
+	}
+
+	cmd := exec.Command(exePath, "daemon")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
@@ -22,30 +28,46 @@ func startDaemonProcess() (int, error) {
 }
 
 func stopProcess(pid int) error {
-	// Windows does not support SIGTERM; use taskkill for graceful stop
-	cmd := exec.Command("taskkill", "/PID", fmt.Sprintf("%d", pid))
-	return cmd.Run()
+	// Use /F for force kill — console processes don't respond to WM_CLOSE
+	return exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", pid)).Run()
 }
 
 func processExists(pid int) bool {
-	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH")
+	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(output), fmt.Sprintf("%d", pid))
+	// CSV format: "process.exe","PID","Session Name","Session#","Mem Usage"
+	// Check for exact PID match in CSV field
+	pidStr := strconv.Itoa(pid)
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Split(line, ",")
+		if len(fields) >= 2 {
+			// Strip quotes from PID field
+			fieldPID := strings.Trim(fields[1], "\" ")
+			if fieldPID == pidStr {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func tailLogFile(logFile string) {
-	// Windows: use PowerShell Get-Content -Wait (equivalent of tail -f)
-	cmd := exec.Command("powershell", "-Command",
-		fmt.Sprintf("Get-Content -Path '%s' -Tail 20 -Wait", logFile))
+	// Use PowerShell with properly escaped path argument
+	cmd := exec.Command("powershell", "-NoProfile", "-Command",
+		"Get-Content", "-Path", logFile, "-Tail", "20", "-Wait")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Run()
 }
 
 func readLastLines(filename string, n int) (string, error) {
+	if n <= 0 {
+		n = 10
+	}
+
 	f, err := os.Open(filename)
 	if err != nil {
 		return "", err
@@ -56,6 +78,10 @@ func readLastLines(filename string, n int) (string, error) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
+		// Keep only the last n+buffer lines to limit memory usage
+		if len(lines) > n*2 {
+			lines = lines[len(lines)-n:]
+		}
 	}
 
 	if len(lines) > n {
