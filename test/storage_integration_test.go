@@ -257,7 +257,7 @@ func TestStorageReopen(t *testing.T) {
 	// Create and write
 	store, _ := storage.New(dbPath)
 	_ = store.SetConfig("test_key", "test_value")
-	store.Close()
+	_ = store.Close()
 
 	// Reopen and verify
 	store2, err := storage.New(dbPath)
@@ -295,7 +295,7 @@ func TestStoragePlatformIsolation(t *testing.T) {
 			Timestamp: time.Now(),
 			Direction: "in",
 		}
-		store.SaveMessage(msg)
+		_ = store.SaveMessage(msg)
 	}
 
 	// Verify isolation

@@ -192,10 +192,10 @@ exit 1
 	t.Run("MultipleHooks", func(t *testing.T) {
 		// Create two scripts
 		script1 := filepath.Join(tmpDir, "hook1.sh")
-		os.WriteFile(script1, []byte("#!/bin/bash\necho 'first'\nexit 0"), 0755)
+		_ = os.WriteFile(script1, []byte("#!/bin/bash\necho 'first'\nexit 0"), 0755)
 
 		script2 := filepath.Join(tmpDir, "hook2.sh")
-		os.WriteFile(script2, []byte("#!/bin/bash\necho 'second'\nexit 0"), 0755)
+		_ = os.WriteFile(script2, []byte("#!/bin/bash\necho 'second'\nexit 0"), 0755)
 
 		hookCfg := []config.HookConfig{
 			{

@@ -36,7 +36,7 @@ func cmdStart() {
 	}
 
 	// Save PID
-	os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0600)
+	_ = os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0600)
 
 	fmt.Printf("✅ Magabot started (PID: %d)\n", pid)
 	fmt.Printf("   Logs: %s\n", logFile)
@@ -58,7 +58,7 @@ func cmdStop() {
 		os.Exit(1)
 	}
 
-	os.Remove(pidFile)
+	_ = os.Remove(pidFile)
 	fmt.Println("✅ Magabot stopped")
 }
 
@@ -161,11 +161,11 @@ func cmdGenKey() {
 // Helper functions
 
 func ensureDirs() {
-	os.MkdirAll(configDir, 0700)
-	os.MkdirAll(dataDir, 0700)
-	os.MkdirAll(logDir, 0700)
-	os.MkdirAll(filepath.Join(dataDir, "sessions"), 0700)
-	os.MkdirAll(filepath.Join(dataDir, "backups"), 0700)
+	_ = os.MkdirAll(configDir, 0700)
+	_ = os.MkdirAll(dataDir, 0700)
+	_ = os.MkdirAll(logDir, 0700)
+	_ = os.MkdirAll(filepath.Join(dataDir, "sessions"), 0700)
+	_ = os.MkdirAll(filepath.Join(dataDir, "backups"), 0700)
 }
 
 func getPID() int {

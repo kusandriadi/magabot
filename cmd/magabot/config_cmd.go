@@ -131,8 +131,8 @@ func cmdConfigEdit() {
 		// Create default config
 		cfg := &config.Config{}
 		data, _ := yaml.Marshal(cfg)
-		os.MkdirAll(configDir, 0700)
-		os.WriteFile(configFile, data, 0600)
+		_ = os.MkdirAll(configDir, 0700)
+		_ = os.WriteFile(configFile, data, 0600)
 	}
 
 	cmd := exec.Command(editor, configFile)

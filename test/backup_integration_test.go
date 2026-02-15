@@ -206,7 +206,7 @@ func TestBackupEmptyDataDir(t *testing.T) {
 	backupDir := filepath.Join(tmpDir, "backups")
 	emptyDataDir := filepath.Join(tmpDir, "empty_data")
 
-	os.MkdirAll(emptyDataDir, 0755)
+	_ = os.MkdirAll(emptyDataDir, 0755)
 
 	mgr := backup.New(backupDir, 5)
 
@@ -230,7 +230,7 @@ func TestBackupLargeFile(t *testing.T) {
 	backupDir := filepath.Join(tmpDir, "backups")
 	dataDir := filepath.Join(tmpDir, "data")
 
-	os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(dataDir, 0755)
 
 	// Create a larger file (1MB)
 	largeData := make([]byte, 1024*1024)
@@ -253,7 +253,7 @@ func TestBackupLargeFile(t *testing.T) {
 
 	// Verify restore
 	restoreDir := filepath.Join(tmpDir, "restore")
-	os.MkdirAll(restoreDir, 0755)
+	_ = os.MkdirAll(restoreDir, 0755)
 
 	err = mgr.Restore(info.Filename, restoreDir)
 	if err != nil {

@@ -281,7 +281,7 @@ func TestE2EErrorRecovery(t *testing.T) {
 			Timestamp: time.Now(),
 			Direction: "in",
 		})
-		store1.Close()
+		_ = store1.Close()
 
 		// Reopen and verify data persisted
 		store2, err := storage.New(dbPath)
@@ -378,7 +378,7 @@ func TestE2EResourceCleanup(t *testing.T) {
 			t.Errorf("Vacuum failed: %v", err)
 		}
 
-		store.Close()
+		_ = store.Close()
 	})
 
 	t.Run("SessionManagerCleanup", func(t *testing.T) {
