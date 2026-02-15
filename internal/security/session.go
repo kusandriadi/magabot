@@ -124,27 +124,29 @@ func (sm *SessionManager) GetOrCreate(platform, userID string) *Session {
 // Validate checks if a user has a valid session
 func (sm *SessionManager) Validate(platform, userID string) error {
 	key := sm.sessionKey(platform, userID)
-	
+
 	sm.mu.RLock()
 	sess, ok := sm.sessions[key]
-	sm.mu.RUnlock()
-	
 	if !ok {
+		sm.mu.RUnlock()
 		return nil // No session yet, will be created on next GetOrCreate
 	}
-	
+	expiresAt := sess.ExpiresAt
+	lastSeen := sess.LastSeen
+	sm.mu.RUnlock()
+
 	now := time.Now()
-	
-	if now.After(sess.ExpiresAt) {
+
+	if now.After(expiresAt) {
 		sm.Invalidate(platform, userID)
 		return ErrSessionExpired
 	}
-	
-	if now.Sub(sess.LastSeen) > IdleTimeout {
+
+	if now.Sub(lastSeen) > IdleTimeout {
 		sm.Invalidate(platform, userID)
 		return ErrSessionIdle
 	}
-	
+
 	return nil
 }
 

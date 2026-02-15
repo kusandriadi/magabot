@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -212,9 +213,9 @@ func TestGetHistory(t *testing.T) {
 }
 
 func TestSpawn(t *testing.T) {
-	var notified bool
+	var notified atomic.Bool
 	notify := func(p, c, m string) error {
-		notified = true
+		notified.Store(true)
 		_ = m // Use m to avoid unused variable
 		return nil
 	}
@@ -245,19 +246,20 @@ func TestSpawn(t *testing.T) {
 		// Wait for completion
 		time.Sleep(100 * time.Millisecond)
 
-		if sub.Status != StatusComplete {
-			t.Errorf("Expected status 'complete', got '%s'", sub.Status)
+		status, result, _, _ := mgr.SessionStatus(sub.ID)
+		if status != StatusComplete {
+			t.Errorf("Expected status 'complete', got '%s'", status)
 		}
-		if sub.Result != "Task done" {
-			t.Errorf("Expected result 'Task done', got '%s'", sub.Result)
+		if result != "Task done" {
+			t.Errorf("Expected result 'Task done', got '%s'", result)
 		}
-		if !notified {
+		if !notified.Load() {
 			t.Error("Should notify on completion")
 		}
 	})
 
 	t.Run("SpawnWithError", func(t *testing.T) {
-		notified = false
+		notified.Store(false)
 		mgr := NewManager(notify, 50, nil)
 		mgr.SetTaskRunner(&MockTaskRunner{err: errors.New("task failed")})
 
@@ -266,11 +268,12 @@ func TestSpawn(t *testing.T) {
 
 		time.Sleep(50 * time.Millisecond)
 
-		if sub.Status != StatusFailed {
-			t.Errorf("Expected status 'failed', got '%s'", sub.Status)
+		status, _, errMsg, _ := mgr.SessionStatus(sub.ID)
+		if status != StatusFailed {
+			t.Errorf("Expected status 'failed', got '%s'", status)
 		}
-		if sub.Error != "task failed" {
-			t.Errorf("Expected error 'task failed', got '%s'", sub.Error)
+		if errMsg != "task failed" {
+			t.Errorf("Expected error 'task failed', got '%s'", errMsg)
 		}
 	})
 
@@ -283,8 +286,9 @@ func TestSpawn(t *testing.T) {
 
 		time.Sleep(50 * time.Millisecond)
 
-		if sub.Status != StatusFailed {
-			t.Errorf("Expected status 'failed', got '%s'", sub.Status)
+		status, _, _, _ := mgr.SessionStatus(sub.ID)
+		if status != StatusFailed {
+			t.Errorf("Expected status 'failed', got '%s'", status)
 		}
 	})
 }
@@ -356,10 +360,11 @@ func TestCancel(t *testing.T) {
 
 		// After cancel, status could be 'canceled' or 'failed' (due to context.Canceled error)
 		// The important thing is that it's no longer running
-		if sub.Status == StatusRunning || sub.Status == StatusPending {
-			t.Errorf("Session should not be running/pending after cancel, got '%s'", sub.Status)
+		status, _, _, completedAt := mgr.SessionStatus(sub.ID)
+		if status == StatusRunning || status == StatusPending {
+			t.Errorf("Session should not be running/pending after cancel, got '%s'", status)
 		}
-		if sub.CompletedAt == nil {
+		if completedAt == nil {
 			t.Error("CompletedAt should be set after cancel")
 		}
 	})

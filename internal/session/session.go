@@ -128,6 +128,17 @@ func (m *Manager) Get(id string) *Session {
 	return m.sessions[id]
 }
 
+// SessionStatus returns the current status, result, error, and completion time for a session (thread-safe)
+func (m *Manager) SessionStatus(id string) (Status, string, string, *time.Time) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	s := m.sessions[id]
+	if s == nil {
+		return "", "", "", nil
+	}
+	return s.Status, s.Result, s.Error, s.CompletedAt
+}
+
 // AddMessage adds a message to session history
 func (m *Manager) AddMessage(session *Session, role, content string) {
 	m.mu.Lock()
