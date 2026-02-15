@@ -188,7 +188,7 @@ func (a *AuditLogger) LogAuthLockout(platform, userID string) {
 
 // LogRateLimited logs a rate limit event
 func (a *AuditLogger) LogRateLimited(platform, userID string) {
-	a.Log(SecurityEvent{
+_ = a.Log(SecurityEvent{
 		EventType: EventRateLimited,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -198,7 +198,7 @@ func (a *AuditLogger) LogRateLimited(platform, userID string) {
 
 // LogSSRFBlocked logs a blocked SSRF attempt
 func (a *AuditLogger) LogSSRFBlocked(platform, userID, url string) {
-	a.Log(SecurityEvent{
+_ = a.Log(SecurityEvent{
 		EventType: EventSSRFBlocked,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -210,7 +210,7 @@ func (a *AuditLogger) LogSSRFBlocked(platform, userID, url string) {
 
 // LogAdminAction logs an admin action
 func (a *AuditLogger) LogAdminAction(platform, userID, action string) {
-	a.Log(SecurityEvent{
+_ = a.Log(SecurityEvent{
 		EventType: EventAdminAction,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -221,7 +221,7 @@ func (a *AuditLogger) LogAdminAction(platform, userID, action string) {
 
 // LogConfigChange logs a configuration change
 func (a *AuditLogger) LogConfigChange(platform, userID, change string) {
-	a.Log(SecurityEvent{
+_ = a.Log(SecurityEvent{
 		EventType: EventConfigChange,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -232,7 +232,7 @@ func (a *AuditLogger) LogConfigChange(platform, userID, change string) {
 
 // LogAccessDenied logs an access denied event
 func (a *AuditLogger) LogAccessDenied(platform, userID, resource string) {
-	a.Log(SecurityEvent{
+_ = a.Log(SecurityEvent{
 		EventType: EventAccessDenied,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),

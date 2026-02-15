@@ -328,8 +328,8 @@ func TestListSubSessions(t *testing.T) {
 	mgr.SetTaskRunner(&MockTaskRunner{result: "done", delay: 100 * time.Millisecond})
 
 	parent := mgr.GetOrCreate("telegram", "chat1", "user1")
-	mgr.Spawn(parent, "Sub 1")
-	mgr.Spawn(parent, "Sub 2")
+_, _ = mgr.Spawn(parent, "Sub 1")
+_, _ = mgr.Spawn(parent, "Sub 2")
 
 	subs := mgr.ListSubSessions(parent.ID)
 	if len(subs) != 2 {

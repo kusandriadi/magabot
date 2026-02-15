@@ -284,7 +284,7 @@ func cronDeleteCmd(dataDir string) *cobra.Command {
 			if !force {
 				fmt.Printf("Delete job %s (%s)? [y/N]: ", job.ID, job.Name)
 				var confirm string
-				fmt.Scanln(&confirm)
+_, _ = fmt.Scanln(&confirm)
 				if strings.ToLower(confirm) != "y" {
 					fmt.Println("Cancelled.")
 					return nil

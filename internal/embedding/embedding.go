@@ -853,7 +853,7 @@ func (s *VectorStore) SearchByVector(queryVector []float32, limit int) ([]Search
 		}
 
 		if metaData != "" {
-			json.Unmarshal([]byte(metaData), &entry.Metadata)
+_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
 		similarity := CosineSimilarity(queryVector, entry.Embedding)
@@ -945,7 +945,7 @@ func (s *VectorStore) List(offset, limit int) ([]*Entry, error) {
 		}
 
 		if metaData != "" {
-			json.Unmarshal([]byte(metaData), &entry.Metadata)
+_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
 		entries = append(entries, &entry)

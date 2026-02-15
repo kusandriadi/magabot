@@ -120,7 +120,7 @@ func (s *Scheduler) createJobFunc(jobID string) func() {
 		}
 		
 		// Record the run
-		s.store.RecordRun(jobID, lastErr)
+_ = s.store.RecordRun(jobID, lastErr)
 	}
 }
 
@@ -139,7 +139,7 @@ func (s *Scheduler) AddJob(job *Job) error {
 		if s.running {
 			if err := s.scheduleJob(job); err != nil {
 				// Rollback
-				s.store.Delete(job.ID)
+_ = s.store.Delete(job.ID)
 				return err
 			}
 		}
@@ -245,7 +245,7 @@ func (s *Scheduler) RunNow(id string) error {
 	}
 	
 	// Record the run
-	s.store.RecordRun(id, lastErr)
+_ = s.store.RecordRun(id, lastErr)
 	
 	return lastErr
 }

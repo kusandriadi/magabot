@@ -234,7 +234,7 @@ func TestVectorStoreList(t *testing.T) {
 
 	// Add entries
 	for i := 0; i < 10; i++ {
-		store.AddWithEmbedding(
+_ = store.AddWithEmbedding(
 			string(rune('a'+i)),
 			"content",
 			[]float32{float32(i), 0, 0},
@@ -331,7 +331,7 @@ func TestSearchWithClient(t *testing.T) {
 	defer store.Close()
 
 	// Add some data
-	store.AddWithEmbedding("1", "test", []float32{1, 0, 0}, nil)
+_ = store.AddWithEmbedding("1", "test", []float32{1, 0, 0}, nil)
 
 	// Search should fail without client
 	_, err := store.Search(context.Background(), "query", 10)
@@ -351,10 +351,10 @@ func TestUpdateEntry(t *testing.T) {
 	defer store.Close()
 
 	// Add initial entry
-	store.AddWithEmbedding("1", "original", []float32{1, 0, 0}, nil)
+_ = store.AddWithEmbedding("1", "original", []float32{1, 0, 0}, nil)
 
 	// Update entry (same ID)
-	store.AddWithEmbedding("1", "updated", []float32{0, 1, 0}, nil)
+_ = store.AddWithEmbedding("1", "updated", []float32{0, 1, 0}, nil)
 
 	entry, _ := store.Get("1")
 	if entry.Content != "updated" {
