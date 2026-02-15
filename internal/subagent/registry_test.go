@@ -137,7 +137,7 @@ func TestRegistryNestingLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to spawn root: %v", err)
 	}
-	registry.WaitFor(root.ID, 2*time.Second)
+_, _ = registry.WaitFor(root.ID, 2*time.Second)
 
 	// Spawn child (depth 1)
 	child, err := registry.Spawn(context.Background(), SpawnOptions{
@@ -148,7 +148,7 @@ func TestRegistryNestingLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to spawn child: %v", err)
 	}
-	registry.WaitFor(child.ID, 2*time.Second)
+_, _ = registry.WaitFor(child.ID, 2*time.Second)
 
 	// Spawn grandchild (depth 2, should succeed)
 	grandchild, err := registry.Spawn(context.Background(), SpawnOptions{
@@ -159,7 +159,7 @@ func TestRegistryNestingLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to spawn grandchild: %v", err)
 	}
-	registry.WaitFor(grandchild.ID, 2*time.Second)
+_, _ = registry.WaitFor(grandchild.ID, 2*time.Second)
 
 	// Try to spawn great-grandchild (depth 3, should fail as it equals maxDepth)
 	_, err = registry.Spawn(context.Background(), SpawnOptions{
@@ -184,8 +184,8 @@ func TestRegistryMaxAgents(t *testing.T) {
 	registry.SetExecutor(executor)
 
 	// Spawn two agents
-	registry.Spawn(context.Background(), SpawnOptions{Task: "task1", Timeout: 10 * time.Second})
-	registry.Spawn(context.Background(), SpawnOptions{Task: "task2", Timeout: 10 * time.Second})
+_, _ = registry.Spawn(context.Background(), SpawnOptions{Task: "task1", Timeout: 10 * time.Second})
+_, _ = registry.Spawn(context.Background(), SpawnOptions{Task: "task2", Timeout: 10 * time.Second})
 
 	// Third should fail
 	_, err := registry.Spawn(context.Background(), SpawnOptions{Task: "task3"})
@@ -249,7 +249,7 @@ func TestRegistryStats(t *testing.T) {
 			Task:    "task",
 			Timeout: 1 * time.Second,
 		})
-		registry.WaitFor(agent.ID, 2*time.Second)
+_, _ = registry.WaitFor(agent.ID, 2*time.Second)
 	}
 
 	stats := registry.Stats()
@@ -275,7 +275,7 @@ func TestRegistryCleanup(t *testing.T) {
 			Task:    "task",
 			Timeout: 100 * time.Millisecond,
 		})
-		registry.WaitFor(agent.ID, 1*time.Second)
+_, _ = registry.WaitFor(agent.ID, 1*time.Second)
 	}
 
 	stats := registry.Stats()
@@ -333,7 +333,7 @@ func TestRegistryChildren(t *testing.T) {
 	parent, _ := registry.Spawn(context.Background(), SpawnOptions{
 		Task: "parent",
 	})
-	registry.WaitFor(parent.ID, 1*time.Second)
+_, _ = registry.WaitFor(parent.ID, 1*time.Second)
 
 	// Spawn children
 	for i := 0; i < 3; i++ {
@@ -341,7 +341,7 @@ func TestRegistryChildren(t *testing.T) {
 			Task:     "child",
 			ParentID: parent.ID,
 		})
-		registry.WaitFor(child.ID, 1*time.Second)
+_, _ = registry.WaitFor(child.ID, 1*time.Second)
 	}
 
 	children := registry.Children(parent.ID)
@@ -366,7 +366,7 @@ func TestRegistryContext(t *testing.T) {
 	})
 
 	// Set additional context
-	registry.SetContext(agent, "key2", "value2")
+_ = registry.SetContext(agent, "key2", "value2")
 
 	// Get context values
 	val1 := registry.GetContext(agent, "key1")

@@ -184,7 +184,7 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 	// Move new binary
 	if err := os.Rename(tmpFile, execPath); err != nil {
 		// Restore backup
-		os.Rename(backupPath, execPath)
+		_ = os.Rename(backupPath, execPath)
 		return fmt.Errorf("failed to install update: %w", err)
 	}
 	
@@ -411,10 +411,10 @@ func (u *Updater) Rollback() error {
 		return err
 	}
 	if err := os.Rename(backupPath, execPath); err != nil {
-		os.Rename(tmpPath, execPath)
+		_ = os.Rename(tmpPath, execPath)
 		return err
 	}
-	os.Remove(tmpPath)
+	_ = os.Remove(tmpPath)
 	
 	return nil
 }

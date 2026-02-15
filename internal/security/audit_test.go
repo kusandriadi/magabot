@@ -196,7 +196,7 @@ func TestAuditLoggerClose(t *testing.T) {
 	logger, _ := NewAuditLogger(dir)
 
 	// Log something
-	logger.Log(SecurityEvent{EventType: EventAuthSuccess})
+_ = logger.Log(SecurityEvent{EventType: EventAuthSuccess})
 
 	// Close should not error
 	err := logger.Close()
@@ -215,7 +215,7 @@ func TestAuditLoggerConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			logger.Log(SecurityEvent{
+_ = logger.Log(SecurityEvent{
 				EventType: EventAuthSuccess,
 				Platform:  "telegram",
 				Details:   "concurrent log",
@@ -248,7 +248,7 @@ func TestAuditLoggerLogFormat(t *testing.T) {
 		UserID:    HashUserID("telegram", "12345"),
 		Success:   true,
 	}
-	logger.Log(event)
+_ = logger.Log(event)
 
 	// Read and verify JSON format
 	logPath := filepath.Join(dir, "security.log")
@@ -287,7 +287,7 @@ func TestAuditLoggerWithCustomWriter(t *testing.T) {
 		maxSizeMB: 50,
 	}
 
-	logger.Log(SecurityEvent{
+_ = logger.Log(SecurityEvent{
 		EventType: EventAuthSuccess,
 		Platform:  "test",
 	})
@@ -306,7 +306,7 @@ func TestAuditLoggerRotation(t *testing.T) {
 	logger.maxSizeMB = 0 // Force rotation on first call
 
 	// Write something
-	logger.Log(SecurityEvent{EventType: EventAuthSuccess})
+_ = logger.Log(SecurityEvent{EventType: EventAuthSuccess})
 
 	// Trigger rotateIfNeeded (would normally happen on next log)
 	// Since we can't easily trigger rotation without large writes,
@@ -364,7 +364,7 @@ func TestAuditLoggerRotateScenario(t *testing.T) {
 	for i := range largeData {
 		largeData[i] = 'X'
 	}
-	os.WriteFile(logPath, largeData, 0600)
+_ = os.WriteFile(logPath, largeData, 0600)
 
 	// Create logger (will use existing file)
 	logger, err := NewAuditLogger(dir)
@@ -377,7 +377,7 @@ func TestAuditLoggerRotateScenario(t *testing.T) {
 	logger.maxSizeMB = 0 // 0 MB means any file will trigger rotation
 
 	// Log something to trigger rotation check
-	logger.Log(SecurityEvent{EventType: EventAuthSuccess})
+_ = logger.Log(SecurityEvent{EventType: EventAuthSuccess})
 
 	// Check that rotation happened (look for timestamped file)
 	files, _ := filepath.Glob(filepath.Join(dir, "security.log.*"))

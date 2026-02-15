@@ -155,7 +155,7 @@ func (a *AuditLogger) Close() error {
 
 // LogAuthSuccess logs a successful authentication
 func (a *AuditLogger) LogAuthSuccess(platform, userID string) {
-	a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventAuthSuccess,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -165,7 +165,7 @@ func (a *AuditLogger) LogAuthSuccess(platform, userID string) {
 
 // LogAuthFailure logs a failed authentication attempt
 func (a *AuditLogger) LogAuthFailure(platform, userID, reason string) {
-	a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventAuthFailure,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -176,7 +176,7 @@ func (a *AuditLogger) LogAuthFailure(platform, userID, reason string) {
 
 // LogAuthLockout logs an account lockout
 func (a *AuditLogger) LogAuthLockout(platform, userID string) {
-	a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventAuthLockout,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),

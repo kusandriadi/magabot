@@ -167,7 +167,7 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 			"platform", msg.Platform, 
 			"user_hash", hashedUser,
 		)
-		r.store.AuditLog(msg.Platform, hashedUser, "unauthorized", "")
+		_ = r.store.AuditLog(msg.Platform, hashedUser, "unauthorized", "")
 		
 		// Track failed attempts (A07 fix)
 		r.authAttempts.RecordFailure(userKey)
