@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -617,6 +618,415 @@ func TestBearerTokensMapping(t *testing.T) {
 		body := bytes.NewReader([]byte(`{"message": "hi"}`))
 		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
 		req.Header.Set("Authorization", "Bearer wrong-token")
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("Expected 401, got %d", rec.Code)
+		}
+	})
+}
+
+// ==== Security Features Tests ====
+
+func TestRateLimiter(t *testing.T) {
+	rl := newRateLimiter(3, 100*time.Millisecond)
+
+	// First 3 should pass
+	for i := 0; i < 3; i++ {
+		if !rl.allow("test-key") {
+			t.Errorf("Request %d should be allowed", i+1)
+		}
+	}
+
+	// 4th should be blocked
+	if rl.allow("test-key") {
+		t.Error("Request 4 should be blocked")
+	}
+
+	// Different key should work
+	if !rl.allow("other-key") {
+		t.Error("Different key should be allowed")
+	}
+
+	// Wait for window to expire
+	time.Sleep(150 * time.Millisecond)
+	if !rl.allow("test-key") {
+		t.Error("Should be allowed after window expires")
+	}
+}
+
+func TestFailureTracker(t *testing.T) {
+	ft := newFailureTracker(3, 100*time.Millisecond)
+
+	// Should not be locked initially
+	if ft.isLocked("test-ip") {
+		t.Error("Should not be locked initially")
+	}
+
+	// Record 2 failures - still not locked
+	ft.recordFailure("test-ip")
+	ft.recordFailure("test-ip")
+	if ft.isLocked("test-ip") {
+		t.Error("Should not be locked after 2 failures")
+	}
+
+	// Record 3rd failure - now locked
+	ft.recordFailure("test-ip")
+	if !ft.isLocked("test-ip") {
+		t.Error("Should be locked after 3 failures")
+	}
+
+	// Different IP should not be locked
+	if ft.isLocked("other-ip") {
+		t.Error("Other IP should not be locked")
+	}
+
+	// Wait for lockout to expire
+	time.Sleep(150 * time.Millisecond)
+	if ft.isLocked("test-ip") {
+		t.Error("Should not be locked after lockout expires")
+	}
+
+	// Clear failures
+	ft.recordFailure("test-ip")
+	ft.recordFailure("test-ip")
+	ft.clearFailures("test-ip")
+	ft.recordFailure("test-ip")
+	if ft.isLocked("test-ip") {
+		t.Error("Should not be locked after clearFailures")
+	}
+}
+
+func TestIPRateLimiting(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:     "none",
+		AllowedUsers:   []string{"testuser"},
+		RateLimitPerIP: 2,
+		RateLimitWindow: 100 * time.Millisecond,
+	})
+
+	makeRequest := func() int {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.RemoteAddr = "192.168.1.100:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+		return rec.Code
+	}
+
+	// First 2 should succeed
+	if code := makeRequest(); code != http.StatusOK {
+		t.Errorf("Request 1 should succeed, got %d", code)
+	}
+	if code := makeRequest(); code != http.StatusOK {
+		t.Errorf("Request 2 should succeed, got %d", code)
+	}
+
+	// 3rd should be rate limited
+	if code := makeRequest(); code != http.StatusTooManyRequests {
+		t.Errorf("Request 3 should be rate limited, got %d", code)
+	}
+}
+
+func TestUserRateLimiting(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:       "none",
+		AllowedUsers:     []string{"user1", "user2"},
+		RateLimitPerUser: 2,
+		RateLimitWindow:  100 * time.Millisecond,
+	})
+
+	makeRequest := func(userID string, ip string) int {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "` + userID + `"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.RemoteAddr = ip + ":12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+		return rec.Code
+	}
+
+	// User1: first 2 succeed
+	makeRequest("user1", "1.1.1.1")
+	makeRequest("user1", "2.2.2.2") // Different IP, same user
+
+	// User1: 3rd blocked
+	if code := makeRequest("user1", "3.3.3.3"); code != http.StatusTooManyRequests {
+		t.Errorf("User1 request 3 should be rate limited, got %d", code)
+	}
+
+	// User2: still works
+	if code := makeRequest("user2", "1.1.1.1"); code != http.StatusOK {
+		t.Errorf("User2 should still work, got %d", code)
+	}
+}
+
+func TestAuthFailureLockout(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:      "bearer",
+		BearerToken:     "correct-token",
+		AllowedUsers:    []string{"testuser"},
+		MaxAuthFailures: 2,
+		AuthLockoutTime: 100 * time.Millisecond,
+	})
+
+	badRequest := func() int {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.Header.Set("Authorization", "Bearer wrong-token")
+		req.RemoteAddr = "10.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+		return rec.Code
+	}
+
+	goodRequest := func() int {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.Header.Set("Authorization", "Bearer correct-token")
+		req.RemoteAddr = "10.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+		return rec.Code
+	}
+
+	// First 2 bad requests return 401
+	if code := badRequest(); code != http.StatusUnauthorized {
+		t.Errorf("Bad request 1 should return 401, got %d", code)
+	}
+	if code := badRequest(); code != http.StatusUnauthorized {
+		t.Errorf("Bad request 2 should return 401, got %d", code)
+	}
+
+	// IP is now locked - even good requests blocked
+	if code := goodRequest(); code != http.StatusTooManyRequests {
+		t.Errorf("Locked IP should return 429, got %d", code)
+	}
+
+	// Wait for lockout to expire
+	time.Sleep(150 * time.Millisecond)
+	if code := goodRequest(); code != http.StatusOK {
+		t.Errorf("Good request after lockout should succeed, got %d", code)
+	}
+}
+
+func TestTimestampValidation(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:       "none",
+		AllowedUsers:     []string{"testuser"},
+		RequireTimestamp: true,
+	})
+
+	t.Run("MissingTimestamp", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("Missing timestamp should return 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("ValidTimestamp", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.Header.Set("X-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Valid timestamp should succeed, got %d", rec.Code)
+		}
+	})
+
+	t.Run("OldTimestamp", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		// 10 minutes ago
+		req.Header.Set("X-Timestamp", fmt.Sprintf("%d", time.Now().Add(-10*time.Minute).Unix()))
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("Old timestamp should return 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("FutureTimestamp", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		// 10 minutes in future
+		req.Header.Set("X-Timestamp", fmt.Sprintf("%d", time.Now().Add(10*time.Minute).Unix()))
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("Future timestamp should return 400, got %d", rec.Code)
+		}
+	})
+}
+
+func TestNonceValidation(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:   "none",
+		AllowedUsers: []string{"testuser"},
+		RequireNonce: true,
+	})
+
+	t.Run("MissingNonce", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("Missing nonce should return 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("ValidNonce", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.Header.Set("X-Nonce", "unique-nonce-123")
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Valid nonce should succeed, got %d", rec.Code)
+		}
+	})
+
+	t.Run("DuplicateNonce", func(t *testing.T) {
+		// First request with nonce
+		body1 := bytes.NewReader([]byte(`{"message": "test1", "user_id": "testuser"}`))
+		req1 := httptest.NewRequest(http.MethodPost, "/webhook", body1)
+		req1.Header.Set("X-Nonce", "reused-nonce")
+		req1.RemoteAddr = "127.0.0.1:12345"
+		rec1 := httptest.NewRecorder()
+		s.handleWebhook(rec1, req1)
+
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("First nonce should succeed, got %d", rec1.Code)
+		}
+
+		// Second request with same nonce (replay attack)
+		body2 := bytes.NewReader([]byte(`{"message": "test2", "user_id": "testuser"}`))
+		req2 := httptest.NewRequest(http.MethodPost, "/webhook", body2)
+		req2.Header.Set("X-Nonce", "reused-nonce")
+		req2.RemoteAddr = "127.0.0.1:12345"
+		rec2 := httptest.NewRecorder()
+		s.handleWebhook(rec2, req2)
+
+		if rec2.Code != http.StatusConflict {
+			t.Errorf("Duplicate nonce should return 409, got %d", rec2.Code)
+		}
+	})
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:   "none",
+		AllowedUsers: []string{"testuser"},
+	})
+
+	body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	s.handleWebhook(rec, req)
+
+	headers := rec.Header()
+
+	if headers.Get("X-Request-ID") == "" {
+		t.Error("Missing X-Request-ID header")
+	}
+	if headers.Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("Missing or wrong X-Content-Type-Options header")
+	}
+	if headers.Get("X-Frame-Options") != "DENY" {
+		t.Error("Missing or wrong X-Frame-Options header")
+	}
+	if headers.Get("Cache-Control") != "no-store" {
+		t.Error("Missing or wrong Cache-Control header")
+	}
+	if headers.Get("Content-Security-Policy") != "default-src 'none'" {
+		t.Error("Missing or wrong Content-Security-Policy header")
+	}
+}
+
+func TestRequestIDInResponse(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:   "none",
+		AllowedUsers: []string{"testuser"},
+	})
+
+	body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	s.handleWebhook(rec, req)
+
+	var resp map[string]interface{}
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+
+	if resp["request_id"] == nil || resp["request_id"] == "" {
+		t.Error("Response should include request_id")
+	}
+}
+
+func TestHMACUsersMapping(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod: "hmac",
+		HMACUsers: map[string]string{
+			"secret-for-github":  "github:myrepo",
+			"secret-for-grafana": "grafana:prod",
+		},
+		AllowedUsers: []string{"github:myrepo", "grafana:prod"},
+	})
+	s.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
+		return "hello " + msg.UserID, nil
+	})
+
+	t.Run("GitHubSecret", func(t *testing.T) {
+		payload := []byte(`{"message": "push event"}`)
+		mac := hmac.New(sha256.New, []byte("secret-for-github"))
+		mac.Write(payload)
+		sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(payload))
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected 200, got %d", rec.Code)
+		}
+		var resp map[string]interface{}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp["response"] != "hello github:myrepo" {
+			t.Errorf("Expected 'hello github:myrepo', got %v", resp["response"])
+		}
+	})
+
+	t.Run("WrongSecret", func(t *testing.T) {
+		payload := []byte(`{"message": "push event"}`)
+		mac := hmac.New(sha256.New, []byte("wrong-secret"))
+		mac.Write(payload)
+		sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(payload))
+		req.Header.Set("X-Hub-Signature-256", sig)
 		req.RemoteAddr = "127.0.0.1:12345"
 		rec := httptest.NewRecorder()
 
