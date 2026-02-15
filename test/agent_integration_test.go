@@ -21,7 +21,7 @@ func TestAgentIntegration(t *testing.T) {
 	os.MkdirAll(testDir, 0755)
 
 	cfg := agent.Config{
-		Default:     agent.AgentClaude,
+		Main:        agent.AgentClaude,
 		Timeout:     30,
 		AllowedDirs: []string{tmpDir},
 	}
@@ -252,7 +252,7 @@ func TestExecuteTimeout(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	cfg := agent.Config{
-		Default:     "claude",
+		Main:        "claude",
 		Timeout:     1, // Very short timeout
 		AllowedDirs: []string{tmpDir},
 	}

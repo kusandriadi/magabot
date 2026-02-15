@@ -696,11 +696,30 @@ func (r *Registry) persist() {
 	r.mu.RLock()
 	agents := make([]*Agent, 0, len(r.agents))
 	for _, agent := range r.agents {
-		// Create a copy for serialization
+		// Create a copy for serialization (avoid copying mutex)
 		agent.mu.RLock()
-		agentCopy := *agent
+		agentCopy := &Agent{
+			ID:          agent.ID,
+			ParentID:    agent.ParentID,
+			Name:        agent.Name,
+			Task:        agent.Task,
+			Status:      agent.Status,
+			Result:      agent.Result,
+			Error:       agent.Error,
+			Context:     agent.Context,
+			Messages:    agent.Messages,
+			Metadata:    agent.Metadata,
+			Platform:    agent.Platform,
+			ChatID:      agent.ChatID,
+			UserID:      agent.UserID,
+			Priority:    agent.Priority,
+			Timeout:     agent.Timeout,
+			CreatedAt:   agent.CreatedAt,
+			StartedAt:   agent.StartedAt,
+			CompletedAt: agent.CompletedAt,
+		}
 		agent.mu.RUnlock()
-		agents = append(agents, &agentCopy)
+		agents = append(agents, agentCopy)
 	}
 	r.mu.RUnlock()
 
