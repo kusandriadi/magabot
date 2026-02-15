@@ -251,13 +251,13 @@ func TestLimitedWriter(t *testing.T) {
 		return len(p), nil
 	}), n: 5}
 
-	w.Write([]byte("hello world")) // 11 bytes, limit 5
+	_, _ = w.Write([]byte("hello world")) // 11 bytes, limit 5
 	if string(buf) != "hello" {
 		t.Errorf("limitedWriter wrote %q, want %q", string(buf), "hello")
 	}
 
 	// Further writes should be discarded
-	w.Write([]byte("more"))
+	_, _ = w.Write([]byte("more"))
 	if string(buf) != "hello" {
 		t.Errorf("limitedWriter should discard after limit, got %q", string(buf))
 	}

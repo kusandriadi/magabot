@@ -131,7 +131,7 @@ func (a *AuditLogger) rotateIfNeeded() {
 	file, err := os.OpenFile(a.logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		// Undo rotation so the old path is restored
-		os.Rename(rotatedPath, a.logPath)
+		_ = os.Rename(rotatedPath, a.logPath)
 		return
 	}
 

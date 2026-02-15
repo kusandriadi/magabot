@@ -349,7 +349,9 @@ func (m *Manager) CreateTemplate(name string) error {
 	readmePath := filepath.Join(skillDir, "README.md")
 	readme := fmt.Sprintf("# %s\n\n%s\n\n## Usage\n\nTrigger with `/%s` or mention \"%s\" in your message.\n",
 		name, template.Description, name, name)
-	os.WriteFile(readmePath, []byte(readme), 0644)
+	if err := os.WriteFile(readmePath, []byte(readme), 0644); err != nil {
+		return fmt.Errorf("write README: %w", err)
+	}
 
 	return os.WriteFile(filepath.Join(skillDir, "skill.yaml"), data, 0644)
 }

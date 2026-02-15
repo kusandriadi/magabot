@@ -79,7 +79,7 @@ func (w *Watcher) scanAndRecord() {
 
 	w.lastMod = make(map[string]time.Time)
 
-	filepath.Walk(w.manager.skillsDir, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(w.manager.skillsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -99,8 +99,8 @@ func (w *Watcher) hasChanges() bool {
 	defer w.mu.Unlock()
 
 	current := make(map[string]time.Time)
-	
-	filepath.Walk(w.manager.skillsDir, func(path string, info os.FileInfo, err error) error {
+
+	_ = filepath.Walk(w.manager.skillsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}

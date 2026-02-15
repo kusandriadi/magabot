@@ -98,7 +98,9 @@ func (m *Manager) Fire(event Event, data *EventData) *Result {
 		}
 
 		if h.Async {
-			go m.executeHook(h, data)
+			go func(hook config.HookConfig, d *EventData) {
+				_, _ = m.executeHook(hook, d)
+			}(h, data)
 			continue
 		}
 
@@ -131,7 +133,9 @@ func (m *Manager) FireAsync(event Event, data *EventData) {
 		if !matchesPlatform(h.Platforms, data.Platform) {
 			continue
 		}
-		go m.executeHook(h, data)
+		go func(hook config.HookConfig, d *EventData) {
+			_, _ = m.executeHook(hook, d)
+		}(h, data)
 	}
 }
 

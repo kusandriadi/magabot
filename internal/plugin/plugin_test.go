@@ -87,7 +87,7 @@ func TestManagerLifecycle(t *testing.T) {
 		},
 	}
 
-	mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 
 	// Init
 	err := mgr.Init("lifecycle-plugin")
@@ -175,8 +175,8 @@ func TestManagerStopAll(t *testing.T) {
 		mgr.Register(p)
 	}
 
-	mgr.StartAll()
-	mgr.StopAll()
+	_ = mgr.StartAll()
+	_ = mgr.StopAll()
 
 	// All should be stopped
 	for _, p := range plugins {
@@ -235,7 +235,7 @@ func TestManagerCommands(t *testing.T) {
 		meta: Metadata{ID: "cmd-plugin", Name: "Command Plugin"},
 	}
 
-	mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 
 	// Init to get context
 	mgr.Init("cmd-plugin")
@@ -283,7 +283,7 @@ func TestManagerHooks(t *testing.T) {
 		meta: Metadata{ID: "hook-plugin", Name: "Hook Plugin"},
 	}
 
-	mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 	mgr.Init("hook-plugin")
 
 	reg := mgr.Get("hook-plugin")
@@ -305,7 +305,7 @@ func TestManagerHooks(t *testing.T) {
 	}
 
 	// Trigger hook
-	mgr.TriggerHook(context.Background(), "pre_message", nil)
+	_ = mgr.TriggerHook(context.Background(), "pre_message", nil)
 
 	if !hookCalled {
 		t.Error("hook should have been called")
@@ -323,14 +323,14 @@ func TestManagerStats(t *testing.T) {
 		plugin := &testPlugin{
 			meta: Metadata{ID: string(rune('a' + i)), Name: "Plugin"},
 		}
-		mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 	}
 
 	// Init one
 	mgr.Init("a")
 
 	// Start one
-	mgr.Start("a")
+	_ = mgr.Start("a")
 
 	stats := mgr.Stats()
 	if stats["total"] != 3 {
@@ -397,7 +397,7 @@ func TestManagerConfig(t *testing.T) {
 		},
 	}
 
-	mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 
 	// Check defaults
 	reg := mgr.Get("config-plugin")
@@ -436,7 +436,7 @@ func TestManagerList(t *testing.T) {
 		plugin := &testPlugin{
 			meta: Metadata{ID: string(rune('a' + i)), Name: "Plugin"},
 		}
-		mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 	}
 
 	list := mgr.List()
@@ -455,7 +455,7 @@ func TestPluginContextDataDir(t *testing.T) {
 		meta: Metadata{ID: "data-plugin", Name: "Data Plugin"},
 	}
 
-	mgr.Register(plugin)
+	_ = mgr.Register(plugin)
 
 	reg := mgr.Get("data-plugin")
 	expectedDir := tmpDir + "/plugins/data-plugin"
