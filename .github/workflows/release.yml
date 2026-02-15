@@ -3,41 +3,52 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
   build:
+    name: Build (${{ matrix.name }})
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # Linux
           - goos: linux
             goarch: amd64
             runner: ubuntu-latest
+            name: Linux (amd64)
             cc: gcc
           - goos: linux
             goarch: arm64
             runner: ubuntu-latest
+            name: Linux (arm64)
             cc: aarch64-linux-gnu-gcc
             cross_pkg: gcc-aarch64-linux-gnu
           - goos: linux
             goarch: arm
             runner: ubuntu-latest
+            name: Linux (arm)
             cc: arm-linux-gnueabihf-gcc
             cross_pkg: gcc-arm-linux-gnueabihf
+          # macOS
           - goos: darwin
             goarch: amd64
             runner: macos-latest
+            name: macOS (Intel)
             cc: clang
           - goos: darwin
             goarch: arm64
             runner: macos-latest
+            name: macOS (Apple Silicon)
             cc: clang
+          # Windows
           - goos: windows
             goarch: amd64
             runner: ubuntu-latest
+            name: Windows (amd64)
             cc: x86_64-w64-mingw32-gcc
             cross_pkg: gcc-mingw-w64-x86-64
 
@@ -48,7 +59,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: "1.22"
 
       - name: Install cross-compiler
         if: matrix.cross_pkg != ''
@@ -69,6 +80,14 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
           go build -ldflags="${LDFLAGS}" -o magabot${EXT} ./cmd/magabot
 
+      - name: Generate checksum
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            sha256sum magabot.exe > magabot_${{ matrix.goos }}_${{ matrix.goarch }}.sha256
+          else
+            sha256sum magabot > magabot_${{ matrix.goos }}_${{ matrix.goarch }}.sha256
+          fi
+
       - name: Package
         run: |
           if [ "${{ matrix.goos }}" = "windows" ]; then
@@ -80,9 +99,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: magabot_${{ matrix.goos }}_${{ matrix.goarch }}
-          path: magabot_${{ matrix.goos }}_${{ matrix.goarch }}.*
+          path: |
+            magabot_${{ matrix.goos }}_${{ matrix.goarch }}.*
 
   release:
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
 
@@ -98,3 +119,4 @@ jobs:
           files: |
             magabot_*.tar.gz
             magabot_*.zip
+            magabot_*.sha256
