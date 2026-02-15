@@ -29,10 +29,11 @@ type rateLimiter struct {
 	requests map[string]*rateWindow
 	window   time.Duration
 	limit    int
+	done     chan struct{}
 }
 
 type rateWindow struct {
-	count    int
+	count       int
 	windowStart time.Time
 }
 
@@ -41,10 +42,15 @@ func newRateLimiter(limit int, window time.Duration) *rateLimiter {
 		requests: make(map[string]*rateWindow),
 		window:   window,
 		limit:    limit,
+		done:     make(chan struct{}),
 	}
 	// Cleanup goroutine
 	go rl.cleanup()
 	return rl
+}
+
+func (rl *rateLimiter) stop() {
+	close(rl.done)
 }
 
 func (rl *rateLimiter) allow(key string) bool {
@@ -70,16 +76,21 @@ func (rl *rateLimiter) allow(key string) bool {
 func (rl *rateLimiter) cleanup() {
 	ticker := time.NewTicker(rl.window)
 	defer ticker.Stop()
-	
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for key, w := range rl.requests {
-			if now.Sub(w.windowStart) >= rl.window*2 {
-				delete(rl.requests, key)
+
+	for {
+		select {
+		case <-rl.done:
+			return
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			for key, w := range rl.requests {
+				if now.Sub(w.windowStart) >= rl.window*2 {
+					delete(rl.requests, key)
+				}
 			}
+			rl.mu.Unlock()
 		}
-		rl.mu.Unlock()
 	}
 }
 
@@ -272,14 +283,22 @@ func (s *Server) Start(ctx context.Context) error {
 // Stop stops the server
 func (s *Server) Stop() error {
 	close(s.done)
-	
+
+	// Stop rate limiters to prevent goroutine leaks
+	if s.ipLimiter != nil {
+		s.ipLimiter.stop()
+	}
+	if s.userLimiter != nil {
+		s.userLimiter.stop()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := s.server.Shutdown(ctx); err != nil {
 		return err
 	}
-	
+
 	s.wg.Wait()
 	return nil
 }
