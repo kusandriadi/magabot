@@ -4,10 +4,23 @@ package util
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"net/http"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 )
+
+// DefaultHTTPTimeout is the default timeout for HTTP clients
+const DefaultHTTPTimeout = 30 * time.Second
+
+// NewHTTPClient creates a new HTTP client with the specified timeout
+func NewHTTPClient(timeout time.Duration) *http.Client {
+	if timeout == 0 {
+		timeout = DefaultHTTPTimeout
+	}
+	return &http.Client{Timeout: timeout}
+}
 
 // Truncate shortens a string to max length with ellipsis
 func Truncate(s string, max int) string {
