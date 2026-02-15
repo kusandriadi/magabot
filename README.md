@@ -184,13 +184,15 @@ llm:
 
 ## Platforms
 
-| Platform | Method | Groups | DMs |
-|----------|--------|:------:|:---:|
-| **Telegram** | Long Polling / Webhook | ✅ | ✅ |
-| **Discord** | Gateway | ✅ | ✅ |
-| **Slack** | Socket Mode / Events API | ✅ | ✅ |
-| **WhatsApp** | WebSocket | ✅ | ✅ |
-| **Webhook** | HTTP POST | - | - |
+| Platform | Method | Groups | DMs | Status |
+|----------|--------|:------:|:---:|:------:|
+| **Telegram** | Long Polling / Webhook | ✅ | ✅ | Stable |
+| **Discord** | Gateway | ✅ | ✅ | Stable |
+| **Slack** | Socket Mode / Events API | ✅ | ✅ | Stable |
+| **WhatsApp** | WebSocket (whatsmeow) | ✅ | ✅ | Stable |
+| **Webhook** | HTTP POST | - | - | Stable |
+
+> **Note on WhatsApp:** Uses [whatsmeow](https://github.com/tulir/whatsmeow) (unofficial multi-device API). Requires QR code scan on first setup. WhatsApp may rate-limit or block automated usage - use responsibly.
 
 ### Setup
 
