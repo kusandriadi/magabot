@@ -303,35 +303,10 @@ func setupWebhook() {
 	fmt.Println("\n🔗 Webhook Setup")
 	fmt.Println("────────────────")
 	fmt.Println()
-
-	fmt.Println("Which webhook do you want to configure?")
-	fmt.Println("  1. api      - Generic HTTP API (receive external requests)")
-	fmt.Println("  2. telegram - Telegram Bot API webhook mode")
-	fmt.Println("  3. slack    - Slack Events API webhook mode")
-	fmt.Println()
-
-	choice := askString(reader, "Webhook type", "1")
-
-	switch choice {
-	case "1", "api":
-		setupAPIWebhook(reader)
-	case "2", "telegram":
-		setupTelegramWebhook(reader)
-	case "3", "slack":
-		setupSlackWebhook(reader)
-	default:
-		fmt.Printf("Unknown webhook type: %s\n", choice)
-	}
-}
-
-// setupAPIWebhook configures generic HTTP API webhook
-func setupAPIWebhook(reader *bufio.Reader) {
-	fmt.Println()
-	fmt.Println("🌐 HTTP API Webhook Setup")
-	fmt.Println("─────────────────────────")
-	fmt.Println()
-	fmt.Println("  This creates an HTTP endpoint that external services can call")
-	fmt.Println("  to send messages through the bot.")
+	fmt.Println("  This creates an HTTP endpoint to receive messages from:")
+	fmt.Println("  - Telegram (webhook mode instead of polling)")
+	fmt.Println("  - Slack (Events API instead of Socket Mode)")
+	fmt.Println("  - External services (GitHub, Grafana, scripts, etc.)")
 	fmt.Println()
 
 	cfg := loadOrCreateConfig()
@@ -341,6 +316,9 @@ func setupAPIWebhook(reader *bufio.Reader) {
 	}
 	cfg.Platforms.Webhook.Enabled = true
 
+	// Server config
+	fmt.Println("📡 Server Configuration")
+	fmt.Println("───────────────────────")
 	port := askInt(reader, "Port", 8080)
 	cfg.Platforms.Webhook.Port = port
 
@@ -350,207 +328,198 @@ func setupAPIWebhook(reader *bufio.Reader) {
 	bind := askString(reader, "Bind address", "127.0.0.1")
 	cfg.Platforms.Webhook.Bind = bind
 
+	// Authentication
 	fmt.Println()
-	fmt.Println("  Authentication method:")
-	fmt.Println("  1. none   - No authentication (not recommended)")
-	fmt.Println("  2. bearer - Bearer token (simple, recommended)")
-	fmt.Println("  3. hmac   - HMAC-SHA256 signature (secure)")
+	fmt.Println("🔐 Authentication")
+	fmt.Println("─────────────────")
+	fmt.Println("  1. bearer - Bearer token (recommended)")
+	fmt.Println("  2. hmac   - HMAC-SHA256 signature")
+	fmt.Println("  3. none   - No authentication")
 	fmt.Println()
 
-	authChoice := askString(reader, "Auth method", "2")
+	authChoice := askString(reader, "Auth method", "1")
+	var bearerToken, hmacSecret string
 	switch authChoice {
-	case "1", "none":
-		cfg.Platforms.Webhook.AuthMethod = "none"
-	case "3", "hmac":
+	case "2", "hmac":
 		cfg.Platforms.Webhook.AuthMethod = "hmac"
-		secret := askString(reader, "HMAC secret (leave empty to generate)", "")
-		if secret == "" {
-			secret = security.GenerateKey()
+		hmacSecret = askString(reader, "HMAC secret (leave empty to generate)", "")
+		if hmacSecret == "" {
+			hmacSecret = security.GenerateKey()
 		}
-		cfg.Platforms.Webhook.HMACSecret = secret
-		saveSecret("webhook/hmac_secret", secret)
-		fmt.Printf("   Secret: %s\n", secret)
+		cfg.Platforms.Webhook.HMACSecret = hmacSecret
+		saveSecret("webhook/hmac_secret", hmacSecret)
+		fmt.Printf("   Secret: %s\n", hmacSecret)
+	case "3", "none":
+		cfg.Platforms.Webhook.AuthMethod = "none"
+		fmt.Println("   ⚠️  No authentication - use IP allowlist for security")
 	default:
 		cfg.Platforms.Webhook.AuthMethod = "bearer"
-		token := askString(reader, "Bearer token (leave empty to generate)", "")
-		if token == "" {
-			token = security.GenerateKey()[:32]
+		bearerToken = askString(reader, "Bearer token (leave empty to generate)", "")
+		if bearerToken == "" {
+			bearerToken = security.GenerateKey()[:32]
 		}
-		cfg.Platforms.Webhook.BearerToken = token
-		saveSecret("webhook/bearer_token", token)
-		fmt.Printf("   Token: %s\n", token)
+		cfg.Platforms.Webhook.BearerToken = bearerToken
+		saveSecret("webhook/bearer_token", bearerToken)
+		fmt.Printf("   Token: %s\n", bearerToken)
 	}
 
-	// Allowed users
+	// Platform integrations
 	fmt.Println()
-	fmt.Println("  User allowlist (optional, empty = allow all authenticated requests):")
-	fmt.Println("  Format: user_id or prefix:* (e.g., telegram:123, github:*, slack:U1234)")
+	fmt.Println("📱 Platform Integrations")
+	fmt.Println("────────────────────────")
+	fmt.Println("  Which platforms will send webhooks? (comma-separated)")
+	fmt.Println("  1. telegram - Telegram Bot API")
+	fmt.Println("  2. slack    - Slack Events API")
+	fmt.Println("  3. github   - GitHub Webhooks")
+	fmt.Println("  4. custom   - Other services")
 	fmt.Println()
-	allowedUsers := askString(reader, "Allowed users (comma-separated)", "")
-	if allowedUsers != "" {
-		users := strings.Split(allowedUsers, ",")
-		for i := range users {
-			users[i] = strings.TrimSpace(users[i])
+
+	platforms := askString(reader, "Platforms (e.g., 1,2 or telegram,slack)", "1")
+	
+	var allowedUsers []string
+	hasTelegram := strings.Contains(platforms, "1") || strings.Contains(strings.ToLower(platforms), "telegram")
+	hasSlack := strings.Contains(platforms, "2") || strings.Contains(strings.ToLower(platforms), "slack")
+	hasGitHub := strings.Contains(platforms, "3") || strings.Contains(strings.ToLower(platforms), "github")
+
+	// Configure Telegram webhook
+	if hasTelegram {
+		fmt.Println()
+		fmt.Println("📱 Telegram Configuration")
+		fmt.Println("─────────────────────────")
+		
+		if cfg.Platforms.Telegram == nil {
+			cfg.Platforms.Telegram = &config.TelegramConfig{}
 		}
-		cfg.Platforms.Webhook.AllowedUsers = users
+		cfg.Platforms.Telegram.Enabled = true
+		cfg.Platforms.Telegram.UseWebhook = true
+		cfg.Platforms.Telegram.WebhookPort = port
+		cfg.Platforms.Telegram.WebhookPath = "/telegram"
+		cfg.Platforms.Telegram.WebhookSecret = security.GenerateKey()[:32]
+
+		token := askString(reader, "Bot Token (from @BotFather)", "")
+		if token != "" {
+			saveSecret("telegram/bot_token", token)
+		}
+
+		userID := askString(reader, "Your Telegram User ID", "")
+		if userID != "" {
+			cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
+			cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
+			cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
+			// Auto-add to webhook allowlist
+			allowedUsers = append(allowedUsers, "telegram:"+userID)
+		}
+
+		webhookURL := askString(reader, "Public HTTPS URL (e.g., https://yourdomain.com)", "")
+		cfg.Platforms.Telegram.WebhookURL = webhookURL
 	}
 
+	// Configure Slack webhook
+	if hasSlack {
+		fmt.Println()
+		fmt.Println("💼 Slack Configuration")
+		fmt.Println("──────────────────────")
+
+		if cfg.Platforms.Slack == nil {
+			cfg.Platforms.Slack = &config.SlackConfig{}
+		}
+		cfg.Platforms.Slack.Enabled = true
+		cfg.Platforms.Slack.UseWebhook = true
+		cfg.Platforms.Slack.WebhookPort = port
+		cfg.Platforms.Slack.WebhookPath = "/slack/events"
+
+		signingSecret := askString(reader, "Signing Secret (from Basic Information)", "")
+		if signingSecret != "" {
+			saveSecret("slack/signing_secret", signingSecret)
+			cfg.Platforms.Slack.SigningSecret = signingSecret
+		}
+
+		botToken := askString(reader, "Bot Token (xoxb-...)", "")
+		if botToken != "" {
+			saveSecret("slack/bot_token", botToken)
+		}
+
+		slackUserID := askString(reader, "Your Slack User ID (e.g., U1234567)", "")
+		if slackUserID != "" {
+			cfg.Platforms.Slack.Admins = util.AddUnique(cfg.Platforms.Slack.Admins, slackUserID)
+			cfg.Platforms.Slack.AllowedUsers = util.AddUnique(cfg.Platforms.Slack.AllowedUsers, slackUserID)
+			// Auto-add to webhook allowlist
+			allowedUsers = append(allowedUsers, "slack:"+slackUserID)
+		}
+	}
+
+	// Configure GitHub
+	if hasGitHub {
+		fmt.Println()
+		fmt.Println("🐙 GitHub Configuration")
+		fmt.Println("───────────────────────")
+		githubUser := askString(reader, "GitHub username (or * for all)", "*")
+		if githubUser != "" {
+			allowedUsers = append(allowedUsers, "github:"+githubUser)
+		}
+	}
+
+	// Additional allowed users
+	fmt.Println()
+	fmt.Println("👥 Additional Allowed Users (optional)")
+	fmt.Println("──────────────────────────────────────")
+	fmt.Println("  Format: prefix:id (e.g., grafana, custom:myapp)")
+	additionalUsers := askString(reader, "Additional users (comma-separated)", "")
+	if additionalUsers != "" {
+		for _, u := range strings.Split(additionalUsers, ",") {
+			u = strings.TrimSpace(u)
+			if u != "" {
+				allowedUsers = append(allowedUsers, u)
+			}
+		}
+	}
+
+	cfg.Platforms.Webhook.AllowedUsers = allowedUsers
+
+	// Save config
 	if err := cfg.Save(); err != nil {
 		fmt.Printf("❌ Failed to save config: %v\n", err)
 		return
 	}
 
+	// Summary
 	fmt.Println()
-	fmt.Println("✅ HTTP API webhook configured!")
+	fmt.Println("✅ Webhook configured!")
+	fmt.Println("═══════════════════════")
 	fmt.Printf("   Endpoint: http://%s:%d%s\n", bind, port, path)
+	fmt.Printf("   Auth: %s\n", cfg.Platforms.Webhook.AuthMethod)
+	if len(allowedUsers) > 0 {
+		fmt.Printf("   Allowed: %s\n", strings.Join(allowedUsers, ", "))
+	}
+
+	if hasTelegram {
+		fmt.Println()
+		fmt.Println("📱 Telegram webhook:")
+		fmt.Printf("   Path: /telegram\n")
+		fmt.Printf("   After start: magabot telegram set-webhook\n")
+	}
+
+	if hasSlack {
+		fmt.Println()
+		fmt.Println("💼 Slack webhook:")
+		fmt.Printf("   Path: /slack/events\n")
+		fmt.Printf("   Set Request URL in Slack app settings\n")
+	}
+
 	fmt.Println()
-	fmt.Println("📝 Usage example:")
+	fmt.Println("📝 Test with curl:")
 	if cfg.Platforms.Webhook.AuthMethod == "bearer" {
 		fmt.Printf(`   curl -X POST http://%s:%d%s \
      -H "Authorization: Bearer %s" \
      -H "Content-Type: application/json" \
-     -d '{"message": "Hello!", "user_id": "myapp:user123"}'
-`, bind, port, path, cfg.Platforms.Webhook.BearerToken)
-	} else if cfg.Platforms.Webhook.AuthMethod == "hmac" {
-		fmt.Printf(`   # With HMAC signature
-   curl -X POST http://%s:%d%s \
-     -H "X-Hub-Signature-256: sha256=<signature>" \
-     -H "Content-Type: application/json" \
-     -d '{"message": "Hello!", "user_id": "myapp:user123"}'
-`, bind, port, path)
+     -d '{"message": "Hello!", "user_id": "test"}'
+`, bind, port, path, bearerToken)
 	} else {
 		fmt.Printf(`   curl -X POST http://%s:%d%s \
      -H "Content-Type: application/json" \
-     -d '{"message": "Hello!", "user_id": "myapp:user123"}'
+     -d '{"message": "Hello!", "user_id": "test"}'
 `, bind, port, path)
 	}
-
-	if len(cfg.Platforms.Webhook.AllowedUsers) > 0 {
-		fmt.Printf("\n   Allowed users: %s\n", strings.Join(cfg.Platforms.Webhook.AllowedUsers, ", "))
-	}
-
-	askRestart(reader)
-}
-
-// setupTelegramWebhook configures Telegram webhook mode
-func setupTelegramWebhook(reader *bufio.Reader) {
-	fmt.Println()
-	fmt.Println("📱 Telegram Webhook Setup")
-	fmt.Println("─────────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	if cfg.Platforms.Telegram == nil {
-		cfg.Platforms.Telegram = &config.TelegramConfig{}
-	}
-	cfg.Platforms.Telegram.Enabled = true
-	cfg.Platforms.Telegram.UseWebhook = true
-
-	// Get token if not set
-	fmt.Println("📝 Get your bot token from @BotFather on Telegram")
-	fmt.Println()
-	token := askString(reader, "Bot Token", "")
-	if token != "" {
-		saveSecret("telegram/bot_token", token)
-	}
-
-	fmt.Println()
-	fmt.Println("📝 Webhook URL Configuration")
-	fmt.Println("   Your server must be accessible from the internet (HTTPS required)")
-	fmt.Println()
-
-	webhookURL := askString(reader, "Webhook URL (e.g., https://yourdomain.com/telegram)", "")
-	cfg.Platforms.Telegram.WebhookURL = webhookURL
-
-	port := askInt(reader, "Local port to listen on", 8443)
-	cfg.Platforms.Telegram.WebhookPort = port
-
-	path := askString(reader, "Webhook path", "/telegram")
-	cfg.Platforms.Telegram.WebhookPath = path
-
-	// Optional: Secret token for verification
-	fmt.Println()
-	secret := askString(reader, "Secret token (leave empty to generate)", "")
-	if secret == "" {
-		secret = security.GenerateKey()[:32]
-	}
-	cfg.Platforms.Telegram.WebhookSecret = secret
-	fmt.Printf("   Secret: %s\n", secret)
-
-	// Admin user ID
-	fmt.Println()
-	userID := askString(reader, "Your Telegram User ID (optional)", "")
-	if userID != "" {
-		cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
-		cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
-		cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
-	}
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Telegram webhook configured!")
-	fmt.Printf("   URL: %s%s\n", webhookURL, path)
-	fmt.Printf("   Port: %d\n", port)
-	fmt.Println()
-	fmt.Println("📝 After starting, run: magabot telegram set-webhook")
-
-	askRestart(reader)
-}
-
-// setupSlackWebhook configures Slack Events API webhook
-func setupSlackWebhook(reader *bufio.Reader) {
-	fmt.Println()
-	fmt.Println("💼 Slack Webhook Setup")
-	fmt.Println("──────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	if cfg.Platforms.Slack == nil {
-		cfg.Platforms.Slack = &config.SlackConfig{}
-	}
-	cfg.Platforms.Slack.Enabled = true
-	cfg.Platforms.Slack.UseWebhook = true
-
-	fmt.Println("📝 Create a Slack app at https://api.slack.com/apps")
-	fmt.Println("   1. Enable Event Subscriptions")
-	fmt.Println("   2. Set Request URL to your webhook endpoint")
-	fmt.Println("   3. Copy Signing Secret from Basic Information")
-	fmt.Println()
-
-	signingSecret := askString(reader, "Signing Secret", "")
-	if signingSecret != "" {
-		saveSecret("slack/signing_secret", signingSecret)
-	}
-
-	botToken := askString(reader, "Bot Token (xoxb-...)", "")
-	if botToken != "" {
-		saveSecret("slack/bot_token", botToken)
-	}
-
-	fmt.Println()
-	port := askInt(reader, "Local port to listen on", 3000)
-	cfg.Platforms.Slack.WebhookPort = port
-
-	path := askString(reader, "Webhook path", "/slack/events")
-	cfg.Platforms.Slack.WebhookPath = path
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Slack webhook configured!")
-	fmt.Printf("   Endpoint: http://localhost:%d%s\n", port, path)
-	fmt.Println()
-	fmt.Println("📝 Set your Slack app's Request URL to:")
-	fmt.Printf("   https://yourdomain.com%s\n", path)
 
 	askRestart(reader)
 }
