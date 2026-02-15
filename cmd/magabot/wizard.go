@@ -28,9 +28,13 @@ type WizardState struct {
 	TelegramToken   string
 	TelegramUserID  string
 
-	SlackEnabled      bool
-	SlackBotToken     string
-	SlackAppToken     string
+	DiscordEnabled bool
+	DiscordToken   string
+	DiscordUserID  string
+
+	SlackEnabled  bool
+	SlackBotToken string
+	SlackAppToken string
 
 	WhatsAppEnabled bool
 
@@ -47,6 +51,10 @@ type WizardState struct {
 	OpenAIKey        string
 	GeminiEnabled    bool
 	GeminiKey        string
+	DeepSeekEnabled  bool
+	DeepSeekKey      string
+	GLMEnabled       bool
+	GLMKey           string
 }
 
 // RunWizard runs the interactive setup wizard
@@ -182,129 +190,236 @@ func step2Platforms(reader *bufio.Reader, state *WizardState) {
 	printStep(2, "CHAT PLATFORMS")
 
 	fmt.Println("Which platforms do you want to enable?")
+	fmt.Println("(Enter numbers separated by comma, e.g., 1,3)")
+	fmt.Println()
+	fmt.Println("  1. telegram   - Telegram Bot")
+	fmt.Println("  2. discord    - Discord Bot")
+	fmt.Println("  3. slack      - Slack App")
+	fmt.Println("  4. whatsapp   - WhatsApp (beta)")
+	fmt.Println("  5. webhook    - HTTP Webhook endpoint")
 	fmt.Println()
 
-	// Telegram
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  📱 TELEGRAM                                                │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.TelegramEnabled = askYesNo(reader, "Enable Telegram?", true)
-	if state.TelegramEnabled {
-		fmt.Println()
-		fmt.Println("  To get a bot token:")
-		fmt.Println("  1. Open Telegram and message @BotFather")
-		fmt.Println("  2. Send /newbot and follow the instructions")
-		fmt.Println("  3. Copy the token (format: 123456:ABC-DEF...)")
-		fmt.Println()
-		state.TelegramToken = askPassword(reader, "Bot token")
+	choices := askString(reader, "Platforms to enable", "1")
+	selected := parseNumberList(choices)
 
-		fmt.Println()
-		fmt.Println("  To find your Telegram user ID:")
-		fmt.Println("  Message @userinfobot or @getmyid_bot")
-		fmt.Println()
-		state.TelegramUserID = askString(reader, "Your Telegram user ID (for whitelist, or leave empty)", "")
-	}
-	fmt.Println()
+	// Configure selected platforms
+	for _, num := range selected {
+		switch num {
+		case 1:
+			state.TelegramEnabled = true
+			fmt.Println()
+			fmt.Println("📱 Telegram Configuration")
+			fmt.Println("─────────────────────────")
+			fmt.Println("  To get a bot token:")
+			fmt.Println("  1. Open Telegram and message @BotFather")
+			fmt.Println("  2. Send /newbot and follow the instructions")
+			fmt.Println("  3. Copy the token (format: 123456:ABC-DEF...)")
+			fmt.Println()
+			state.TelegramToken = askPassword(reader, "Bot token")
+			fmt.Println()
+			fmt.Println("  To find your Telegram user ID:")
+			fmt.Println("  Message @userinfobot or @getmyid_bot")
+			fmt.Println()
+			state.TelegramUserID = askString(reader, "Your Telegram user ID (optional)", "")
 
-	// Slack
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  💼 SLACK                                                   │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.SlackEnabled = askYesNo(reader, "Enable Slack?", false)
-	if state.SlackEnabled {
-		fmt.Println()
-		fmt.Println("  To get Slack tokens:")
-		fmt.Println("  1. Go to api.slack.com/apps and create an app")
-		fmt.Println("  2. Enable Socket Mode and get App Token (xapp-...)")
-		fmt.Println("  3. Add Bot Token Scopes and install to workspace")
-		fmt.Println("  4. Copy Bot Token (xoxb-...)")
-		fmt.Println()
-		state.SlackBotToken = askPassword(reader, "Bot token (xoxb-...)")
-		state.SlackAppToken = askPassword(reader, "App token (xapp-...)")
-	}
-	fmt.Println()
+		case 2:
+			state.DiscordEnabled = true
+			fmt.Println()
+			fmt.Println("🎮 Discord Configuration")
+			fmt.Println("────────────────────────")
+			fmt.Println("  To get a bot token:")
+			fmt.Println("  1. Go to discord.com/developers/applications")
+			fmt.Println("  2. Create New Application → Bot → Reset Token")
+			fmt.Println("  3. Enable MESSAGE CONTENT INTENT")
+			fmt.Println()
+			state.DiscordToken = askPassword(reader, "Bot token")
+			fmt.Println()
+			state.DiscordUserID = askString(reader, "Your Discord user ID (optional)", "")
 
-	// WhatsApp
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  💬 WHATSAPP                                                │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.WhatsAppEnabled = askYesNo(reader, "Enable WhatsApp?", false)
-	if state.WhatsAppEnabled {
-		fmt.Println()
-		fmt.Println("  ℹ️  WhatsApp will require QR code scan after starting the bot")
-	}
-	fmt.Println()
+		case 3:
+			state.SlackEnabled = true
+			fmt.Println()
+			fmt.Println("💼 Slack Configuration")
+			fmt.Println("──────────────────────")
+			fmt.Println("  To get Slack tokens:")
+			fmt.Println("  1. Go to api.slack.com/apps and create an app")
+			fmt.Println("  2. Enable Socket Mode (get App Token xapp-...)")
+			fmt.Println("  3. Add Bot Token Scopes and install to workspace")
+			fmt.Println("  4. Copy Bot Token (xoxb-...)")
+			fmt.Println()
+			state.SlackBotToken = askPassword(reader, "Bot token (xoxb-...)")
+			state.SlackAppToken = askPassword(reader, "App token (xapp-...)")
 
-	// Webhook
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  🌐 WEBHOOK (receive HTTP POST)                             │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.WebhookEnabled = askYesNo(reader, "Enable Webhook?", false)
-	if state.WebhookEnabled {
-		state.WebhookPort = askInt(reader, "Port", 8080)
-		state.WebhookAuth = askChoice(reader, "Authentication", []string{"none", "bearer", "hmac"}, "bearer")
-		if state.WebhookAuth == "bearer" {
-			state.WebhookToken = askPassword(reader, "Bearer token")
+		case 4:
+			state.WhatsAppEnabled = true
+			fmt.Println()
+			fmt.Println("💬 WhatsApp Configuration")
+			fmt.Println("─────────────────────────")
+			fmt.Println("  ℹ️  WhatsApp will require QR code scan after starting the bot")
+
+		case 5:
+			state.WebhookEnabled = true
+			fmt.Println()
+			fmt.Println("🌐 Webhook Configuration")
+			fmt.Println("────────────────────────")
+			state.WebhookPort = askInt(reader, "Port", 8080)
+			fmt.Println()
+			fmt.Println("  Authentication method:")
+			fmt.Println("  1. none   - No authentication")
+			fmt.Println("  2. bearer - Bearer token")
+			fmt.Println("  3. hmac   - HMAC signature")
+			fmt.Println()
+			state.WebhookAuth = askChoice(reader, "Auth method", []string{"1", "2", "3"}, "2")
+			switch state.WebhookAuth {
+			case "1":
+				state.WebhookAuth = "none"
+			case "2", "bearer":
+				state.WebhookAuth = "bearer"
+				state.WebhookToken = askPassword(reader, "Bearer token (leave empty to generate)")
+			case "3", "hmac":
+				state.WebhookAuth = "hmac"
+				state.WebhookToken = askPassword(reader, "HMAC secret (leave empty to generate)")
+			}
 		}
 	}
+}
+
+// parseNumberList parses "1,2,3" into []int{1,2,3}
+func parseNumberList(s string) []int {
+	var result []int
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if num, err := strconv.Atoi(part); err == nil {
+			result = append(result, num)
+		}
+	}
+	return result
 }
 
 // Step 3: LLM Providers
 func step3LLM(reader *bufio.Reader, state *WizardState) {
 	printStep(3, "AI / LLM PROVIDERS")
 
-	fmt.Println("Which AI providers do you want to use?")
-	fmt.Println("(You need at least one API key)")
+	fmt.Println("Which LLM provider do you want as your main/default?")
+	fmt.Println()
+	fmt.Println("  1. anthropic  - Claude (recommended)")
+	fmt.Println("  2. openai     - GPT-4")
+	fmt.Println("  3. gemini     - Google Gemini")
+	fmt.Println("  4. deepseek   - DeepSeek")
+	fmt.Println("  5. glm        - Zhipu GLM")
 	fmt.Println()
 
-	// Anthropic
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  🟣 ANTHROPIC (Claude)                                      │")
-	fmt.Println("│  Models: Claude 3.5 Sonnet, Claude 4 Opus                   │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.AnthropicEnabled = askYesNo(reader, "Enable Anthropic?", true)
-	if state.AnthropicEnabled {
-		fmt.Println()
+	mainChoice := askString(reader, "Main provider", "1")
+
+	// Map choice to provider name
+	providerMap := map[string]string{
+		"1": "anthropic", "anthropic": "anthropic",
+		"2": "openai", "openai": "openai",
+		"3": "gemini", "gemini": "gemini",
+		"4": "deepseek", "deepseek": "deepseek",
+		"5": "glm", "glm": "glm",
+	}
+	state.LLMDefault = providerMap[strings.ToLower(mainChoice)]
+	if state.LLMDefault == "" {
+		state.LLMDefault = "anthropic"
+	}
+
+	// Configure main provider
+	fmt.Println()
+	switch state.LLMDefault {
+	case "anthropic":
+		state.AnthropicEnabled = true
+		fmt.Println("🟣 Anthropic Configuration")
+		fmt.Println("──────────────────────────")
 		fmt.Println("  Get API key: https://console.anthropic.com/")
 		fmt.Println()
 		state.AnthropicKey = askPassword(reader, "API key (sk-ant-...)")
-	}
-	fmt.Println()
 
-	// OpenAI
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  🟢 OPENAI (GPT)                                            │")
-	fmt.Println("│  Models: GPT-4o, GPT-4 Turbo                                │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.OpenAIEnabled = askYesNo(reader, "Enable OpenAI?", false)
-	if state.OpenAIEnabled {
-		fmt.Println()
+	case "openai":
+		state.OpenAIEnabled = true
+		fmt.Println("🟢 OpenAI Configuration")
+		fmt.Println("───────────────────────")
 		fmt.Println("  Get API key: https://platform.openai.com/api-keys")
 		fmt.Println()
 		state.OpenAIKey = askPassword(reader, "API key (sk-...)")
-	}
-	fmt.Println()
 
-	// Gemini
-	fmt.Println("┌─────────────────────────────────────────────────────────────┐")
-	fmt.Println("│  🔵 GOOGLE (Gemini)                                         │")
-	fmt.Println("│  Models: Gemini 1.5 Pro, Gemini 1.5 Flash                   │")
-	fmt.Println("└─────────────────────────────────────────────────────────────┘")
-	state.GeminiEnabled = askYesNo(reader, "Enable Gemini?", false)
-	if state.GeminiEnabled {
-		fmt.Println()
+	case "gemini":
+		state.GeminiEnabled = true
+		fmt.Println("🔵 Google Gemini Configuration")
+		fmt.Println("──────────────────────────────")
 		fmt.Println("  Get API key: https://makersuite.google.com/app/apikey")
 		fmt.Println()
 		state.GeminiKey = askPassword(reader, "API key")
+
+	case "deepseek":
+		state.DeepSeekEnabled = true
+		fmt.Println("🔍 DeepSeek Configuration")
+		fmt.Println("─────────────────────────")
+		fmt.Println("  Get API key: https://platform.deepseek.com/")
+		fmt.Println()
+		state.DeepSeekKey = askPassword(reader, "API key")
+
+	case "glm":
+		state.GLMEnabled = true
+		fmt.Println("🇨🇳 Zhipu GLM Configuration")
+		fmt.Println("───────────────────────────")
+		fmt.Println("  Get API key: https://open.bigmodel.cn/")
+		fmt.Println()
+		state.GLMKey = askPassword(reader, "API key")
 	}
 
-	// Set default
-	if state.AnthropicEnabled {
-		state.LLMDefault = "anthropic"
-	} else if state.OpenAIEnabled {
-		state.LLMDefault = "openai"
-	} else if state.GeminiEnabled {
-		state.LLMDefault = "gemini"
+	// Ask about additional providers
+	fmt.Println()
+	if askYesNo(reader, "Configure additional LLM providers?", false) {
+		fmt.Println()
+		fmt.Println("Which additional providers? (comma-separated, e.g., 2,3)")
+		fmt.Println()
+		for name, num := range map[string]string{"anthropic": "1", "openai": "2", "gemini": "3", "deepseek": "4", "glm": "5"} {
+			if name != state.LLMDefault {
+				fmt.Printf("  %s. %s\n", num, name)
+			}
+		}
+		fmt.Println()
+		additional := askString(reader, "Additional providers", "")
+		for _, num := range parseNumberList(additional) {
+			switch num {
+			case 1:
+				if !state.AnthropicEnabled {
+					state.AnthropicEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://console.anthropic.com/")
+					state.AnthropicKey = askPassword(reader, "Anthropic API key (sk-ant-...)")
+				}
+			case 2:
+				if !state.OpenAIEnabled {
+					state.OpenAIEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://platform.openai.com/api-keys")
+					state.OpenAIKey = askPassword(reader, "OpenAI API key (sk-...)")
+				}
+			case 3:
+				if !state.GeminiEnabled {
+					state.GeminiEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://makersuite.google.com/app/apikey")
+					state.GeminiKey = askPassword(reader, "Gemini API key")
+				}
+			case 4:
+				if !state.DeepSeekEnabled {
+					state.DeepSeekEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://platform.deepseek.com/")
+					state.DeepSeekKey = askPassword(reader, "DeepSeek API key")
+				}
+			case 5:
+				if !state.GLMEnabled {
+					state.GLMEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://open.bigmodel.cn/")
+					state.GLMKey = askPassword(reader, "GLM API key")
+				}
+			}
+		}
 	}
 }
 
@@ -465,6 +580,10 @@ platforms:
     enabled: %t
     bot_token: "%s"
   
+  discord:
+    enabled: %t
+    bot_token: "%s"
+  
   slack:
     enabled: %t
     bot_token: "%s"
@@ -524,14 +643,23 @@ llm:
   gemini:
     enabled: %t
     api_key: "%s"
-    model: "gemini-1.5-pro"
+    model: "gemini-2.0-flash"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  deepseek:
+    enabled: %t
+    api_key: "%s"
+    model: "deepseek-chat"
     max_tokens: 4096
     temperature: 0.7
   
   glm:
-    enabled: false
-    api_key: ""
+    enabled: %t
+    api_key: "%s"
     model: "glm-4"
+    max_tokens: 4096
+    temperature: 0.7
 
 # Tools (all free, no API keys needed)
 tools:
@@ -553,6 +681,8 @@ tools:
 		allowedUsers,
 		state.TelegramEnabled,
 		state.TelegramToken,
+		state.DiscordEnabled,
+		state.DiscordToken,
 		state.SlackEnabled,
 		state.SlackBotToken,
 		state.SlackAppToken,
@@ -571,6 +701,10 @@ tools:
 		state.OpenAIKey,
 		state.GeminiEnabled,
 		state.GeminiKey,
+		state.DeepSeekEnabled,
+		state.DeepSeekKey,
+		state.GLMEnabled,
+		state.GLMKey,
 	)
 }
 
