@@ -196,7 +196,8 @@ func step2Platforms(reader *bufio.Reader, state *WizardState) {
 	fmt.Println("  2. discord    - Discord Bot")
 	fmt.Println("  3. slack      - Slack App")
 	fmt.Println("  4. whatsapp   - WhatsApp (beta)")
-	fmt.Println("  5. webhook    - HTTP Webhook endpoint")
+	fmt.Println()
+	fmt.Println("  💡 For webhook mode, run: magabot setup webhook")
 	fmt.Println()
 
 	choices := askString(reader, "Platforms to enable", "1")
@@ -257,29 +258,6 @@ func step2Platforms(reader *bufio.Reader, state *WizardState) {
 			fmt.Println("─────────────────────────")
 			fmt.Println("  ℹ️  WhatsApp will require QR code scan after starting the bot")
 
-		case 5:
-			state.WebhookEnabled = true
-			fmt.Println()
-			fmt.Println("🌐 Webhook Configuration")
-			fmt.Println("────────────────────────")
-			state.WebhookPort = askInt(reader, "Port", 8080)
-			fmt.Println()
-			fmt.Println("  Authentication method:")
-			fmt.Println("  1. none   - No authentication")
-			fmt.Println("  2. bearer - Bearer token")
-			fmt.Println("  3. hmac   - HMAC signature")
-			fmt.Println()
-			state.WebhookAuth = askChoice(reader, "Auth method", []string{"1", "2", "3"}, "2")
-			switch state.WebhookAuth {
-			case "1":
-				state.WebhookAuth = "none"
-			case "2", "bearer":
-				state.WebhookAuth = "bearer"
-				state.WebhookToken = askPassword(reader, "Bearer token (leave empty to generate)")
-			case "3", "hmac":
-				state.WebhookAuth = "hmac"
-				state.WebhookToken = askPassword(reader, "HMAC secret (leave empty to generate)")
-			}
 		}
 	}
 }

@@ -304,41 +304,76 @@ func setupWebhook() {
 	fmt.Println("────────────────")
 	fmt.Println()
 
+	fmt.Println("Which platform webhook do you want to configure?")
+	fmt.Println("  1. telegram - Telegram Bot API webhook")
+	fmt.Println("  2. slack    - Slack Events API webhook")
+	fmt.Println()
+
+	platform := askString(reader, "Platform", "1")
+
+	switch platform {
+	case "1", "telegram":
+		setupTelegramWebhook(reader)
+	case "2", "slack":
+		setupSlackWebhook(reader)
+	default:
+		fmt.Printf("Unknown platform: %s\n", platform)
+	}
+}
+
+// setupTelegramWebhook configures Telegram webhook mode
+func setupTelegramWebhook(reader *bufio.Reader) {
+	fmt.Println()
+	fmt.Println("📱 Telegram Webhook Setup")
+	fmt.Println("─────────────────────────")
+	fmt.Println()
+
 	cfg := loadOrCreateConfig()
 
-	if cfg.Platforms.Webhook == nil {
-		cfg.Platforms.Webhook = &config.WebhookConfig{}
+	if cfg.Platforms.Telegram == nil {
+		cfg.Platforms.Telegram = &config.TelegramConfig{}
 	}
-	cfg.Platforms.Webhook.Enabled = true
+	cfg.Platforms.Telegram.Enabled = true
+	cfg.Platforms.Telegram.UseWebhook = true
 
-	port := askInt(reader, "Port", 8080)
-	cfg.Platforms.Webhook.Port = port
-	cfg.Platforms.Webhook.Path = askString(reader, "Path", "/webhook")
-	cfg.Platforms.Webhook.Bind = askString(reader, "Bind address", "127.0.0.1")
+	// Get token if not set
+	fmt.Println("📝 Get your bot token from @BotFather on Telegram")
+	fmt.Println()
+	token := askString(reader, "Bot Token", "")
+	if token != "" {
+		saveSecret("telegram/bot_token", token)
+	}
 
 	fmt.Println()
-	fmt.Println("Authentication method:")
-	fmt.Println("  1. none   - No authentication")
-	fmt.Println("  2. bearer - Bearer token")
-	fmt.Println("  3. hmac   - HMAC signature")
+	fmt.Println("📝 Webhook URL Configuration")
+	fmt.Println("   Your server must be accessible from the internet (HTTPS required)")
 	fmt.Println()
 
-	auth := askString(reader, "Auth method (none/bearer/hmac)", "bearer")
-	cfg.Platforms.Webhook.AuthMethod = auth
+	webhookURL := askString(reader, "Webhook URL (e.g., https://yourdomain.com/telegram)", "")
+	cfg.Platforms.Telegram.WebhookURL = webhookURL
 
-	if auth == "bearer" {
-		token := askString(reader, "Bearer token (leave empty to generate)", "")
-		if token == "" {
-			token = security.GenerateKey()[:32]
-		}
-		saveSecret("webhook/bearer_token", token)
-		fmt.Printf("   Token: %s\n", token)
-	} else if auth == "hmac" {
-		secret := askString(reader, "HMAC secret (leave empty to generate)", "")
-		if secret == "" {
-			secret = security.GenerateKey()
-		}
-		saveSecret("webhook/hmac_secret", secret)
+	port := askInt(reader, "Local port to listen on", 8443)
+	cfg.Platforms.Telegram.WebhookPort = port
+
+	path := askString(reader, "Webhook path", "/telegram")
+	cfg.Platforms.Telegram.WebhookPath = path
+
+	// Optional: Secret token for verification
+	fmt.Println()
+	secret := askString(reader, "Secret token (leave empty to generate)", "")
+	if secret == "" {
+		secret = security.GenerateKey()[:32]
+	}
+	cfg.Platforms.Telegram.WebhookSecret = secret
+	fmt.Printf("   Secret: %s\n", secret)
+
+	// Admin user ID
+	fmt.Println()
+	userID := askString(reader, "Your Telegram User ID (optional)", "")
+	if userID != "" {
+		cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
+		cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
+		cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 	}
 
 	if err := cfg.Save(); err != nil {
@@ -347,8 +382,64 @@ func setupWebhook() {
 	}
 
 	fmt.Println()
-	fmt.Printf("✅ Webhook configured at http://%s:%d%s\n",
-		cfg.Platforms.Webhook.Bind, cfg.Platforms.Webhook.Port, cfg.Platforms.Webhook.Path)
+	fmt.Println("✅ Telegram webhook configured!")
+	fmt.Printf("   URL: %s%s\n", webhookURL, path)
+	fmt.Printf("   Port: %d\n", port)
+	fmt.Println()
+	fmt.Println("📝 After starting, run: magabot telegram set-webhook")
+
+	askRestart(reader)
+}
+
+// setupSlackWebhook configures Slack Events API webhook
+func setupSlackWebhook(reader *bufio.Reader) {
+	fmt.Println()
+	fmt.Println("💼 Slack Webhook Setup")
+	fmt.Println("──────────────────────")
+	fmt.Println()
+
+	cfg := loadOrCreateConfig()
+
+	if cfg.Platforms.Slack == nil {
+		cfg.Platforms.Slack = &config.SlackConfig{}
+	}
+	cfg.Platforms.Slack.Enabled = true
+	cfg.Platforms.Slack.UseWebhook = true
+
+	fmt.Println("📝 Create a Slack app at https://api.slack.com/apps")
+	fmt.Println("   1. Enable Event Subscriptions")
+	fmt.Println("   2. Set Request URL to your webhook endpoint")
+	fmt.Println("   3. Copy Signing Secret from Basic Information")
+	fmt.Println()
+
+	signingSecret := askString(reader, "Signing Secret", "")
+	if signingSecret != "" {
+		saveSecret("slack/signing_secret", signingSecret)
+	}
+
+	botToken := askString(reader, "Bot Token (xoxb-...)", "")
+	if botToken != "" {
+		saveSecret("slack/bot_token", botToken)
+	}
+
+	fmt.Println()
+	port := askInt(reader, "Local port to listen on", 3000)
+	cfg.Platforms.Slack.WebhookPort = port
+
+	path := askString(reader, "Webhook path", "/slack/events")
+	cfg.Platforms.Slack.WebhookPath = path
+
+	if err := cfg.Save(); err != nil {
+		fmt.Printf("❌ Failed to save config: %v\n", err)
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("✅ Slack webhook configured!")
+	fmt.Printf("   Endpoint: http://localhost:%d%s\n", port, path)
+	fmt.Println()
+	fmt.Println("📝 Set your Slack app's Request URL to:")
+	fmt.Printf("   https://yourdomain.com%s\n", path)
 
 	askRestart(reader)
 }

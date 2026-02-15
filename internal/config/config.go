@@ -111,6 +111,12 @@ type TelegramConfig struct {
 	AllowedChats []string `yaml:"allowed_chats"` // Allowed group/chat IDs
 	AllowGroups  bool     `yaml:"allow_groups"`
 	AllowDMs     bool     `yaml:"allow_dms"`
+	// Webhook mode (alternative to long polling)
+	UseWebhook    bool   `yaml:"use_webhook"`
+	WebhookURL    string `yaml:"webhook_url"`    // Public URL (https://yourdomain.com)
+	WebhookPort   int    `yaml:"webhook_port"`   // Local port to listen on
+	WebhookPath   string `yaml:"webhook_path"`   // Path (e.g., /telegram)
+	WebhookSecret string `yaml:"webhook_secret"` // Secret token for verification
 }
 
 // DiscordConfig for Discord platform
@@ -135,6 +141,11 @@ type SlackConfig struct {
 	AllowedChats []string `yaml:"allowed_chats"`
 	AllowGroups  bool     `yaml:"allow_groups"`
 	AllowDMs     bool     `yaml:"allow_dms"`
+	// Webhook mode (Events API instead of Socket Mode)
+	UseWebhook    bool   `yaml:"use_webhook"`
+	WebhookPort   int    `yaml:"webhook_port"` // Local port to listen on
+	WebhookPath   string `yaml:"webhook_path"` // Path (e.g., /slack/events)
+	SigningSecret string `yaml:"signing_secret"`
 }
 
 // WhatsAppConfig for WhatsApp platform
