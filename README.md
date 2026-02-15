@@ -22,6 +22,9 @@ A security-first, multi-platform chatbot with multi-LLM integration. Single bina
   - [Platform Setup](#platform-setup)
   - [Hooks Setup](#hooks-setup)
   - [Agent Sessions Setup](#agent-sessions-setup)
+- [Multi-Agent System](#multi-agent-system)
+- [Plugin System](#plugin-system)
+- [Semantic Memory](#semantic-memory)
 - [Commands](#commands)
   - [CLI Commands](#cli-commands)
   - [Chat Commands](#chat-commands)
@@ -761,6 +764,255 @@ Once a session is active, any message prefixed with `:send` is routed to the cod
 
 ---
 
+## Multi-Agent System
+
+Magabot supports spawning sub-agents for complex, long-running tasks. Each sub-agent runs in its own isolated session with independent context, allowing parallel execution and agent-to-agent communication.
+
+### Architecture
+
+```
+Main Agent (root)
+├── Sub-Agent 1 (research task)
+│   └── Sub-Agent 1.1 (deep dive)
+├── Sub-Agent 2 (code review)
+└── Sub-Agent 3 (documentation)
+```
+
+### Features
+
+- **Isolated Sessions**: Each sub-agent has its own conversation history and context
+- **Parallel Execution**: Multiple sub-agents can run concurrently
+- **Hierarchical Nesting**: Agents can spawn child agents (up to configurable depth)
+- **Inter-Agent Messaging**: Agents can send messages to each other via inbox channels
+- **Automatic Cleanup**: Completed agents are cleaned up after a configurable duration
+- **Persistence**: Agent state is persisted to disk for crash recovery
+- **Timeout Protection**: Each agent has a configurable timeout (default: 5 minutes)
+
+### Configuration
+
+```yaml
+# config.yaml
+subagents:
+  max_agents: 50       # Maximum concurrent agents
+  max_depth: 5         # Maximum nesting depth
+  max_history: 100     # Maximum messages per agent
+  default_timeout: 5m  # Default task timeout
+```
+
+### Chat Commands
+
+| Command | Description |
+|---------|-------------|
+| `/task spawn <description>` | Spawn a new sub-agent with the given task |
+| `/task list` | List all active sub-agents |
+| `/task status <id>` | Get status of a specific agent |
+| `/task cancel <id>` | Cancel a running agent |
+| `/task clear` | Clean up completed agents |
+
+### Agent States
+
+| State | Description |
+|-------|-------------|
+| `pending` | Agent created but not yet started |
+| `running` | Agent is executing its task |
+| `complete` | Task finished successfully |
+| `failed` | Task failed with an error |
+| `canceled` | Agent was manually canceled |
+| `timeout` | Task exceeded its timeout |
+
+### Security Considerations
+
+- Maximum concurrent agents limit prevents resource exhaustion
+- Nesting depth limit prevents infinite recursion
+- Task length validation (max 100KB)
+- Context entry limits (max 100 keys, 256 char key length)
+- Audit logging for agent lifecycle events
+
+---
+
+## Plugin System
+
+Extend Magabot functionality with plugins. Plugins are Go packages that implement the `Plugin` interface and can register commands, hooks, and event listeners.
+
+### Plugin Lifecycle
+
+```
+Unloaded → Loading → Initialized → Started → Stopping → Stopped
+                 ↓                      ↓
+               Error                  Error
+```
+
+### Creating a Plugin
+
+```go
+package myplugin
+
+import (
+    "context"
+    "github.com/kusa/magabot/internal/plugin"
+)
+
+type MyPlugin struct {
+    logger *slog.Logger
+}
+
+func (p *MyPlugin) Metadata() plugin.Metadata {
+    return plugin.Metadata{
+        ID:          "my-plugin",
+        Name:        "My Plugin",
+        Version:     "1.0.0",
+        Description: "A sample plugin",
+        Author:      "Your Name",
+        Priority:    plugin.PriorityNormal,
+    }
+}
+
+func (p *MyPlugin) Init(ctx plugin.Context) error {
+    p.logger = ctx.Logger()
+    
+    // Register a command
+    ctx.RegisterCommand("hello", func(ctx context.Context, cmd *plugin.Command) (string, error) {
+        return "Hello from my plugin!", nil
+    })
+    
+    // Register an event hook
+    ctx.RegisterHook("on_message", func(ctx context.Context, event string, data interface{}) error {
+        p.logger.Info("message received", "event", event)
+        return nil
+    })
+    
+    return nil
+}
+
+func (p *MyPlugin) Start(ctx context.Context) error {
+    p.logger.Info("plugin started")
+    return nil
+}
+
+func (p *MyPlugin) Stop(ctx context.Context) error {
+    p.logger.Info("plugin stopped")
+    return nil
+}
+```
+
+### Plugin Priority
+
+Plugins are initialized and started in priority order:
+
+| Priority | Value | Use Case |
+|----------|-------|----------|
+| `PriorityCore` | 0 | Core system plugins |
+| `PriorityHigh` | 100 | Critical dependencies |
+| `PriorityNormal` | 500 | Standard plugins |
+| `PriorityLow` | 900 | Optional features |
+| `PriorityLast` | 999 | Cleanup/finalization |
+
+### Plugin Context Services
+
+Plugins have access to these host services via the `Context` interface:
+
+| Method | Description |
+|--------|-------------|
+| `Logger()` | Get a namespaced logger |
+| `Config()` | Access plugin configuration |
+| `SetConfig(key, value)` | Update configuration |
+| `DataDir()` | Get plugin's data directory |
+| `SendMessage(platform, chatID, msg)` | Send a chat message |
+| `RegisterCommand(cmd, handler)` | Register a command |
+| `RegisterHook(event, handler)` | Register an event hook |
+| `GetPlugin(id)` | Access another plugin |
+| `Emit(event, data)` | Emit a custom event |
+
+### Security Considerations
+
+- Plugin IDs are validated to prevent path traversal
+- Command names are restricted to alphanumeric, underscores, and hyphens
+- Plugin data directories have restrictive permissions (0700)
+- Plugin initialization timeout: 30 seconds
+
+---
+
+## Semantic Memory
+
+Magabot includes a semantic memory system powered by vector embeddings. This enables the bot to remember information about users and retrieve contextually relevant memories during conversations.
+
+### Embedding Providers
+
+| Provider | Models | Best For |
+|----------|--------|----------|
+| OpenAI | `text-embedding-3-small`, `text-embedding-3-large` | General purpose, multilingual |
+| Voyage AI | `voyage-3`, `voyage-code-3` | Code understanding |
+| Cohere | `embed-english-v3.0`, `embed-multilingual-v3.0` | Multilingual search |
+| Local | Any sentence-transformers model | Privacy, offline use |
+
+### Configuration
+
+```yaml
+# config.yaml
+memory:
+  enabled: true
+  max_entries: 1000          # Maximum memories per user
+  context_limit: 2000        # Max tokens for context injection
+
+embedding:
+  provider: "openai"         # openai, voyage, cohere, local
+  model: "text-embedding-3-small"
+  api_key: "${OPENAI_API_KEY}"
+  # For local provider:
+  # base_url: "http://localhost:8080"
+```
+
+### Memory Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `fact` | Factual information | "User works at Acme Corp" |
+| `preference` | User preferences | "User prefers dark mode" |
+| `event` | Past events | "User's birthday is March 15" |
+| `note` | General notes | "Follow up on project X" |
+| `context` | Conversation context | Auto-extracted insights |
+
+### Chat Commands
+
+| Command | Description |
+|---------|-------------|
+| `/memory add <text>` | Store a new memory |
+| `/memory <text>` | Shortcut to add a memory |
+| `/memory search <query>` | Semantic search for memories |
+| `/memory list [type]` | List memories, optionally by type |
+| `/memory delete <id>` | Delete a specific memory |
+| `/memory clear` | Clear all memories |
+| `/memory stats` | Show memory statistics |
+
+### How It Works
+
+1. **Storage**: When you add a memory, it's embedded using the configured provider and stored in a local SQLite vector database.
+
+2. **Retrieval**: During conversations, relevant memories are retrieved using cosine similarity search and injected into the LLM prompt as context.
+
+3. **Automatic Extraction**: Optionally, the system can auto-extract important facts from conversations.
+
+```
+User: "Remember that I prefer Python over JavaScript"
+Bot: "Got it! I'll remember you prefer Python over JavaScript."
+
+[Later conversation]
+User: "What language should I use for this project?"
+Bot: [retrieves memory about Python preference]
+     "Based on your preference for Python, I'd recommend..."
+```
+
+### Security Considerations
+
+- Memories are stored per-user with filesystem isolation
+- Content length limit: 100KB per memory
+- Search results limited to prevent OOM (10,000 entries scanned max)
+- API responses use io.LimitReader (10MB max)
+- User IDs are sanitized for safe filesystem paths
+- SSRF protection: cloud provider URLs cannot point to private networks
+
+---
+
 ## Commands
 
 ### CLI Commands
@@ -1212,7 +1464,7 @@ If a config field already has a value, the secrets backend is not used for that 
 
 ## Cron Jobs
 
-Schedule messages to any platform channel.
+Schedule messages to any platform channel with enhanced scheduling support.
 
 ### Channel Format
 
@@ -1224,17 +1476,119 @@ discord:<channel_id>         # Discord channel
 webhook:<url>                # Custom webhook URL
 ```
 
-### Schedule Format
+### Schedule Types
 
-Standard cron syntax or shortcuts:
+Magabot supports three schedule types:
+
+#### Cron Expressions
+
+Standard 5-field or 6-field (with seconds) cron syntax:
 
 ```
-0 9 * * 1-5                 # 9am weekdays
+# 5-field: minute hour day month weekday
+0 9 * * 1-5                 # 9:00 AM weekdays
 0 */2 * * *                 # Every 2 hours
-30 8,12,17 * * *            # 8:30am, 12:30pm, 5:30pm
-@hourly                     # Every hour
-@daily                      # Daily at midnight
-@weekly                     # Every week
+30 8,12,17 * * *            # 8:30 AM, 12:30 PM, 5:30 PM
+0 9 1 * *                   # 9:00 AM on the 1st of each month
+
+# 6-field: second minute hour day month weekday
+0 30 9 * * 1-5              # 9:30:00 AM weekdays (with seconds)
+*/10 * * * * *              # Every 10 seconds
+```
+
+**Supported field values:**
+
+| Field | Range | Special Characters |
+|-------|-------|-------------------|
+| Second (optional) | 0-59 | `*` `,` `-` `/` |
+| Minute | 0-59 | `*` `,` `-` `/` |
+| Hour | 0-23 | `*` `,` `-` `/` |
+| Day of Month | 1-31 | `*` `,` `-` `/` |
+| Month | 1-12 or JAN-DEC | `*` `,` `-` `/` |
+| Day of Week | 0-6 or SUN-SAT | `*` `,` `-` `/` |
+
+**Predefined shortcuts:**
+
+| Shortcut | Equivalent | Description |
+|----------|------------|-------------|
+| `@yearly` | `0 0 0 1 1 *` | Once a year (Jan 1, midnight) |
+| `@monthly` | `0 0 0 1 * *` | Once a month (1st, midnight) |
+| `@weekly` | `0 0 0 * * 0` | Once a week (Sunday, midnight) |
+| `@daily` | `0 0 0 * * *` | Once a day (midnight) |
+| `@hourly` | `0 0 * * * *` | Once an hour (top of hour) |
+
+#### Interval Schedules
+
+Simple interval-based scheduling with `every`:
+
+```
+every 5m                    # Every 5 minutes
+every 2h                    # Every 2 hours
+every 1h30m                 # Every 1 hour 30 minutes
+every 24h                   # Every day
+every minute                # Every minute
+every hour                  # Every hour
+every day                   # Every 24 hours
+```
+
+**Supported units:** `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks)
+
+#### One-Shot Schedules
+
+Schedule a single execution at a specific time with `at`:
+
+```
+at 15:30                    # Today at 3:30 PM (or tomorrow if past)
+at 2024-12-25T09:00         # December 25, 2024 at 9:00 AM
+at 2024-12-31 23:59:59      # New Year's Eve countdown
+```
+
+**Supported formats:**
+- `HH:MM` - Time today (or tomorrow if past)
+- `HH:MM:SS` - Time with seconds
+- `YYYY-MM-DD` - Date at midnight
+- `YYYY-MM-DD HH:MM` - Date and time
+- `YYYY-MM-DDTHH:MM:SS` - ISO 8601 format
+
+### Timezone Support
+
+All schedules support timezone specification:
+
+```yaml
+cron:
+  jobs:
+    - name: "morning-report"
+      schedule: "0 9 * * 1-5"
+      timezone: "Asia/Jakarta"       # IANA timezone name
+      channel: "telegram:123456"
+      message: "Good morning! Here's your daily report."
+```
+
+**Common timezone aliases:**
+
+| Alias | IANA Name |
+|-------|-----------|
+| `WIB` | Asia/Jakarta |
+| `WITA` | Asia/Makassar |
+| `WIT` | Asia/Jayapura |
+| `JST` | Asia/Tokyo |
+| `SGT` | Asia/Singapore |
+| `EST` | America/New_York |
+| `PST` | America/Los_Angeles |
+| `UTC` | UTC |
+
+### CLI Commands
+
+```bash
+magabot cron list            # List all jobs
+magabot cron list -a         # Include disabled jobs
+magabot cron add             # Add a new job (interactive)
+magabot cron edit <id>       # Edit a job
+magabot cron delete <id>     # Delete a job
+magabot cron enable <id>     # Enable a job
+magabot cron disable <id>    # Disable a job
+magabot cron run <id>        # Run a job immediately
+magabot cron show <id>       # Show job details
 ```
 
 ---

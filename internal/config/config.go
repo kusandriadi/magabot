@@ -69,6 +69,15 @@ type Config struct {
 	// Agent sessions (coding agents via chat)
 	Agents AgentConfig `yaml:"agents"`
 
+	// Sub-agent system settings
+	SubAgents SubAgentConfig `yaml:"subagents"`
+
+	// Plugin system settings
+	Plugins PluginConfig `yaml:"plugins"`
+
+	// Embedding/Vector settings
+	Embedding EmbeddingConfig `yaml:"embedding"`
+
 	// Metadata
 	Version     string    `yaml:"version"`
 	LastUpdated time.Time `yaml:"last_updated"`
@@ -338,6 +347,42 @@ type VaultSecretsConfig struct {
 	TLSSkipVerify bool   `yaml:"tls_skip_verify,omitempty"`
 }
 
+// SubAgentConfig holds sub-agent system settings
+type SubAgentConfig struct {
+	Enabled    bool          `yaml:"enabled"`               // Enable sub-agent system
+	MaxAgents  int           `yaml:"max_agents"`            // Max concurrent agents (default: 50)
+	MaxDepth   int           `yaml:"max_depth"`             // Max nesting depth (default: 5)
+	MaxHistory int           `yaml:"max_history"`           // Max messages per agent (default: 100)
+	Timeout    time.Duration `yaml:"timeout"`               // Default task timeout (default: 5m)
+	Persist    bool          `yaml:"persist"`               // Persist agent state across restarts
+}
+
+// PluginConfig holds plugin system settings
+type PluginConfig struct {
+	Enabled    bool     `yaml:"enabled"`               // Enable plugin system
+	Dirs       []string `yaml:"dirs"`                  // Plugin directories to scan
+	AutoLoad   bool     `yaml:"auto_load"`             // Auto-load plugins on startup
+	AutoStart  bool     `yaml:"auto_start"`            // Auto-start plugins after loading
+	HotReload  bool     `yaml:"hot_reload"`            // Watch for plugin changes
+	Allowlist  []string `yaml:"allowlist,omitempty"`   // Only load these plugins (empty = all)
+	Denylist   []string `yaml:"denylist,omitempty"`    // Never load these plugins
+}
+
+// EmbeddingConfig holds embedding/vector settings
+type EmbeddingConfig struct {
+	Enabled      bool   `yaml:"enabled"`               // Enable embedding generation
+	Provider     string `yaml:"provider"`              // openai, voyage, cohere, local
+	APIKey       string `yaml:"api_key"`               // API key for provider
+	Model        string `yaml:"model"`                 // Embedding model name
+	BaseURL      string `yaml:"base_url,omitempty"`    // Custom API base URL
+	Dimensions   int    `yaml:"dimensions,omitempty"`  // Output dimensions
+	MaxBatchSize int    `yaml:"max_batch_size"`        // Max texts per batch (default: 100)
+	Timeout      int    `yaml:"timeout"`               // API timeout in seconds (default: 30)
+	// Memory integration
+	AutoEmbed    bool   `yaml:"auto_embed"`            // Auto-generate embeddings for memories
+	SearchLimit  int    `yaml:"search_limit"`          // Default search result limit (default: 10)
+}
+
 // LocalSecretsConfig holds local file-based secrets settings
 type LocalSecretsConfig struct {
 	Path string `yaml:"path"`
@@ -466,6 +511,46 @@ func (c *Config) setDefaults() {
 		if c.Platforms.Discord.Prefix == "" {
 			c.Platforms.Discord.Prefix = "!"
 		}
+	}
+
+	// SubAgent defaults
+	if c.SubAgents.MaxAgents <= 0 {
+		c.SubAgents.MaxAgents = 50
+	}
+	if c.SubAgents.MaxDepth <= 0 {
+		c.SubAgents.MaxDepth = 5
+	}
+	if c.SubAgents.MaxHistory <= 0 {
+		c.SubAgents.MaxHistory = 100
+	}
+	if c.SubAgents.Timeout <= 0 {
+		c.SubAgents.Timeout = 5 * time.Minute
+	}
+
+	// Plugin defaults
+	if len(c.Plugins.Dirs) == 0 {
+		c.Plugins.Dirs = []string{filepath.Join(home, ".magabot", "plugins")}
+	}
+	// Expand paths
+	for i, dir := range c.Plugins.Dirs {
+		c.Plugins.Dirs[i] = expandPath(dir)
+	}
+
+	// Embedding defaults
+	if c.Embedding.MaxBatchSize <= 0 {
+		c.Embedding.MaxBatchSize = 100
+	}
+	if c.Embedding.Timeout <= 0 {
+		c.Embedding.Timeout = 30
+	}
+	if c.Embedding.SearchLimit <= 0 {
+		c.Embedding.SearchLimit = 10
+	}
+	if c.Embedding.Provider == "" {
+		c.Embedding.Provider = "openai"
+	}
+	if c.Embedding.Model == "" {
+		c.Embedding.Model = "text-embedding-3-small"
 	}
 }
 
