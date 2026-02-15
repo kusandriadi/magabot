@@ -24,24 +24,28 @@ type WizardState struct {
 	EncryptionKey string
 
 	// Platforms
-	TelegramEnabled bool
-	TelegramToken   string
-	TelegramUserID  string
+	TelegramEnabled       bool
+	TelegramToken         string
+	TelegramUserID        string
+	TelegramMode          string // "bot", "webhook", "both"
+	TelegramWebhookURL    string
+	TelegramWebhookPort   int
+	TelegramWebhookPath   string
+	TelegramWebhookSecret string
 
 	DiscordEnabled bool
 	DiscordToken   string
 	DiscordUserID  string
 
-	SlackEnabled  bool
-	SlackBotToken string
-	SlackAppToken string
+	SlackEnabled       bool
+	SlackBotToken      string
+	SlackAppToken      string
+	SlackMode          string // "bot", "webhook", "both"
+	SlackWebhookPort   int
+	SlackWebhookPath   string
+	SlackSigningSecret string
 
 	WhatsAppEnabled bool
-
-	WebhookEnabled bool
-	WebhookPort    int
-	WebhookAuth    string
-	WebhookToken   string
 
 	// LLM
 	LLMDefault       string
@@ -197,8 +201,6 @@ func step2Platforms(reader *bufio.Reader, state *WizardState) {
 	fmt.Println("  3. slack      - Slack App")
 	fmt.Println("  4. whatsapp   - WhatsApp (beta)")
 	fmt.Println()
-	fmt.Println("  💡 For webhook mode, run: magabot setup webhook")
-	fmt.Println()
 
 	choices := askString(reader, "Platforms to enable", "1")
 	selected := parseNumberList(choices)
@@ -211,12 +213,43 @@ func step2Platforms(reader *bufio.Reader, state *WizardState) {
 			fmt.Println()
 			fmt.Println("📱 Telegram Configuration")
 			fmt.Println("─────────────────────────")
+			fmt.Println()
+			fmt.Println("  Connection mode:")
+			fmt.Println("  1. bot     - Long polling (simple, no server needed)")
+			fmt.Println("  2. webhook - HTTP webhook (requires public HTTPS URL)")
+			fmt.Println("  3. both    - Enable both modes")
+			fmt.Println()
+			modeChoice := askString(reader, "Mode", "1")
+			switch modeChoice {
+			case "2", "webhook":
+				state.TelegramMode = "webhook"
+			case "3", "both":
+				state.TelegramMode = "both"
+			default:
+				state.TelegramMode = "bot"
+			}
+
+			fmt.Println()
 			fmt.Println("  To get a bot token:")
 			fmt.Println("  1. Open Telegram and message @BotFather")
 			fmt.Println("  2. Send /newbot and follow the instructions")
 			fmt.Println("  3. Copy the token (format: 123456:ABC-DEF...)")
 			fmt.Println()
 			state.TelegramToken = askPassword(reader, "Bot token")
+
+			// Webhook configuration
+			if state.TelegramMode == "webhook" || state.TelegramMode == "both" {
+				fmt.Println()
+				fmt.Println("  Webhook configuration:")
+				fmt.Println("  Your server must be accessible via HTTPS")
+				fmt.Println()
+				state.TelegramWebhookURL = askString(reader, "Webhook URL (e.g., https://yourdomain.com)", "")
+				state.TelegramWebhookPort = askInt(reader, "Local port", 8443)
+				state.TelegramWebhookPath = askString(reader, "Path", "/telegram")
+				state.TelegramWebhookSecret = security.GenerateKey()[:32]
+				fmt.Printf("  Secret: %s\n", state.TelegramWebhookSecret)
+			}
+
 			fmt.Println()
 			fmt.Println("  To find your Telegram user ID:")
 			fmt.Println("  Message @userinfobot or @getmyid_bot")
@@ -242,14 +275,49 @@ func step2Platforms(reader *bufio.Reader, state *WizardState) {
 			fmt.Println()
 			fmt.Println("💼 Slack Configuration")
 			fmt.Println("──────────────────────")
+			fmt.Println()
+			fmt.Println("  Connection mode:")
+			fmt.Println("  1. bot     - Socket Mode (simple, no server needed)")
+			fmt.Println("  2. webhook - Events API (requires public URL)")
+			fmt.Println("  3. both    - Enable both modes")
+			fmt.Println()
+			modeChoice := askString(reader, "Mode", "1")
+			switch modeChoice {
+			case "2", "webhook":
+				state.SlackMode = "webhook"
+			case "3", "both":
+				state.SlackMode = "both"
+			default:
+				state.SlackMode = "bot"
+			}
+
+			fmt.Println()
 			fmt.Println("  To get Slack tokens:")
 			fmt.Println("  1. Go to api.slack.com/apps and create an app")
-			fmt.Println("  2. Enable Socket Mode (get App Token xapp-...)")
-			fmt.Println("  3. Add Bot Token Scopes and install to workspace")
-			fmt.Println("  4. Copy Bot Token (xoxb-...)")
+			fmt.Println("  2. Add Bot Token Scopes and install to workspace")
+			fmt.Println("  3. Copy Bot Token (xoxb-...)")
 			fmt.Println()
 			state.SlackBotToken = askPassword(reader, "Bot token (xoxb-...)")
-			state.SlackAppToken = askPassword(reader, "App token (xapp-...)")
+
+			// Socket Mode (bot mode)
+			if state.SlackMode == "bot" || state.SlackMode == "both" {
+				fmt.Println()
+				fmt.Println("  For Socket Mode, you need an App Token:")
+				fmt.Println("  Go to Basic Information → App-Level Tokens → Generate")
+				fmt.Println()
+				state.SlackAppToken = askPassword(reader, "App token (xapp-...)")
+			}
+
+			// Webhook configuration
+			if state.SlackMode == "webhook" || state.SlackMode == "both" {
+				fmt.Println()
+				fmt.Println("  Webhook configuration:")
+				fmt.Println("  Go to Basic Information → Copy Signing Secret")
+				fmt.Println()
+				state.SlackSigningSecret = askPassword(reader, "Signing Secret")
+				state.SlackWebhookPort = askInt(reader, "Local port", 3000)
+				state.SlackWebhookPath = askString(reader, "Path", "/slack/events")
+			}
 
 		case 4:
 			state.WhatsAppEnabled = true
@@ -527,11 +595,6 @@ func generateWizardConfig(state *WizardState) string {
 		}
 	}
 
-	webhookToken := state.WebhookToken
-	if webhookToken == "" {
-		webhookToken = security.GenerateKey()[:32]
-	}
-
 	return fmt.Sprintf(`# Magabot Configuration
 # Generated by setup wizard
 
@@ -557,6 +620,11 @@ platforms:
   telegram:
     enabled: %t
     bot_token: "%s"
+    use_webhook: %t
+    webhook_url: "%s"
+    webhook_port: %d
+    webhook_path: "%s"
+    webhook_secret: "%s"
   
   discord:
     enabled: %t
@@ -566,17 +634,13 @@ platforms:
     enabled: %t
     bot_token: "%s"
     app_token: "%s"
+    use_webhook: %t
+    webhook_port: %d
+    webhook_path: "%s"
+    signing_secret: "%s"
   
   whatsapp:
     enabled: %t
-  
-  webhook:
-    enabled: %t
-    port: %d
-    path: "/webhook"
-    bind: "127.0.0.1"
-    auth_method: "%s"
-    bearer_token: "%s"
 
 # Storage
 storage:
@@ -657,21 +721,32 @@ tools:
 		state.VaultAddress,
 		state.EncryptionKey,
 		allowedUsers,
+		// Telegram
 		state.TelegramEnabled,
 		state.TelegramToken,
+		state.TelegramMode == "webhook" || state.TelegramMode == "both",
+		state.TelegramWebhookURL,
+		state.TelegramWebhookPort,
+		state.TelegramWebhookPath,
+		state.TelegramWebhookSecret,
+		// Discord
 		state.DiscordEnabled,
 		state.DiscordToken,
+		// Slack
 		state.SlackEnabled,
 		state.SlackBotToken,
 		state.SlackAppToken,
+		state.SlackMode == "webhook" || state.SlackMode == "both",
+		state.SlackWebhookPort,
+		state.SlackWebhookPath,
+		state.SlackSigningSecret,
+		// WhatsApp
 		state.WhatsAppEnabled,
-		state.WebhookEnabled,
-		state.WebhookPort,
-		state.WebhookAuth,
-		webhookToken,
+		// Storage/Logging
 		dataDir,
 		dataDir,
 		logFile,
+		// LLM
 		state.LLMDefault,
 		state.AnthropicEnabled,
 		state.AnthropicKey,
