@@ -118,7 +118,7 @@ func TestJobPersistence(t *testing.T) {
 		Message:  "Persisted",
 		Enabled:  true,
 	}
-_, _ = store1.Create(job)
+_ = store1.Create(job)
 	jobID := job.ID
 
 	// Create new store (simulates restart)
@@ -172,7 +172,7 @@ func TestJobTimestamps(t *testing.T) {
 		Schedule: "0 9 * * *",
 		Enabled:  true,
 	}
-_, _ = store.Create(job)
+_ = store.Create(job)
 	after := time.Now()
 
 	if job.CreatedAt.Before(before) || job.CreatedAt.After(after) {
