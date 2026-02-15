@@ -304,21 +304,114 @@ func setupWebhook() {
 	fmt.Println("────────────────")
 	fmt.Println()
 
-	fmt.Println("Which platform webhook do you want to configure?")
-	fmt.Println("  1. telegram - Telegram Bot API webhook")
-	fmt.Println("  2. slack    - Slack Events API webhook")
+	fmt.Println("Which webhook do you want to configure?")
+	fmt.Println("  1. api      - Generic HTTP API (receive external requests)")
+	fmt.Println("  2. telegram - Telegram Bot API webhook mode")
+	fmt.Println("  3. slack    - Slack Events API webhook mode")
 	fmt.Println()
 
-	platform := askString(reader, "Platform", "1")
+	choice := askString(reader, "Webhook type", "1")
 
-	switch platform {
-	case "1", "telegram":
+	switch choice {
+	case "1", "api":
+		setupAPIWebhook(reader)
+	case "2", "telegram":
 		setupTelegramWebhook(reader)
-	case "2", "slack":
+	case "3", "slack":
 		setupSlackWebhook(reader)
 	default:
-		fmt.Printf("Unknown platform: %s\n", platform)
+		fmt.Printf("Unknown webhook type: %s\n", choice)
 	}
+}
+
+// setupAPIWebhook configures generic HTTP API webhook
+func setupAPIWebhook(reader *bufio.Reader) {
+	fmt.Println()
+	fmt.Println("🌐 HTTP API Webhook Setup")
+	fmt.Println("─────────────────────────")
+	fmt.Println()
+	fmt.Println("  This creates an HTTP endpoint that external services can call")
+	fmt.Println("  to send messages through the bot.")
+	fmt.Println()
+
+	cfg := loadOrCreateConfig()
+
+	if cfg.Platforms.Webhook == nil {
+		cfg.Platforms.Webhook = &config.WebhookConfig{}
+	}
+	cfg.Platforms.Webhook.Enabled = true
+
+	port := askInt(reader, "Port", 8080)
+	cfg.Platforms.Webhook.Port = port
+
+	path := askString(reader, "Path", "/webhook")
+	cfg.Platforms.Webhook.Path = path
+
+	bind := askString(reader, "Bind address", "127.0.0.1")
+	cfg.Platforms.Webhook.Bind = bind
+
+	fmt.Println()
+	fmt.Println("  Authentication method:")
+	fmt.Println("  1. none   - No authentication (not recommended)")
+	fmt.Println("  2. bearer - Bearer token (simple, recommended)")
+	fmt.Println("  3. hmac   - HMAC-SHA256 signature (secure)")
+	fmt.Println()
+
+	authChoice := askString(reader, "Auth method", "2")
+	switch authChoice {
+	case "1", "none":
+		cfg.Platforms.Webhook.AuthMethod = "none"
+	case "3", "hmac":
+		cfg.Platforms.Webhook.AuthMethod = "hmac"
+		secret := askString(reader, "HMAC secret (leave empty to generate)", "")
+		if secret == "" {
+			secret = security.GenerateKey()
+		}
+		cfg.Platforms.Webhook.HMACSecret = secret
+		saveSecret("webhook/hmac_secret", secret)
+		fmt.Printf("   Secret: %s\n", secret)
+	default:
+		cfg.Platforms.Webhook.AuthMethod = "bearer"
+		token := askString(reader, "Bearer token (leave empty to generate)", "")
+		if token == "" {
+			token = security.GenerateKey()[:32]
+		}
+		cfg.Platforms.Webhook.BearerToken = token
+		saveSecret("webhook/bearer_token", token)
+		fmt.Printf("   Token: %s\n", token)
+	}
+
+	if err := cfg.Save(); err != nil {
+		fmt.Printf("❌ Failed to save config: %v\n", err)
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("✅ HTTP API webhook configured!")
+	fmt.Printf("   Endpoint: http://%s:%d%s\n", bind, port, path)
+	fmt.Println()
+	fmt.Println("📝 Usage example:")
+	if cfg.Platforms.Webhook.AuthMethod == "bearer" {
+		fmt.Printf(`   curl -X POST http://%s:%d%s \
+     -H "Authorization: Bearer %s" \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Hello from webhook!"}'
+`, bind, port, path, cfg.Platforms.Webhook.BearerToken)
+	} else if cfg.Platforms.Webhook.AuthMethod == "hmac" {
+		fmt.Printf(`   # With HMAC signature
+   curl -X POST http://%s:%d%s \
+     -H "X-Hub-Signature-256: sha256=<signature>" \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Hello from webhook!"}'
+`, bind, port, path)
+	} else {
+		fmt.Printf(`   curl -X POST http://%s:%d%s \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Hello from webhook!"}'
+`, bind, port, path)
+	}
+
+	askRestart(reader)
 }
 
 // setupTelegramWebhook configures Telegram webhook mode
