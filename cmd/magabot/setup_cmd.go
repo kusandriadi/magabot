@@ -328,41 +328,6 @@ func setupWebhook() {
 	bind := askString(reader, "Bind address", "127.0.0.1")
 	cfg.Platforms.Webhook.Bind = bind
 
-	// Authentication
-	fmt.Println()
-	fmt.Println("🔐 Authentication")
-	fmt.Println("─────────────────")
-	fmt.Println("  1. bearer - Bearer token (recommended)")
-	fmt.Println("  2. hmac   - HMAC-SHA256 signature")
-	fmt.Println("  3. none   - No authentication")
-	fmt.Println()
-
-	authChoice := askString(reader, "Auth method", "1")
-	var bearerToken, hmacSecret string
-	switch authChoice {
-	case "2", "hmac":
-		cfg.Platforms.Webhook.AuthMethod = "hmac"
-		hmacSecret = askString(reader, "HMAC secret (leave empty to generate)", "")
-		if hmacSecret == "" {
-			hmacSecret = security.GenerateKey()
-		}
-		cfg.Platforms.Webhook.HMACSecret = hmacSecret
-		saveSecret("webhook/hmac_secret", hmacSecret)
-		fmt.Printf("   Secret: %s\n", hmacSecret)
-	case "3", "none":
-		cfg.Platforms.Webhook.AuthMethod = "none"
-		fmt.Println("   ⚠️  No authentication - use IP allowlist for security")
-	default:
-		cfg.Platforms.Webhook.AuthMethod = "bearer"
-		bearerToken = askString(reader, "Bearer token (leave empty to generate)", "")
-		if bearerToken == "" {
-			bearerToken = security.GenerateKey()[:32]
-		}
-		cfg.Platforms.Webhook.BearerToken = bearerToken
-		saveSecret("webhook/bearer_token", bearerToken)
-		fmt.Printf("   Token: %s\n", bearerToken)
-	}
-
 	// Platform integrations
 	fmt.Println()
 	fmt.Println("📱 Platform Integrations")
@@ -377,9 +342,11 @@ func setupWebhook() {
 	platforms := askString(reader, "Platforms (e.g., 1,2 or telegram,slack)", "1")
 	
 	var allowedUsers []string
+	bearerTokens := make(map[string]string) // token -> user_id
 	hasTelegram := strings.Contains(platforms, "1") || strings.Contains(strings.ToLower(platforms), "telegram")
 	hasSlack := strings.Contains(platforms, "2") || strings.Contains(strings.ToLower(platforms), "slack")
 	hasGitHub := strings.Contains(platforms, "3") || strings.Contains(strings.ToLower(platforms), "github")
+	hasCustom := strings.Contains(platforms, "4") || strings.Contains(strings.ToLower(platforms), "custom")
 
 	// Configure Telegram webhook
 	if hasTelegram {
@@ -403,11 +370,15 @@ func setupWebhook() {
 
 		userID := askString(reader, "Your Telegram User ID", "")
 		if userID != "" {
+			tgUser := "telegram:" + userID
 			cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
 			cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
 			cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
-			// Auto-add to webhook allowlist
-			allowedUsers = append(allowedUsers, "telegram:"+userID)
+			// Generate unique token for this user
+			userToken := security.GenerateKey()[:32]
+			bearerTokens[userToken] = tgUser
+			allowedUsers = append(allowedUsers, tgUser)
+			fmt.Printf("   🔑 Token for %s: %s\n", tgUser, userToken)
 		}
 
 		webhookURL := askString(reader, "Public HTTPS URL (e.g., https://yourdomain.com)", "")
@@ -441,10 +412,14 @@ func setupWebhook() {
 
 		slackUserID := askString(reader, "Your Slack User ID (e.g., U1234567)", "")
 		if slackUserID != "" {
+			slackUser := "slack:" + slackUserID
 			cfg.Platforms.Slack.Admins = util.AddUnique(cfg.Platforms.Slack.Admins, slackUserID)
 			cfg.Platforms.Slack.AllowedUsers = util.AddUnique(cfg.Platforms.Slack.AllowedUsers, slackUserID)
-			// Auto-add to webhook allowlist
-			allowedUsers = append(allowedUsers, "slack:"+slackUserID)
+			// Generate unique token for this user
+			userToken := security.GenerateKey()[:32]
+			bearerTokens[userToken] = slackUser
+			allowedUsers = append(allowedUsers, slackUser)
+			fmt.Printf("   🔑 Token for %s: %s\n", slackUser, userToken)
 		}
 	}
 
@@ -453,27 +428,53 @@ func setupWebhook() {
 		fmt.Println()
 		fmt.Println("🐙 GitHub Configuration")
 		fmt.Println("───────────────────────")
-		githubUser := askString(reader, "GitHub username (or * for all)", "*")
+		fmt.Println("  Note: GitHub webhooks use HMAC signing, not bearer tokens")
+		githubUser := askString(reader, "GitHub username", "")
 		if githubUser != "" {
-			allowedUsers = append(allowedUsers, "github:"+githubUser)
-		}
-	}
-
-	// Additional allowed users
-	fmt.Println()
-	fmt.Println("👥 Additional Allowed Users (optional)")
-	fmt.Println("──────────────────────────────────────")
-	fmt.Println("  Format: prefix:id (e.g., grafana, custom:myapp)")
-	additionalUsers := askString(reader, "Additional users (comma-separated)", "")
-	if additionalUsers != "" {
-		for _, u := range strings.Split(additionalUsers, ",") {
-			u = strings.TrimSpace(u)
-			if u != "" {
-				allowedUsers = append(allowedUsers, u)
+			ghUser := "github:" + githubUser
+			// Generate HMAC secret for GitHub
+			ghSecret := security.GenerateKey()[:40]
+			if cfg.Platforms.Webhook.HMACUsers == nil {
+				cfg.Platforms.Webhook.HMACUsers = make(map[string]string)
 			}
+			cfg.Platforms.Webhook.HMACUsers[ghSecret] = ghUser
+			allowedUsers = append(allowedUsers, ghUser)
+			fmt.Printf("   🔑 HMAC Secret for %s: %s\n", ghUser, ghSecret)
+			fmt.Println("   Use this secret in GitHub webhook settings")
 		}
 	}
 
+	// Configure custom services
+	if hasCustom {
+		fmt.Println()
+		fmt.Println("🔧 Custom Service Configuration")
+		fmt.Println("────────────────────────────────")
+		for {
+			customUser := askString(reader, "Service name (e.g., grafana, myapp) or Enter to finish", "")
+			if customUser == "" {
+				break
+			}
+			// Generate unique token for this service
+			userToken := security.GenerateKey()[:32]
+			bearerTokens[userToken] = customUser
+			allowedUsers = append(allowedUsers, customUser)
+			fmt.Printf("   🔑 Token for %s: %s\n", customUser, userToken)
+		}
+	}
+
+	// Validate allowlist is not empty
+	if len(allowedUsers) == 0 {
+		fmt.Println()
+		fmt.Println("❌ Error: At least one user/service must be configured")
+		fmt.Println("   Webhook requires user allowlist for security")
+		return
+	}
+
+	// Set auth method and tokens
+	if len(bearerTokens) > 0 {
+		cfg.Platforms.Webhook.AuthMethod = "bearer"
+		cfg.Platforms.Webhook.BearerTokens = bearerTokens
+	}
 	cfg.Platforms.Webhook.AllowedUsers = allowedUsers
 
 	// Save config
@@ -487,10 +488,8 @@ func setupWebhook() {
 	fmt.Println("✅ Webhook configured!")
 	fmt.Println("═══════════════════════")
 	fmt.Printf("   Endpoint: http://%s:%d%s\n", bind, port, path)
-	fmt.Printf("   Auth: %s\n", cfg.Platforms.Webhook.AuthMethod)
-	if len(allowedUsers) > 0 {
-		fmt.Printf("   Allowed: %s\n", strings.Join(allowedUsers, ", "))
-	}
+	fmt.Printf("   Auth: bearer (token-per-user)\n")
+	fmt.Printf("   Allowed: %s\n", strings.Join(allowedUsers, ", "))
 
 	if hasTelegram {
 		fmt.Println()
@@ -507,19 +506,17 @@ func setupWebhook() {
 	}
 
 	fmt.Println()
-	fmt.Println("📝 Test with curl:")
-	if cfg.Platforms.Webhook.AuthMethod == "bearer" {
-		fmt.Printf(`   curl -X POST http://%s:%d%s \
-     -H "Authorization: Bearer %s" \
+	fmt.Println("📝 Usage - each user/service uses their unique token:")
+	fmt.Printf(`   curl -X POST http://%s:%d%s \
+     -H "Authorization: Bearer <your-token>" \
      -H "Content-Type: application/json" \
-     -d '{"message": "Hello!", "user_id": "test"}'
-`, bind, port, path, bearerToken)
-	} else {
-		fmt.Printf(`   curl -X POST http://%s:%d%s \
-     -H "Content-Type: application/json" \
-     -d '{"message": "Hello!", "user_id": "test"}'
+     -d '{"message": "Hello!"}'
 `, bind, port, path)
-	}
+	fmt.Println()
+	fmt.Println("⚠️  Security notes:")
+	fmt.Println("   - Each token maps to one user (token IS the identity)")
+	fmt.Println("   - User ID in payload is ignored (can't be spoofed)")
+	fmt.Println("   - Store tokens securely, don't share between services")
 
 	askRestart(reader)
 }

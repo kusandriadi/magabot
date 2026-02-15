@@ -34,18 +34,20 @@ type Server struct {
 
 // Config for webhook server
 type Config struct {
-	Port          int
-	Path          string
-	Bind          string
-	AuthMethod    string // none, bearer, basic, hmac
-	BearerToken   string
-	BasicUser     string
-	BasicPass     string
-	HMACSecret    string
-	AllowedIPs    []string
-	AllowedUsers  []string // Allowed user IDs (X-User-ID header or payload)
-	MaxBodySize   int64
-	Logger        *slog.Logger
+	Port         int
+	Path         string
+	Bind         string
+	AuthMethod   string            // none, bearer, basic, hmac
+	BearerTokens map[string]string // token -> user_id mapping (secure: token IS the identity)
+	BearerToken  string            // legacy: single token (user_id from payload - less secure)
+	BasicUser    string
+	BasicPass    string
+	HMACSecret   string
+	HMACUsers    map[string]string // secret -> user_id mapping
+	AllowedIPs   []string
+	AllowedUsers []string // Required: allowed user IDs
+	MaxBodySize  int64
+	Logger       *slog.Logger
 }
 
 // New creates a new webhook server
@@ -144,8 +146,9 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authentication
-	if !s.authenticate(r) {
+	// Authentication - returns user_id from token mapping
+	authUserID, ok := s.authenticate(r)
+	if !ok {
 		s.logger.Warn("webhook auth failed", "ip", getClientIP(r))
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -159,26 +162,31 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Parse message and user ID from payload
-	text, userID := s.parsePayload(body, r)
+	// Parse message from payload
+	text, payloadUserID := s.parsePayload(body, r)
 	if text == "" {
 		http.Error(w, "No message found", http.StatusBadRequest)
 		return
 	}
 
-	// User ID from header takes precedence
-	if headerUserID := r.Header.Get("X-User-ID"); headerUserID != "" {
-		userID = headerUserID
-	}
-	// Fallback to X-Webhook-Source for backward compatibility
+	// User ID priority: auth token > header > payload
+	userID := authUserID
 	if userID == "" {
-		userID = r.Header.Get("X-Webhook-Source")
+		if headerUserID := r.Header.Get("X-User-ID"); headerUserID != "" {
+			userID = headerUserID
+		} else if payloadUserID != "" {
+			userID = payloadUserID
+		} else {
+			userID = r.Header.Get("X-Webhook-Source")
+		}
 	}
 	if userID == "" {
-		userID = "anonymous"
+		s.logger.Warn("webhook rejected: no user_id", "ip", getClientIP(r))
+		http.Error(w, "Forbidden: user_id required", http.StatusForbidden)
+		return
 	}
 
-	// User allowlist check
+	// User allowlist check (mandatory)
 	if !s.checkUser(userID) {
 		s.logger.Warn("webhook blocked by user allowlist", "user_id", userID, "ip", getClientIP(r))
 		http.Error(w, "Forbidden: user not allowed", http.StatusForbidden)
@@ -228,53 +236,93 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-// authenticate verifies the request
-func (s *Server) authenticate(r *http.Request) bool {
+// authenticate verifies the request and returns the user_id from token mapping.
+// Returns (userID, true) on success, ("", false) on failure.
+// If using token-to-user mapping, the token determines the user identity (secure).
+// If using legacy single token, returns ("", true) and user_id comes from payload (less secure).
+func (s *Server) authenticate(r *http.Request) (string, bool) {
 	switch s.config.AuthMethod {
 	case "none", "":
-		return true
+		return "", true
 		
 	case "bearer":
 		auth := r.Header.Get("Authorization")
-		expected := "Bearer " + s.config.BearerToken
-		return subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) == 1
+		if !strings.HasPrefix(auth, "Bearer ") {
+			return "", false
+		}
+		token := strings.TrimPrefix(auth, "Bearer ")
+		
+		// Check token-to-user mapping (secure: token IS the identity)
+		if len(s.config.BearerTokens) > 0 {
+			for t, userID := range s.config.BearerTokens {
+				if subtle.ConstantTimeCompare([]byte(token), []byte(t)) == 1 {
+					return userID, true
+				}
+			}
+			return "", false
+		}
+		
+		// Legacy: single token (user_id from payload)
+		if subtle.ConstantTimeCompare([]byte(token), []byte(s.config.BearerToken)) == 1 {
+			return "", true
+		}
+		return "", false
 		
 	case "basic":
 		user, pass, ok := r.BasicAuth()
 		if !ok {
-			return false
+			return "", false
 		}
-		return subtle.ConstantTimeCompare([]byte(user), []byte(s.config.BasicUser)) == 1 &&
-			subtle.ConstantTimeCompare([]byte(pass), []byte(s.config.BasicPass)) == 1
+		if subtle.ConstantTimeCompare([]byte(user), []byte(s.config.BasicUser)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(pass), []byte(s.config.BasicPass)) == 1 {
+			return user, true // username is the user_id
+		}
+		return "", false
 			
 	case "hmac":
-		if s.config.HMACSecret == "" {
-			return false
-		}
 		// Check X-Hub-Signature-256 (GitHub style)
 		sig := r.Header.Get("X-Hub-Signature-256")
 		if sig == "" {
 			sig = r.Header.Get("X-Signature")
 		}
 		if sig == "" {
-			return false
+			return "", false
 		}
 
-		// Apply same body size limit as handleWebhook to prevent OOM
+		// Read body for signature verification
 		body, err := io.ReadAll(io.LimitReader(r.Body, s.config.MaxBodySize))
 		if err != nil {
-			return false
+			return "", false
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 
+		// Check HMAC-to-user mapping
+		if len(s.config.HMACUsers) > 0 {
+			for secret, userID := range s.config.HMACUsers {
+				mac := hmac.New(sha256.New, []byte(secret))
+				mac.Write(body)
+				expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+				if subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1 {
+					return userID, true
+				}
+			}
+			return "", false
+		}
+
+		// Legacy: single secret
+		if s.config.HMACSecret == "" {
+			return "", false
+		}
 		mac := hmac.New(sha256.New, []byte(s.config.HMACSecret))
 		mac.Write(body)
 		expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-
-		return subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
+		if subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1 {
+			return "", true
+		}
+		return "", false
 	}
 	
-	return false
+	return "", false
 }
 
 // checkIP checks if the client IP is allowed

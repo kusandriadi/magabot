@@ -77,7 +77,8 @@ func TestServerSend(t *testing.T) {
 
 func TestHandleWebhook(t *testing.T) {
 	s := newTestServer(&Config{
-		AuthMethod: "none",
+		AuthMethod:   "none",
+		AllowedUsers: []string{"testuser"},
 	})
 
 	t.Run("MethodNotAllowed", func(t *testing.T) {
@@ -91,7 +92,7 @@ func TestHandleWebhook(t *testing.T) {
 	})
 
 	t.Run("ValidPost", func(t *testing.T) {
-		body := bytes.NewReader([]byte(`{"message": "hello"}`))
+		body := bytes.NewReader([]byte(`{"message": "hello", "user_id": "testuser"}`))
 		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.RemoteAddr = "127.0.0.1:12345"
@@ -113,7 +114,7 @@ func TestHandleWebhook(t *testing.T) {
 			return "response", nil
 		})
 
-		body := bytes.NewReader([]byte(`{"message": "hello"}`))
+		body := bytes.NewReader([]byte(`{"message": "hello", "user_id": "testuser"}`))
 		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.RemoteAddr = "127.0.0.1:12345"
@@ -136,7 +137,7 @@ func TestAuthenticateBearerToken(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 		req.Header.Set("Authorization", "Bearer secret-token-123")
 
-		if !s.authenticate(req) {
+		if _, ok := s.authenticate(req); !ok {
 			t.Error("Valid bearer token should authenticate")
 		}
 	})
@@ -145,7 +146,7 @@ func TestAuthenticateBearerToken(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 		req.Header.Set("Authorization", "Bearer wrong-token")
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("Invalid bearer token should not authenticate")
 		}
 	})
@@ -153,7 +154,7 @@ func TestAuthenticateBearerToken(t *testing.T) {
 	t.Run("MissingToken", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("Missing token should not authenticate")
 		}
 	})
@@ -170,7 +171,7 @@ func TestAuthenticateBasic(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 		req.SetBasicAuth("admin", "password123")
 
-		if !s.authenticate(req) {
+		if _, ok := s.authenticate(req); !ok {
 			t.Error("Valid basic auth should authenticate")
 		}
 	})
@@ -179,7 +180,7 @@ func TestAuthenticateBasic(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 		req.SetBasicAuth("admin", "wrongpassword")
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("Wrong password should not authenticate")
 		}
 	})
@@ -188,7 +189,7 @@ func TestAuthenticateBasic(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 		req.SetBasicAuth("wronguser", "password123")
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("Wrong user should not authenticate")
 		}
 	})
@@ -196,7 +197,7 @@ func TestAuthenticateBasic(t *testing.T) {
 	t.Run("NoAuth", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("No auth should not authenticate")
 		}
 	})
@@ -218,7 +219,7 @@ func TestAuthenticateHMAC(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
 		req.Header.Set("X-Hub-Signature-256", signature)
 
-		if !s.authenticate(req) {
+		if _, ok := s.authenticate(req); !ok {
 			t.Error("Valid HMAC should authenticate")
 		}
 	})
@@ -228,7 +229,7 @@ func TestAuthenticateHMAC(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
 		req.Header.Set("X-Hub-Signature-256", "sha256=invalid")
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("Invalid HMAC should not authenticate")
 		}
 	})
@@ -237,7 +238,7 @@ func TestAuthenticateHMAC(t *testing.T) {
 		body := []byte(`{"event": "test"}`)
 		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
 
-		if s.authenticate(req) {
+		if _, ok := s.authenticate(req); ok {
 			t.Error("Missing signature should not authenticate")
 		}
 	})
@@ -251,7 +252,7 @@ func TestAuthenticateHMAC(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
 		req.Header.Set("X-Signature", signature)
 
-		if !s.authenticate(req) {
+		if _, ok := s.authenticate(req); !ok {
 			t.Error("X-Signature header should work")
 		}
 	})
@@ -261,7 +262,7 @@ func TestAuthenticateNone(t *testing.T) {
 	t.Run("AuthNone", func(t *testing.T) {
 		s := newTestServer(&Config{AuthMethod: "none"})
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
-		if !s.authenticate(req) {
+		if _, ok := s.authenticate(req); !ok {
 			t.Error("Auth none should always pass")
 		}
 	})
@@ -269,7 +270,7 @@ func TestAuthenticateNone(t *testing.T) {
 	t.Run("AuthEmpty", func(t *testing.T) {
 		s := newTestServer(&Config{AuthMethod: ""})
 		req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
-		if !s.authenticate(req) {
+		if _, ok := s.authenticate(req); !ok {
 			t.Error("Empty auth should default to none")
 		}
 	})
@@ -512,12 +513,15 @@ func TestServerStartStop(t *testing.T) {
 }
 
 func TestWebhookResponse(t *testing.T) {
-	s := newTestServer(&Config{AuthMethod: "none"})
+	s := newTestServer(&Config{
+		AuthMethod:   "none",
+		AllowedUsers: []string{"testuser"},
+	})
 	s.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
 		return "bot response", nil
 	})
 
-	body := bytes.NewReader([]byte(`{"message": "test"}`))
+	body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
 	req := httptest.NewRequest(http.MethodPost, "/webhook", body)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
@@ -539,4 +543,87 @@ func TestWebhookResponse(t *testing.T) {
 	if resp["response"] != "bot response" {
 		t.Errorf("Expected response 'bot response', got %v", resp["response"])
 	}
+}
+
+func TestWebhookRejectsEmptyUserID(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:   "none",
+		AllowedUsers: []string{"testuser"},
+	})
+
+	body := bytes.NewReader([]byte(`{"message": "test"}`))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+
+	s.handleWebhook(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("Expected 403 for missing user_id, got %d", rec.Code)
+	}
+}
+
+func TestWebhookRejectsUnauthorizedUser(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod:   "none",
+		AllowedUsers: []string{"alloweduser"},
+	})
+
+	body := bytes.NewReader([]byte(`{"message": "test", "user_id": "hackeruser"}`))
+	req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+
+	s.handleWebhook(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("Expected 403 for unauthorized user, got %d", rec.Code)
+	}
+}
+
+func TestBearerTokensMapping(t *testing.T) {
+	s := newTestServer(&Config{
+		AuthMethod: "bearer",
+		BearerTokens: map[string]string{
+			"token-for-alice": "alice",
+			"token-for-bob":   "bob",
+		},
+		AllowedUsers: []string{"alice", "bob"},
+	})
+	s.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
+		return "hello " + msg.UserID, nil
+	})
+
+	t.Run("AliceToken", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "hi"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.Header.Set("Authorization", "Bearer token-for-alice")
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected 200, got %d", rec.Code)
+		}
+		var resp map[string]interface{}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp["response"] != "hello alice" {
+			t.Errorf("Expected 'hello alice', got %v", resp["response"])
+		}
+	})
+
+	t.Run("InvalidToken", func(t *testing.T) {
+		body := bytes.NewReader([]byte(`{"message": "hi"}`))
+		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+		req.Header.Set("Authorization", "Bearer wrong-token")
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+
+		s.handleWebhook(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("Expected 401, got %d", rec.Code)
+		}
+	})
 }
