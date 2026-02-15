@@ -360,9 +360,9 @@ func (r *Registry) Cancel(id string) error {
 	}
 
 	agent.mu.Lock()
-	defer agent.mu.Unlock()
 
 	if agent.Status != StatusRunning && agent.Status != StatusPending {
+		agent.mu.Unlock()
 		return fmt.Errorf("agent is not running (status: %s)", agent.Status)
 	}
 
@@ -382,6 +382,8 @@ func (r *Registry) Cancel(id string) error {
 		"platform", agent.Platform,
 		"task", truncate(agent.Task, 100),
 	)
+
+	agent.mu.Unlock()
 
 	r.persist()
 

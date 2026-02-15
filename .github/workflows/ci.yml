@@ -199,10 +199,22 @@ jobs:
       - name: Run gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -exclude=G104,G304 -fmt=sarif -out=gosec.sarif ./... || true
+          gosec -exclude=G104,G304 -fmt=sarif -out=gosec-raw.sarif ./... || true
+          # Fix invalid SARIF: remove malformed relationships arrays
+          python3 -c "
+          import json, sys
+          with open('gosec-raw.sarif') as f:
+              data = json.load(f)
+          for run in data.get('runs', []):
+              for rule in run.get('tool', {}).get('driver', {}).get('rules', []):
+                  rels = rule.get('relationships', [])
+                  rule['relationships'] = [r for r in rels if isinstance(r, dict)]
+          with open('gosec.sarif', 'w') as f:
+              json.dump(data, f)
+          " || cp gosec-raw.sarif gosec.sarif
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: gosec.sarif
         continue-on-error: true
