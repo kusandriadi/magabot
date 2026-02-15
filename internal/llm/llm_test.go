@@ -328,32 +328,6 @@ func TestRouterRegisterAndComplete(t *testing.T) {
 	}
 }
 
-func TestRouterFallback(t *testing.T) {
-	r := NewRouter(&Config{
-		Default:       "primary",
-		FallbackChain: []string{"fallback"},
-		RateLimit:     100,
-		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-	})
-
-	primary := &mockProvider{name: "primary", available: true, err: ErrProviderFailed}
-	fallback := &mockProvider{
-		name:      "fallback",
-		available: true,
-		response:  &Response{Content: "from fallback", Provider: "fallback"},
-	}
-	r.Register(primary)
-	r.Register(fallback)
-
-	resp, err := r.Complete(context.Background(), "user1", "hi")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Content != "from fallback" {
-		t.Errorf("expected fallback response, got %q", resp.Content)
-	}
-}
-
 func TestRouterRateLimit(t *testing.T) {
 	r := NewRouter(&Config{
 		Default:   "mock",

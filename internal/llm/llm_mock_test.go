@@ -48,20 +48,16 @@ func TestRouterConfigDefaults(t *testing.T) {
 	t.Run("CustomConfig", func(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 		r := NewRouter(&Config{
-			Default:       "custom",
-			FallbackChain: []string{"fb1", "fb2"},
-			SystemPrompt:  "Be helpful",
-			MaxInput:      5000,
-			Timeout:       30 * time.Second,
-			RateLimit:     20,
-			Logger:        logger,
+			Default:      "custom",
+			SystemPrompt: "Be helpful",
+			MaxInput:     5000,
+			Timeout:      30 * time.Second,
+			RateLimit:    20,
+			Logger:       logger,
 		})
 
 		if r.defaultName != "custom" {
 			t.Errorf("expected default 'custom', got %q", r.defaultName)
-		}
-		if len(r.fallbackChain) != 2 {
-			t.Errorf("expected 2 fallbacks, got %d", len(r.fallbackChain))
 		}
 		if r.systemPrompt != "Be helpful" {
 			t.Errorf("expected systemPrompt 'Be helpful', got %q", r.systemPrompt)
@@ -238,69 +234,38 @@ func TestRouterChatWithSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestRouterTryProvidersAllFail(t *testing.T) {
+func TestRouterProviderFails(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:       "p1",
-		FallbackChain: []string{"p2"},
-		RateLimit:     100,
-		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
+		Default:   "p1",
+		RateLimit: 100,
+		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
 
 	p1 := &mockProvider{name: "p1", available: true, err: errors.New("p1 failed")}
-	p2 := &mockProvider{name: "p2", available: true, err: errors.New("p2 failed")}
 	r.Register(p1)
-	r.Register(p2)
 
 	_, err := r.Complete(context.Background(), "user1", "hi")
 	if err == nil {
-		t.Error("expected error when all providers fail")
+		t.Error("expected error when provider fails")
+	}
+	if !errors.Is(err, ErrProviderFailed) {
+		t.Errorf("expected ErrProviderFailed, got %v", err)
+	}
+}
+
+func TestRouterProviderNotRegistered(t *testing.T) {
+	r := NewRouter(&Config{
+		Default:   "nonexistent",
+		RateLimit: 100,
+		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
+	})
+
+	_, err := r.Complete(context.Background(), "user1", "hi")
+	if err == nil {
+		t.Error("expected error when provider not registered")
 	}
 	if !errors.Is(err, ErrNoProvider) {
 		t.Errorf("expected ErrNoProvider, got %v", err)
-	}
-}
-
-func TestRouterTryProvidersSkipDefault(t *testing.T) {
-	r := NewRouter(&Config{
-		Default:       "primary",
-		FallbackChain: []string{"primary", "fallback"}, // primary in fallback should be skipped
-		RateLimit:     100,
-		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-	})
-
-	primary := &mockProvider{name: "primary", available: true, err: errors.New("failed")}
-	fallback := &mockProvider{name: "fallback", available: true, response: &Response{Content: "from fallback"}}
-	r.Register(primary)
-	r.Register(fallback)
-
-	resp, err := r.Complete(context.Background(), "user1", "hi")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Content != "from fallback" {
-		t.Errorf("expected 'from fallback', got %q", resp.Content)
-	}
-}
-
-func TestRouterTryProvidersLastResort(t *testing.T) {
-	r := NewRouter(&Config{
-		Default:       "primary",
-		FallbackChain: []string{}, // Empty fallback chain
-		RateLimit:     100,
-		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-	})
-
-	primary := &mockProvider{name: "primary", available: true, err: errors.New("failed")}
-	other := &mockProvider{name: "other", available: true, response: &Response{Content: "last resort"}}
-	r.Register(primary)
-	r.Register(other)
-
-	resp, err := r.Complete(context.Background(), "user1", "hi")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Content != "last resort" {
-		t.Errorf("expected 'last resort', got %q", resp.Content)
 	}
 }
 
@@ -312,16 +277,14 @@ func TestRouterDefaultNotAvailable(t *testing.T) {
 	})
 
 	unavailable := &mockProvider{name: "unavailable", available: false}
-	available := &mockProvider{name: "available", available: true, response: &Response{Content: "ok"}}
 	r.Register(unavailable)
-	r.Register(available)
 
-	resp, err := r.Complete(context.Background(), "user1", "hi")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := r.Complete(context.Background(), "user1", "hi")
+	if err == nil {
+		t.Error("expected error when default not available")
 	}
-	if resp.Content != "ok" {
-		t.Errorf("expected 'ok', got %q", resp.Content)
+	if !errors.Is(err, ErrNoProvider) {
+		t.Errorf("expected ErrNoProvider, got %v", err)
 	}
 }
 
@@ -978,25 +941,6 @@ func TestTryProvidersContextCancelled(t *testing.T) {
 	_, err := r.Complete(ctx, "user1", "hi")
 	if err == nil {
 		t.Error("expected error for cancelled context")
-	}
-}
-
-func TestTryProvidersWithUnavailableFallback(t *testing.T) {
-	r := NewRouter(&Config{
-		Default:       "primary",
-		FallbackChain: []string{"unavailable"},
-		RateLimit:     100,
-		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-	})
-
-	primary := &mockProvider{name: "primary", available: true, err: errors.New("failed")}
-	unavailable := &mockProvider{name: "unavailable", available: false}
-	r.Register(primary)
-	r.Register(unavailable)
-
-	_, err := r.Complete(context.Background(), "user1", "hi")
-	if err == nil {
-		t.Error("expected error when all providers unavailable or fail")
 	}
 }
 

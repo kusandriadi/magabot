@@ -110,13 +110,12 @@ func runDaemon() {
 
 	// Initialize LLM router
 	llmRouter := llm.NewRouter(&llm.Config{
-		Default:       cfg.LLM.Default,
-		FallbackChain: cfg.LLM.FallbackChain,
-		SystemPrompt:  cfg.LLM.SystemPrompt,
-		MaxInput:      cfg.LLM.MaxInputLength,
-		Timeout:       time.Duration(cfg.LLM.Timeout) * time.Second,
-		RateLimit:     cfg.LLM.RateLimit,
-		Logger:        logger.With("component", "llm"),
+		Default:      cfg.LLM.Default,
+		SystemPrompt: cfg.LLM.SystemPrompt,
+		MaxInput:     cfg.LLM.MaxInputLength,
+		Timeout:      time.Duration(cfg.LLM.Timeout) * time.Second,
+		RateLimit:    cfg.LLM.RateLimit,
+		Logger:       logger.With("component", "llm"),
 	})
 
 	// Register LLM providers

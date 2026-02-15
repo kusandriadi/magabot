@@ -93,7 +93,6 @@ func cmdConfigShow() {
 
 	fmt.Println("🤖 LLM:")
 	fmt.Printf("  Default: %s\n", cfg.LLM.DefaultProvider)
-	fmt.Printf("  Fallback: %v\n", cfg.LLM.FallbackChain)
 	fmt.Println()
 
 	if len(cfg.Cron.Jobs) > 0 {

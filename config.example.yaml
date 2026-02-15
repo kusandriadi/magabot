@@ -76,10 +76,6 @@ logging:
 # LLM Configuration
 llm:
   default: "anthropic"
-  fallback_chain:
-    - "anthropic"
-    - "openai"
-    - "gemini"
   
   system_prompt: |
     Kamu adalah asisten AI yang helpful dan ramah.

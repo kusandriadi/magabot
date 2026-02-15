@@ -167,7 +167,6 @@ type LLMConfig struct {
 	Default         string          `yaml:"default"`          // Default provider
 	DefaultProvider string          `yaml:"default_provider"` // Alias for default
 	Providers       ProvidersConfig `yaml:"providers"`        // Alternative structure
-	FallbackChain   []string        `yaml:"fallback_chain"`
 	SystemPrompt    string          `yaml:"system_prompt"`
 	MaxInputLength  int             `yaml:"max_input_length"`
 	Timeout         int             `yaml:"timeout"` // seconds

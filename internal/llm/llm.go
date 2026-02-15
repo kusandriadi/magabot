@@ -63,28 +63,26 @@ type Provider interface {
 	Available() bool
 }
 
-// Router manages multiple LLM providers with fallback
+// Router manages LLM provider
 type Router struct {
-	providers     map[string]Provider
-	defaultName   string
-	fallbackChain []string
-	systemPrompt  string
-	maxInput      int
-	timeout       time.Duration
-	rateLimiter   *rateLimiter
-	logger        *slog.Logger
-	mu            sync.RWMutex
+	providers    map[string]Provider
+	defaultName  string
+	systemPrompt string
+	maxInput     int
+	timeout      time.Duration
+	rateLimiter  *rateLimiter
+	logger       *slog.Logger
+	mu           sync.RWMutex
 }
 
 // Config for LLM router
 type Config struct {
-	Default       string
-	FallbackChain []string
-	SystemPrompt  string
-	MaxInput      int
-	Timeout       time.Duration
-	RateLimit     int // requests per minute per user
-	Logger        *slog.Logger
+	Default      string
+	SystemPrompt string
+	MaxInput     int
+	Timeout      time.Duration
+	RateLimit    int // requests per minute per user
+	Logger       *slog.Logger
 }
 
 // NewRouter creates a new LLM router
@@ -105,14 +103,13 @@ func NewRouter(cfg *Config) *Router {
 	}
 
 	return &Router{
-		providers:     make(map[string]Provider),
-		defaultName:   cfg.Default,
-		fallbackChain: cfg.FallbackChain,
-		systemPrompt:  cfg.SystemPrompt,
-		maxInput:      cfg.MaxInput,
-		timeout:       cfg.Timeout,
-		rateLimiter:   newRateLimiter(cfg.RateLimit),
-		logger:        logger,
+		providers:    make(map[string]Provider),
+		defaultName:  cfg.Default,
+		systemPrompt: cfg.SystemPrompt,
+		maxInput:     cfg.MaxInput,
+		timeout:      cfg.Timeout,
+		rateLimiter:  newRateLimiter(cfg.RateLimit),
+		logger:       logger,
 	}
 }
 
@@ -221,74 +218,26 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	return r.tryProviders(ctx, req)
 }
 
-// tryProviders attempts all providers in order: default, fallback chain, any available
+// tryProviders attempts the default provider only
 func (r *Router) tryProviders(ctx context.Context, req *Request) (*Response, error) {
-	var lastErr error
-
-	// Try default provider first
 	r.mu.RLock()
 	defaultProvider, ok := r.providers[r.defaultName]
 	r.mu.RUnlock()
 
-	if ok && defaultProvider.Available() {
-		resp, err := defaultProvider.Complete(ctx, req)
-		if err == nil {
-			return resp, nil
-		}
-		lastErr = fmt.Errorf("%s: %w", r.defaultName, err)
-		r.logger.Warn("default provider failed", "provider", r.defaultName, "error", err)
+	if !ok {
+		return nil, fmt.Errorf("%w: provider %q not registered", ErrNoProvider, r.defaultName)
 	}
 
-	// Try fallback chain
-	for _, name := range r.fallbackChain {
-		if name == r.defaultName {
-			continue
-		}
-
-		r.mu.RLock()
-		provider, ok := r.providers[name]
-		r.mu.RUnlock()
-
-		if !ok || !provider.Available() {
-			continue
-		}
-
-		resp, err := provider.Complete(ctx, req)
-		if err == nil {
-			r.logger.Info("used fallback provider", "provider", name)
-			return resp, nil
-		}
-		lastErr = fmt.Errorf("%s: %w", name, err)
-		r.logger.Warn("fallback provider failed", "provider", name, "error", err)
+	if !defaultProvider.Available() {
+		return nil, fmt.Errorf("%w: provider %q not available", ErrNoProvider, r.defaultName)
 	}
 
-	// Last resort: try any available provider
-	r.mu.RLock()
-	type candidate struct {
-		name     string
-		provider Provider
-	}
-	var candidates []candidate
-	for name, provider := range r.providers {
-		if name != r.defaultName && provider.Available() {
-			candidates = append(candidates, candidate{name, provider})
-		}
-	}
-	r.mu.RUnlock()
-
-	for _, c := range candidates {
-		resp, err := c.provider.Complete(ctx, req)
-		if err == nil {
-			r.logger.Info("used available provider", "provider", c.name)
-			return resp, nil
-		}
-		lastErr = fmt.Errorf("%s: %w", c.name, err)
+	resp, err := defaultProvider.Complete(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", ErrProviderFailed, r.defaultName, err)
 	}
 
-	if lastErr != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNoProvider, lastErr)
-	}
-	return nil, ErrNoProvider
+	return resp, nil
 }
 
 // SetSystemPrompt updates the system prompt

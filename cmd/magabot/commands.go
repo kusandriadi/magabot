@@ -252,7 +252,6 @@ logging:
 
 llm:
   default: "%s"
-  fallback_chain: ["anthropic", "openai", "gemini"]
   system_prompt: |
     Kamu adalah asisten AI yang helpful dan ramah.
     Jawab dengan singkat dan jelas.

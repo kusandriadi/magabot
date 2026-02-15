@@ -499,7 +499,6 @@ logging:
 # LLM Providers
 llm:
   default: "%s"
-  fallback_chain: ["anthropic", "openai", "gemini"]
   
   system_prompt: |
     You are a helpful AI assistant. Be concise and friendly.
