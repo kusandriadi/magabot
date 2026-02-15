@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -458,7 +459,7 @@ func TestPluginContextDataDir(t *testing.T) {
 	_ = mgr.Register(plugin)
 
 	reg := mgr.Get("data-plugin")
-	expectedDir := tmpDir + "/plugins/data-plugin"
+	expectedDir := filepath.Join(tmpDir, "plugins", "data-plugin")
 
 	if reg.DataDir != expectedDir {
 		t.Errorf("expected data dir '%s', got '%s'", expectedDir, reg.DataDir)

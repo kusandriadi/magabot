@@ -243,10 +243,16 @@ func TestSpawn(t *testing.T) {
 			t.Errorf("Expected task 'Do something', got '%s'", sub.Task)
 		}
 
-		// Wait for completion
-		time.Sleep(100 * time.Millisecond)
-
-		status, result, _, _ := mgr.SessionStatus(sub.ID)
+		// Wait for completion with polling
+		var status Status
+		var result string
+		for i := 0; i < 50; i++ {
+			status, result, _, _ = mgr.SessionStatus(sub.ID)
+			if status == StatusComplete || status == StatusFailed {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
 		if status != StatusComplete {
 			t.Errorf("Expected status 'complete', got '%s'", status)
 		}

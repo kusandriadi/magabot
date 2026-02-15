@@ -3,6 +3,7 @@ package security
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,10 @@ _ = os.WriteFile(configPath, []byte("test: true"), 0644)
 
 func TestConfigValidatorFilePermissions(t *testing.T) {
 	dir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission tests not applicable on Windows")
+	}
 
 	t.Run("InsecureConfigPermissions", func(t *testing.T) {
 		v := NewConfigValidator()
@@ -438,6 +443,9 @@ func TestFormatIssues(t *testing.T) {
 }
 
 func TestFixPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission tests not applicable on Windows")
+	}
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
 	dbPath := filepath.Join(dir, "magabot.db")
