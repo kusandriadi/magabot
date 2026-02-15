@@ -75,7 +75,7 @@ logging:
 
 # LLM Configuration
 llm:
-  default: "anthropic"
+  main: "anthropic"
   
   system_prompt: |
     Kamu adalah asisten AI yang helpful dan ramah.
