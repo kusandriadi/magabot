@@ -698,8 +698,24 @@ func (r *Registry) persist() {
 	r.mu.RLock()
 	agents := make([]*Agent, 0, len(r.agents))
 	for _, agent := range r.agents {
-		// Create a copy for serialization (avoid copying mutex)
+		// Create a deep copy for serialization (avoid copying mutex and map references)
 		agent.mu.RLock()
+		var ctxCopy map[string]interface{}
+		if agent.Context != nil {
+			ctxCopy = make(map[string]interface{}, len(agent.Context))
+			for k, v := range agent.Context {
+				ctxCopy[k] = v
+			}
+		}
+		var metaCopy map[string]string
+		if agent.Metadata != nil {
+			metaCopy = make(map[string]string, len(agent.Metadata))
+			for k, v := range agent.Metadata {
+				metaCopy[k] = v
+			}
+		}
+		msgsCopy := make([]Message, len(agent.Messages))
+		copy(msgsCopy, agent.Messages)
 		agentCopy := &Agent{
 			ID:          agent.ID,
 			ParentID:    agent.ParentID,
@@ -708,9 +724,9 @@ func (r *Registry) persist() {
 			Status:      agent.Status,
 			Result:      agent.Result,
 			Error:       agent.Error,
-			Context:     agent.Context,
-			Messages:    agent.Messages,
-			Metadata:    agent.Metadata,
+			Context:     ctxCopy,
+			Messages:    msgsCopy,
+			Metadata:    metaCopy,
 			Platform:    agent.Platform,
 			ChatID:      agent.ChatID,
 			UserID:      agent.UserID,
