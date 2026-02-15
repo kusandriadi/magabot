@@ -410,7 +410,7 @@ func cmdCronShow() {
 	if jsonOutput {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(job)
+		_ = enc.Encode(job)
 		return
 	}
 

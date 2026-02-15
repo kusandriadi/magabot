@@ -150,7 +150,7 @@ func TestStorageIntegration(t *testing.T) {
 			Timestamp: time.Now().AddDate(0, 0, -100), // 100 days ago
 			Direction: "in",
 		}
-		store.SaveMessage(oldMsg)
+		_ = store.SaveMessage(oldMsg)
 
 		// Add recent message
 		newMsg := &storage.Message{
@@ -161,7 +161,7 @@ func TestStorageIntegration(t *testing.T) {
 			Timestamp: time.Now(),
 			Direction: "in",
 		}
-		store.SaveMessage(newMsg)
+		_ = store.SaveMessage(newMsg)
 
 		// Purge messages older than 30 days
 		deleted, err := store.PurgeOldMessages(30)
@@ -230,7 +230,7 @@ func TestStorageConcurrency(t *testing.T) {
 				Timestamp: time.Now(),
 				Direction: "in",
 			}
-			store.SaveMessage(msg)
+			_ = store.SaveMessage(msg)
 			done <- true
 		}(i)
 	}

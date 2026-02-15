@@ -48,7 +48,7 @@ func tailLogFile(logFile string) {
 	cmd := exec.Command("tail", "-f", "--", logFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Run()
+	_ = cmd.Run()
 }
 
 func readLastLines(filename string, n int) (string, error) {

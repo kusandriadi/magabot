@@ -83,7 +83,7 @@ func TestBackupIntegration(t *testing.T) {
 
 		// Create a new restore directory
 		restoreDir := filepath.Join(tmpDir, "restore")
-		os.MkdirAll(restoreDir, 0755)
+		_ = os.MkdirAll(restoreDir, 0755)
 
 		// Restore
 		err := mgr.Restore(info.Filename, restoreDir)
@@ -176,9 +176,9 @@ func TestBackupPathTraversal(t *testing.T) {
 	dataDir := filepath.Join(tmpDir, "data")
 	restoreDir := filepath.Join(tmpDir, "restore")
 
-	os.MkdirAll(dataDir, 0755)
-	os.MkdirAll(restoreDir, 0755)
-	os.WriteFile(filepath.Join(dataDir, "magabot.db"), []byte("test"), 0600)
+	_ = os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(restoreDir, 0755)
+	_ = os.WriteFile(filepath.Join(dataDir, "magabot.db"), []byte("test"), 0600)
 
 	mgr := backup.New(backupDir, 5)
 
@@ -237,7 +237,7 @@ func TestBackupLargeFile(t *testing.T) {
 	for i := range largeData {
 		largeData[i] = byte(i % 256)
 	}
-	os.WriteFile(filepath.Join(dataDir, "magabot.db"), largeData, 0600)
+	_ = os.WriteFile(filepath.Join(dataDir, "magabot.db"), largeData, 0600)
 
 	mgr := backup.New(backupDir, 5)
 

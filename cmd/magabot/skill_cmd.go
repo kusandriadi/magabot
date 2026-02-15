@@ -135,7 +135,7 @@ func cmdSkillList() {
 // cmdSkillInfo shows details about a skill
 func cmdSkillInfo(name string) {
 	manager := skills.NewManager(getSkillsDir())
-	manager.LoadAll()
+	_ = manager.LoadAll()
 
 	skill, ok := manager.Get(name)
 	if !ok {

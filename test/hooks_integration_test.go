@@ -96,7 +96,7 @@ exit 0
 		blockContent := `#!/bin/bash
 exit 1
 `
-		os.WriteFile(blockScript, []byte(blockContent), 0755)
+		_ = os.WriteFile(blockScript, []byte(blockContent), 0755)
 
 		hookCfg := []config.HookConfig{
 			{

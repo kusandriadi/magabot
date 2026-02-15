@@ -88,7 +88,7 @@ func TestRouterIntegration(t *testing.T) {
 		AllowedUsers: []string{"user1", "user2"},
 		AllowDMs:     true,
 	}
-	cfg.Save()
+	_ = cfg.Save()
 
 	// Setup authorizer
 	auth := security.NewAuthorizer()
@@ -318,7 +318,7 @@ func TestRouterConcurrency(t *testing.T) {
 		AllowedUsers: []string{},
 		AllowDMs:     true,
 	}
-	cfg.Save()
+	_ = cfg.Save()
 
 	auth := security.NewAuthorizer()
 	auth.SetAllowedUsers("telegram", []string{}) // Allow all
@@ -339,7 +339,7 @@ func TestRouterConcurrency(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	r.Start(ctx)
+	_ = r.Start(ctx)
 	defer r.Stop()
 
 	// Concurrent message handling
