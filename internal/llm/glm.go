@@ -22,7 +22,7 @@ type GLM struct {
 
 // GLMConfig for GLM provider
 type GLMConfig struct {
-	APIKey      string
+	APIKey      string // #nosec G117 -- config field, not serialized to untrusted output
 	Model       string
 	MaxTokens   int
 	Temperature float64

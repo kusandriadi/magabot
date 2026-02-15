@@ -198,7 +198,7 @@ type LLMConfig struct {
 // LLMProviderConfig holds config for a single LLM provider
 type LLMProviderConfig struct {
 	Enabled     bool    `yaml:"enabled"`
-	APIKey      string  `yaml:"api_key"`
+	APIKey      string  `yaml:"api_key"` // #nosec G117 -- config field
 	Model       string  `yaml:"model"`
 	MaxTokens   int     `yaml:"max_tokens"`
 	Temperature float64 `yaml:"temperature"`
@@ -385,7 +385,7 @@ type PluginConfig struct {
 type EmbeddingConfig struct {
 	Enabled      bool   `yaml:"enabled"`               // Enable embedding generation
 	Provider     string `yaml:"provider"`              // openai, voyage, cohere, local
-	APIKey       string `yaml:"api_key"`               // API key for provider
+	APIKey       string `yaml:"api_key"`               // API key for provider // #nosec G117
 	Model        string `yaml:"model"`                 // Embedding model name
 	BaseURL      string `yaml:"base_url,omitempty"`    // Custom API base URL
 	Dimensions   int    `yaml:"dimensions,omitempty"`  // Output dimensions

@@ -21,7 +21,7 @@ type Gemini struct {
 
 // GeminiConfig for Gemini provider
 type GeminiConfig struct {
-	APIKey      string
+	APIKey      string // #nosec G117 -- config field, not serialized to untrusted output
 	Model       string
 	MaxTokens   int
 	Temperature float64

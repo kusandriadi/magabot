@@ -98,18 +98,18 @@ jobs:
           install: mingw-w64-x86_64-gcc
 
       - name: Run unit tests
-        shell: msys2 {0}
-        run: |
-          export PATH="/mingw64/bin:$PATH"
-          export CGO_ENABLED=1
-          go test -v -timeout=10m ./internal/...
+        shell: bash
+        env:
+          CGO_ENABLED: 1
+          PATH: D:\a\_temp\msys64\mingw64\bin;${{ env.PATH }}
+        run: go test -v -timeout=10m ./internal/...
 
       - name: Run integration tests
-        shell: msys2 {0}
-        run: |
-          export PATH="/mingw64/bin:$PATH"
-          export CGO_ENABLED=1
-          go test -v -timeout=10m ./test/...
+        shell: bash
+        env:
+          CGO_ENABLED: 1
+          PATH: D:\a\_temp\msys64\mingw64\bin;${{ env.PATH }}
+        run: go test -v -timeout=10m ./test/...
 
   build:
     name: Build (${{ matrix.name }})
@@ -197,10 +197,9 @@ jobs:
         continue-on-error: true
 
       - name: Run gosec
-        uses: securego/gosec@master
-        with:
-          args: "-exclude=G104,G304 -fmt=sarif -out=gosec.sarif ./..."
-        continue-on-error: true
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -exclude=G104,G304 -fmt=sarif -out=gosec.sarif ./... || true
 
       - name: Upload SARIF
         uses: github/codeql-action/upload-sarif@v3

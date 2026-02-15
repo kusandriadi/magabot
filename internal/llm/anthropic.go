@@ -22,7 +22,7 @@ type Anthropic struct {
 
 // AnthropicConfig for Anthropic provider
 type AnthropicConfig struct {
-	APIKey      string
+	APIKey      string // #nosec G117 -- config field, not serialized to untrusted output
 	Model       string
 	MaxTokens   int
 	Temperature float64

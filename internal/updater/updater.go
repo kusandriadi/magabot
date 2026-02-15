@@ -169,7 +169,7 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 	}
 	
 	// Make executable
-	if err := os.Chmod(tmpFile, 0755); err != nil {
+	if err := os.Chmod(tmpFile, 0755); err != nil { // #nosec G302 -- binary must be executable
 		os.Remove(tmpFile)
 		return fmt.Errorf("failed to chmod: %w", err)
 	}
@@ -459,7 +459,7 @@ func parseVersion(v string) [3]int {
 		if idx := strings.IndexAny(s, "-+"); idx >= 0 {
 			s = s[:idx]
 		}
-_, _ = fmt.Sscanf(s, "%d", &parts[i])
+	_, _ = fmt.Sscanf(s, "%d", &parts[i]) // #nosec G602 -- parts is pre-allocated with known size
 	}
 	return parts
 }

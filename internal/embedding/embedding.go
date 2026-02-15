@@ -49,7 +49,7 @@ var defaultDimensions = map[string]int{
 // Config holds embedding service configuration.
 type Config struct {
 	Provider    Provider
-	APIKey      string
+	APIKey      string // #nosec G117 -- config field, not serialized to untrusted output
 	Model       string
 	BaseURL     string // Custom base URL for API
 	Dimensions  int    // Output dimensions (for models that support it)

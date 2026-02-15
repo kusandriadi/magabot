@@ -61,7 +61,7 @@ func checkFilePermissions(path string) error {
 	mode := info.Mode().Perm()
 	// Reject if group or others have any access (should be 0600 or stricter)
 	if mode&0077 != 0 {
-		slog.Warn("credential file has unsafe permissions", "path", path, "mode", fmt.Sprintf("%o", mode))
+		slog.Warn("credential file has unsafe permissions", "path", path, "mode", fmt.Sprintf("%o", mode)) // #nosec G706 -- structured logging with local filesystem path
 		return fmt.Errorf("credential file %s has unsafe permissions %o (should be 0600)", path, mode)
 	}
 	return nil

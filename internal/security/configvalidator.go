@@ -329,7 +329,7 @@ func FixPermissions(configPath, dataDir string) error {
 	}
 
 	// Fix data directory
-	if err := os.Chmod(dataDir, 0700); err != nil && !os.IsNotExist(err) {
+	if err := os.Chmod(dataDir, 0700); err != nil && !os.IsNotExist(err) { // #nosec G302 -- directory needs execute bit
 		return fmt.Errorf("chmod data dir: %w", err)
 	}
 
@@ -341,7 +341,7 @@ func FixPermissions(configPath, dataDir string) error {
 
 	// Fix log directory (ignore errors — log dir may not exist yet)
 	logDir := filepath.Join(dataDir, "..", "logs")
-	_ = os.Chmod(logDir, 0700)
+	_ = os.Chmod(logDir, 0700) // #nosec G302 -- directory needs execute bit
 
 	return nil
 }

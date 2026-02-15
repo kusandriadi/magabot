@@ -99,7 +99,7 @@ func (m *Manager) LoadAll() error {
 	defer m.mu.Unlock()
 
 	// Create skills directory if it doesn't exist
-	if err := os.MkdirAll(m.skillsDir, 0755); err != nil {
+	if err := os.MkdirAll(m.skillsDir, 0750); err != nil {
 		return err
 	}
 
@@ -320,7 +320,7 @@ func (m *Manager) Install(source string) error {
 // CreateTemplate creates a new skill template
 func (m *Manager) CreateTemplate(name string) error {
 	skillDir := filepath.Join(m.skillsDir, name)
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
+	if err := os.MkdirAll(skillDir, 0750); err != nil {
 		return err
 	}
 
@@ -349,9 +349,9 @@ func (m *Manager) CreateTemplate(name string) error {
 	readmePath := filepath.Join(skillDir, "README.md")
 	readme := fmt.Sprintf("# %s\n\n%s\n\n## Usage\n\nTrigger with `/%s` or mention \"%s\" in your message.\n",
 		name, template.Description, name, name)
-	if err := os.WriteFile(readmePath, []byte(readme), 0644); err != nil {
+	if err := os.WriteFile(readmePath, []byte(readme), 0600); err != nil {
 		return fmt.Errorf("write README: %w", err)
 	}
 
-	return os.WriteFile(filepath.Join(skillDir, "skill.yaml"), data, 0644)
+	return os.WriteFile(filepath.Join(skillDir, "skill.yaml"), data, 0600)
 }
