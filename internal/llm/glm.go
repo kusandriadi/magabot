@@ -3,10 +3,11 @@ package llm
 
 import (
 	"context"
-	"os"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 const glmAPIURL = "https://api.z.ai/api/paas/v4"
@@ -31,13 +32,7 @@ type GLMConfig struct {
 
 // NewGLM creates a new GLM provider
 func NewGLM(cfg *GLMConfig) *GLM {
-	apiKey := cfg.APIKey
-	if apiKey == "" {
-		apiKey = os.Getenv("ZAI_API_KEY")
-	}
-	if apiKey == "" {
-		apiKey = os.Getenv("GLM_API_KEY")
-	}
+	apiKey := util.ResolveAPIKey(cfg.APIKey, "ZAI_API_KEY", "GLM_API_KEY")
 
 	baseURL := cfg.BaseURL
 	if baseURL == "" {

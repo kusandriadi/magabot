@@ -14,6 +14,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/kusa/magabot/internal/router"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Bot represents a Telegram bot
@@ -244,7 +245,7 @@ func (b *Bot) downloadFile(fileID, prefix string) (string, error) {
 	// Build download URL (token is embedded by Telegram API — use dedicated client, never log this URL)
 	fileURL := file.Link(b.api.Token)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := util.NewHTTPClient(60 * time.Second)
 	resp, err := client.Get(fileURL)
 	if err != nil {
 		return "", fmt.Errorf("download file: %w", err)

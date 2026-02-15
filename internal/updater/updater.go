@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Config holds updater configuration
@@ -66,7 +68,7 @@ func New(config Config) *Updater {
 	
 	return &Updater{
 		config: config,
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: util.NewHTTPClient(0),
 	}
 }
 

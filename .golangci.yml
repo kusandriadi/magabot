@@ -1,0 +1,39 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - bodyclose
+    - misspell
+    - gofmt
+  disable:
+    - gosec # Run separately in CI security job
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+  govet:
+    enable-all: false
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    # Test files can use dot imports and have longer functions
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Generated code
+    - path: ".*\\.pb\\.go"
+      linters:
+        - all
+  max-issues-per-linter: 0
+  max-same-issues: 0

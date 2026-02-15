@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Weather tool using wttr.in
@@ -19,7 +20,7 @@ type Weather struct {
 // NewWeather creates a new Weather tool
 func NewWeather() *Weather {
 	return &Weather{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: util.NewHTTPClient(0),
 	}
 }
 
@@ -81,7 +82,10 @@ func (w *Weather) Execute(ctx context.Context, params map[string]string) (string
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", fmt.Errorf("read weather response: %w", err)
+	}
 	result := string(body)
 
 	if resp.StatusCode != http.StatusOK {
@@ -113,7 +117,10 @@ func (w *Weather) GetForecast(ctx context.Context, location string, days int) (s
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", fmt.Errorf("read forecast response: %w", err)
+	}
 	return string(body), nil
 }
 

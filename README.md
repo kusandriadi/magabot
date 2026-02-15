@@ -1,10 +1,10 @@
 # Magabot
 
 [![CI](https://github.com/kusandriadi/magabot/actions/workflows/ci.yml/badge.svg)](https://github.com/kusandriadi/magabot/actions/workflows/ci.yml)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A **security-first**, multi-platform AI chatbot. Single binary, zero runtime dependencies.
+Magabot is a **privacy-first, self-hosted AI chatbot** that connects multiple LLM providers to your favorite messaging platforms. It ships as a single static binary with zero runtime dependencies — no Python, Node.js, Docker, or cloud accounts required. All data stays on your machine, encrypted at rest with AES-256-GCM.
 
 ---
 
@@ -12,13 +12,13 @@ A **security-first**, multi-platform AI chatbot. Single binary, zero runtime dep
 
 - [Features](#features)
 - [Security](#security)
+- [LLM Providers](#llm-providers)
+- [Platforms](#platforms)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Uninstall](#uninstall)
-- [LLM Providers](#llm-providers)
-- [Platforms](#platforms)
-- [Webhooks](#webhooks)
-- [Commands](#commands)
+- [CLI Commands](#cli-commands)
+- [Chat Commands](#chat-commands)
 - [Skills](#skills)
 - [Configuration](#configuration)
 - [Building from Source](#building-from-source)
@@ -31,7 +31,7 @@ A **security-first**, multi-platform AI chatbot. Single binary, zero runtime dep
 | Feature | Description |
 |---------|-------------|
 | **Multi-LLM** | Anthropic, OpenAI, Gemini, DeepSeek, GLM, Local (Ollama/vLLM) |
-| **Multi-Platform** | Telegram, Discord, Slack, WhatsApp, Webhooks |
+| **Multi-Platform** | Telegram, Slack, WhatsApp, Webhooks |
 | **Fallback Chain** | Automatic failover between LLM providers |
 | **Semantic Memory** | Vector-based memory with OpenAI/Voyage/Cohere embeddings |
 | **Multi-Agent** | Spawn sub-agents for parallel tasks |
@@ -59,6 +59,59 @@ Security is built into every layer:
 | **Secure Delete** | SQLite `secure_delete = ON` |
 | **SHA-256 Verification** | Binary updates verified before install |
 | **Restrictive Permissions** | Config `0600`, directories `0700` |
+| **Response Size Limits** | All HTTP response reads capped to prevent OOM |
+
+---
+
+## LLM Providers
+
+| Provider | Default Model | Auth |
+|----------|---------------|------|
+| **Anthropic** | claude-sonnet-4-20250514 | `ANTHROPIC_API_KEY` |
+| **OpenAI** | gpt-4o | `OPENAI_API_KEY` |
+| **Gemini** | gemini-2.0-flash | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
+| **DeepSeek** | deepseek-chat | `DEEPSEEK_API_KEY` |
+| **GLM** | glm-4.7 | `ZAI_API_KEY` or `GLM_API_KEY` |
+| **Local** | llama3 (Ollama/vLLM) | Optional (`LOCAL_LLM_API_KEY`) |
+
+### Fallback Chain
+
+If the primary provider fails, Magabot automatically tries the next available provider:
+
+```yaml
+llm:
+  main: anthropic
+  fallback_chain: [anthropic, deepseek, openai]
+```
+
+---
+
+## Platforms
+
+| Platform | Method | Groups | DMs | Status |
+|----------|--------|:------:|:---:|:------:|
+| **Telegram** | Long Polling / Webhook | yes | yes | Stable |
+| **Slack** | Socket Mode / Events API | yes | yes | Stable |
+| **WhatsApp** | WebSocket (whatsmeow) | yes | yes | Stable |
+| **Discord** | Bot API / Webhook | - | - | Notifications Only |
+| **Webhook** | HTTP POST | - | - | Stable |
+
+> **Note on WhatsApp:** Uses [whatsmeow](https://github.com/tulir/whatsmeow) (unofficial multi-device API). Requires QR code scan on first setup. WhatsApp may rate-limit or block automated usage — use responsibly.
+
+> **Note on Discord:** Discord integration is currently limited to sending notifications via cron jobs (bot token or webhook URL). It is not a full interactive chat platform.
+
+### Webhook Security
+
+| Feature | Description |
+|---------|-------------|
+| **Auth Methods** | Bearer token, Basic auth, HMAC signature |
+| **IP Allowlist** | Restrict by IP or CIDR |
+| **User Allowlist** | Restrict by user ID |
+| **Rate Limiting** | Per-IP and per-user limits |
+| **Brute Force Protection** | Lockout after N failures |
+| **Timestamp Validation** | Reject old/future requests |
+| **Nonce Validation** | Prevent replay attacks |
+| **Request ID Tracking** | Audit trail for every request |
 
 ---
 
@@ -71,7 +124,7 @@ Security is built into every layer:
 curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/master/install.sh | bash
 
 # Manual
-wget https://github.com/kusandriadi/magabot/releases/latest/download/magabot_linux_amd64.tar.gz
+curl -sLO https://github.com/kusandriadi/magabot/releases/latest/download/magabot_linux_amd64.tar.gz
 tar -xzf magabot_linux_amd64.tar.gz
 sudo mv magabot /usr/local/bin/
 ```
@@ -83,12 +136,12 @@ sudo mv magabot /usr/local/bin/
 curl -sL https://raw.githubusercontent.com/kusandriadi/magabot/master/install.sh | bash
 
 # Manual (Apple Silicon)
-wget https://github.com/kusandriadi/magabot/releases/latest/download/magabot_darwin_arm64.tar.gz
+curl -sLO https://github.com/kusandriadi/magabot/releases/latest/download/magabot_darwin_arm64.tar.gz
 tar -xzf magabot_darwin_arm64.tar.gz
 sudo mv magabot /usr/local/bin/
 
 # Manual (Intel)
-wget https://github.com/kusandriadi/magabot/releases/latest/download/magabot_darwin_amd64.tar.gz
+curl -sLO https://github.com/kusandriadi/magabot/releases/latest/download/magabot_darwin_amd64.tar.gz
 tar -xzf magabot_darwin_amd64.tar.gz
 sudo mv magabot /usr/local/bin/
 ```
@@ -135,7 +188,15 @@ magabot status
 
 ## Uninstall
 
-### Linux / macOS
+### Linux
+
+```bash
+magabot uninstall              # Stop daemon, remove config
+sudo rm /usr/local/bin/magabot # Remove binary
+rm -rf ~/data/magabot          # Remove data (optional)
+```
+
+### macOS
 
 ```bash
 magabot uninstall              # Stop daemon, remove config
@@ -153,187 +214,108 @@ Remove-Item -Recurse -Force "$env:USERPROFILE\.magabot"
 
 ---
 
-## LLM Providers
-
-| Provider | Model | Auth |
-|----------|-------|------|
-| **Anthropic** | claude-sonnet-4-20250514 | API key |
-| **OpenAI** | gpt-4o | API key |
-| **Gemini** | gemini-2.0-flash | API key |
-| **DeepSeek** | deepseek-chat | API key |
-| **GLM** | glm-4 | API key |
-| **Local** | llama3 (Ollama/vLLM) | Optional |
-
-### Setup
-
-```bash
-magabot setup llm
-```
-
-### Fallback Chain
-
-If the primary provider fails, Magabot automatically tries the next:
-
-```yaml
-llm:
-  main: anthropic
-  fallback_chain: [anthropic, deepseek, openai]
-```
-
----
-
-## Platforms
-
-| Platform | Method | Groups | DMs | Status |
-|----------|--------|:------:|:---:|:------:|
-| **Telegram** | Long Polling / Webhook | ✅ | ✅ | Stable |
-| **Discord** | Gateway | ✅ | ✅ | Stable |
-| **Slack** | Socket Mode / Events API | ✅ | ✅ | Stable |
-| **WhatsApp** | WebSocket (whatsmeow) | ✅ | ✅ | Stable |
-| **Webhook** | HTTP POST | - | - | Stable |
-
-> **Note on WhatsApp:** Uses [whatsmeow](https://github.com/tulir/whatsmeow) (unofficial multi-device API). Requires QR code scan on first setup. WhatsApp may rate-limit or block automated usage - use responsibly.
-
-### Setup
-
-```bash
-magabot setup platform
-```
-
----
-
-## Webhooks
-
-Receive messages from external services (GitHub, Grafana, CI/CD).
-
-### Setup
-
-```bash
-magabot setup webhook
-```
-
-### Security Features
-
-| Feature | Description |
-|---------|-------------|
-| **Auth Methods** | Bearer token, Basic auth, HMAC signature |
-| **IP Allowlist** | Restrict by IP or CIDR |
-| **User Allowlist** | Restrict by user ID |
-| **Rate Limiting** | Per-IP and per-user limits |
-| **Brute Force Protection** | Lockout after N failures |
-| **Timestamp Validation** | Reject old/future requests (±5 min) |
-| **Nonce Validation** | Prevent replay attacks |
-| **Request ID Tracking** | Audit trail for every request |
-
-### Example Config
-
-```yaml
-webhook:
-  enabled: true
-  port: 8080
-  auth_method: hmac
-  hmac_users:
-    "secret-github": "github:myrepo"
-    "secret-grafana": "grafana:prod"
-  rate_limit_per_ip: 60
-  rate_limit_per_user: 30
-  max_auth_failures: 5
-  require_timestamp: true
-  require_nonce: true
-```
-
----
-
-## Commands
-
-### CLI Commands
+## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `magabot setup` | Full interactive wizard |
+| `magabot setup` | Full interactive setup wizard |
 | `magabot setup llm` | Configure LLM providers |
 | `magabot setup platform` | Configure chat platforms |
 | `magabot setup webhook` | Configure webhooks |
+| `magabot init` | Quick init (auto-detects env vars) |
 | `magabot start` | Start daemon |
 | `magabot stop` | Stop daemon |
 | `magabot restart` | Restart daemon |
 | `magabot status` | Show status |
 | `magabot log` | Tail log file |
+| `magabot genkey` | Generate encryption key |
+| `magabot reset` | Reset configuration |
 | `magabot config show` | Show config summary |
-| `magabot config edit` | Edit config in $EDITOR |
+| `magabot config edit` | Edit config in `$EDITOR` |
+| `magabot config path` | Print config file path |
+| `magabot config admin` | Manage admin users |
 | `magabot cron list` | List cron jobs |
 | `magabot cron add` | Add cron job |
+| `magabot cron edit` | Edit cron job |
+| `magabot cron delete` | Delete cron job |
+| `magabot cron enable` | Enable cron job |
+| `magabot cron disable` | Disable cron job |
+| `magabot cron run` | Run cron job manually |
+| `magabot cron show` | Show cron job details |
 | `magabot skill list` | List installed skills |
+| `magabot skill info` | Show skill details |
+| `magabot skill create` | Create new skill template |
+| `magabot skill enable` | Enable a skill |
+| `magabot skill disable` | Disable a skill |
+| `magabot skill reload` | Reload all skills |
+| `magabot skill builtin` | List built-in skills |
 | `magabot update check` | Check for updates |
 | `magabot update apply` | Apply update |
+| `magabot update rollback` | Roll back to previous version |
 | `magabot uninstall` | Uninstall magabot |
 | `magabot version` | Show version |
 | `magabot help` | Show help |
 
-### Chat Commands
+---
+
+## Chat Commands
+
+Send these in any connected platform:
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show commands |
-| `/status` | Bot status |
-| `/models` | List AI models |
+| `/help` | Show available commands |
+| `/status` | Bot status and uptime |
+| `/models` | List available AI models |
+| `/providers` | Show LLM provider status |
+| `/config` | Show or manage configuration (admin) |
 | `/memory add <text>` | Remember something |
 | `/memory search <query>` | Search memories |
-| `/config allow user <id>` | Add to allowlist (admin) |
-| `/task spawn <desc>` | Run background task |
+| `/task spawn <desc>` | Run a background task |
 
 ---
 
 ## Skills
 
-Skills extend Magabot with custom functionality.
+Skills extend Magabot with custom YAML-defined functionality.
 
-### List Skills
-
-```bash
-magabot skill list
-magabot skill builtin
-```
-
-### Install Skill
+### Install a Skill
 
 ```bash
-# Clone to skills directory
+# Clone into skills directory
 git clone https://github.com/example/my-skill.git ~/code/magabot-skills/my-skill
 
-# Enable
+# Enable and reload
 magabot skill enable my-skill
-
-# Reload
 magabot skill reload
 ```
 
-### Uninstall Skill
+### Uninstall a Skill
 
 ```bash
-# Disable
 magabot skill disable my-skill
-
-# Remove
 rm -rf ~/code/magabot-skills/my-skill
 ```
 
-### Create Skill
+### Create a Skill
 
 ```bash
 magabot skill create my-skill
 ```
 
-Creates a template in `~/code/magabot-skills/my-skill/skill.yaml`:
+This generates a template at `~/code/magabot-skills/my-skill/skill.yaml`:
 
 ```yaml
 name: my-skill
+description: Description of your skill
 version: 1.0.0
-description: My custom skill
-commands:
-  - name: hello
-    description: Say hello
-    action: echo "Hello, world!"
+triggers:
+  commands: ["/my-skill"]
+  keywords: ["my-skill"]
+actions:
+  type: prompt
+  prompt: "You are now in my-skill mode. Help the user with..."
+system_prompt: "Additional context for the LLM when this skill is active."
 ```
 
 ---
@@ -366,21 +348,13 @@ access:
   global_admins: ["YOUR_USER_ID"]
 ```
 
-### Environment Variables
-
-Config supports `$VAR` and `${VAR}` expansion:
-
-```yaml
-llm:
-  anthropic:
-    api_key: "${ANTHROPIC_API_KEY}"
-```
+Config supports `$VAR` and `${VAR}` expansion for environment variables.
 
 ---
 
 ## Building from Source
 
-Requires Go 1.22+ and a C compiler (for SQLite CGO).
+Requires Go 1.24+ and a C compiler (for SQLite CGO).
 
 ```bash
 git clone https://github.com/kusandriadi/magabot.git
@@ -404,18 +378,7 @@ make release
 make clean
 ```
 
-### Cross-Platform Build
-
-```bash
-# Linux
-GOOS=linux GOARCH=amd64 make build
-
-# macOS
-GOOS=darwin GOARCH=arm64 make build
-
-# Windows
-GOOS=windows GOARCH=amd64 make build
-```
+> **Note:** `make release` uses `CGO_ENABLED=0` for static binaries. This excludes SQLite support. For full functionality, build with CGO enabled and a C compiler.
 
 ---
 

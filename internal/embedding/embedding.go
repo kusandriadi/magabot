@@ -21,6 +21,8 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Provider identifies the embedding API provider.
@@ -100,7 +102,7 @@ func NewClient(cfg Config) *Client {
 
 	return &Client{
 		config: cfg,
-		client: &http.Client{Timeout: cfg.Timeout},
+		client: util.NewHTTPClient(cfg.Timeout),
 		logger: cfg.Logger,
 	}
 }

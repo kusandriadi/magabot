@@ -9,7 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Maps tool using Nominatim (OpenStreetMap) - completely free
@@ -25,7 +26,7 @@ type MapsConfig struct {
 // NewMaps creates a new Maps tool
 func NewMaps(cfg *MapsConfig) *Maps {
 	return &Maps{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: util.NewHTTPClient(0),
 	}
 }
 
@@ -86,7 +87,10 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", fmt.Errorf("read search response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("Nominatim API error: %s", string(body))
 	}
@@ -175,7 +179,10 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", fmt.Errorf("read reverse geocode response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("Nominatim API error: %s", string(body))
 	}

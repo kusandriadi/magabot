@@ -4,11 +4,12 @@ package llm
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // OpenAI provider
@@ -31,10 +32,7 @@ type OpenAIConfig struct {
 
 // NewOpenAI creates a new OpenAI provider
 func NewOpenAI(cfg *OpenAIConfig) *OpenAI {
-	apiKey := cfg.APIKey
-	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
-	}
+	apiKey := util.ResolveAPIKey(cfg.APIKey, "OPENAI_API_KEY")
 
 	model := cfg.Model
 	if model == "" {

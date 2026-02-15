@@ -2,10 +2,11 @@ package llm
 
 import (
 	"context"
-	"os"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // DeepSeek API is OpenAI-compatible
@@ -32,9 +33,7 @@ func NewDeepSeek(config *DeepSeekConfig) *DeepSeek {
 	// Copy to avoid mutating caller's config
 	cfg := *config
 
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("DEEPSEEK_API_KEY")
-	}
+	cfg.APIKey = util.ResolveAPIKey(cfg.APIKey, "DEEPSEEK_API_KEY")
 	if cfg.Model == "" {
 		cfg.Model = "deepseek-chat"
 	}

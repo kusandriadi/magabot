@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gocolly/colly/v2"
+	"github.com/kusa/magabot/internal/util"
 )
 
 const braveSearchURL = "https://api.search.brave.com/res/v1/web/search"
@@ -32,7 +33,7 @@ type SearchConfig struct {
 func NewSearch(cfg *SearchConfig) *Search {
 	return &Search{
 		apiKey:    cfg.APIKey,
-		client:    &http.Client{Timeout: 30 * time.Second},
+		client:    util.NewHTTPClient(0),
 		userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 	}
 }
@@ -100,7 +101,10 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", fmt.Errorf("read search response: %w", err)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("Brave API error %d: %s", resp.StatusCode, string(body))

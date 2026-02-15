@@ -13,12 +13,13 @@ package llm
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 const (
@@ -87,7 +88,7 @@ func (l *Local) Available() bool {
 		return false
 	}
 
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := util.NewHTTPClient(2 * time.Second)
 	resp, err := client.Get(l.config.BaseURL + "/models")
 	if err != nil {
 		return false

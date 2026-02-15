@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +21,20 @@ func NewHTTPClient(timeout time.Duration) *http.Client {
 		timeout = DefaultHTTPTimeout
 	}
 	return &http.Client{Timeout: timeout}
+}
+
+// ResolveAPIKey returns configKey if non-empty, otherwise checks each
+// environment variable in order and returns the first non-empty value.
+func ResolveAPIKey(configKey string, envVars ...string) string {
+	if configKey != "" {
+		return configKey
+	}
+	for _, env := range envVars {
+		if v := os.Getenv(env); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // Truncate shortens a string to max length with ellipsis

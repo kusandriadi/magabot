@@ -4,11 +4,12 @@ package llm
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Anthropic provider
@@ -31,12 +32,7 @@ type AnthropicConfig struct {
 
 // NewAnthropic creates a new Anthropic provider
 func NewAnthropic(cfg *AnthropicConfig) *Anthropic {
-	apiKey := cfg.APIKey
-
-	// Try to load from environment
-	if apiKey == "" {
-		apiKey = os.Getenv("ANTHROPIC_API_KEY")
-	}
+	apiKey := util.ResolveAPIKey(cfg.APIKey, "ANTHROPIC_API_KEY")
 
 	model := cfg.Model
 	if model == "" {

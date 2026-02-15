@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // OAuthCredentials represents OAuth tokens
@@ -45,7 +47,7 @@ type OAuthManager struct {
 func NewOAuthManager() *OAuthManager {
 	return &OAuthManager{
 		credentials: make(map[string]*OAuthCredentials),
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		httpClient:  util.NewHTTPClient(0),
 	}
 }
 

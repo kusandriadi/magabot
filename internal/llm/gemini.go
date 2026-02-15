@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"os"
 	"time"
 
 	"google.golang.org/genai"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Gemini provider
@@ -29,13 +30,7 @@ type GeminiConfig struct {
 
 // NewGemini creates a new Gemini provider
 func NewGemini(cfg *GeminiConfig) *Gemini {
-	apiKey := cfg.APIKey
-	if apiKey == "" {
-		apiKey = os.Getenv("GEMINI_API_KEY")
-	}
-	if apiKey == "" {
-		apiKey = os.Getenv("GOOGLE_API_KEY")
-	}
+	apiKey := util.ResolveAPIKey(cfg.APIKey, "GEMINI_API_KEY", "GOOGLE_API_KEY")
 
 	model := cfg.Model
 	if model == "" {

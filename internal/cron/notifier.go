@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // NotifierConfig holds notification channel credentials
@@ -33,9 +34,7 @@ type Notifier struct {
 func NewNotifier(config NotifierConfig) *Notifier {
 	return &Notifier{
 		config: config,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		httpClient: util.NewHTTPClient(0),
 	}
 }
 
@@ -113,7 +112,7 @@ func (n *Notifier) sendWhatsApp(ctx context.Context, phone, message string) erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("whatsapp error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -229,7 +228,7 @@ func (n *Notifier) sendDiscordBot(ctx context.Context, channelID, message string
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("discord error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -272,7 +271,7 @@ func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}
 	defer resp.Body.Close()
 	
 	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 	
