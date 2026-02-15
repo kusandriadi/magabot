@@ -59,7 +59,7 @@ func TestStorageIntegration(t *testing.T) {
 				Timestamp: time.Now().Add(time.Duration(i) * time.Second),
 				Direction: "in",
 			}
-			store.SaveMessage(msg)
+			_ = store.SaveMessage(msg)
 		}
 
 		messages, _ := store.GetMessages("telegram", "chat_order", 10)
@@ -256,7 +256,7 @@ func TestStorageReopen(t *testing.T) {
 
 	// Create and write
 	store, _ := storage.New(dbPath)
-	store.SetConfig("test_key", "test_value")
+	_ = store.SetConfig("test_key", "test_value")
 	store.Close()
 
 	// Reopen and verify

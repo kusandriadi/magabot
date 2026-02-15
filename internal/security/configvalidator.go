@@ -339,11 +339,9 @@ func FixPermissions(configPath, dataDir string) error {
 		return fmt.Errorf("chmod database: %w", err)
 	}
 
-	// Fix log directory
+	// Fix log directory (ignore errors — log dir may not exist yet)
 	logDir := filepath.Join(dataDir, "..", "logs")
-	if err := os.Chmod(logDir, 0700); err != nil && !os.IsNotExist(err) {
-		// Ignore if doesn't exist
-	}
+	_ = os.Chmod(logDir, 0700)
 
 	return nil
 }

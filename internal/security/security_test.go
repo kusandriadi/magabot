@@ -283,7 +283,7 @@ func TestHashUserID(t *testing.T) {
 func TestNewAuthorizer(t *testing.T) {
 	auth := NewAuthorizer()
 	if auth == nil {
-		t.Error("Authorizer should not be nil")
+		t.Fatal("Authorizer should not be nil")
 	}
 	if auth.allowedUsers == nil {
 		t.Error("allowedUsers map should be initialized")
@@ -378,7 +378,7 @@ func TestAuthorizerConcurrency(t *testing.T) {
 func TestNewRateLimiter(t *testing.T) {
 	limiter := NewRateLimiter(10, 5)
 	if limiter == nil {
-		t.Error("RateLimiter should not be nil")
+		t.Fatal("RateLimiter should not be nil")
 	}
 	if limiter.maxMsg != 10 {
 		t.Errorf("Expected maxMsg 10, got %d", limiter.maxMsg)

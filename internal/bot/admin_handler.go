@@ -71,7 +71,7 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 
 	// Access info
 	sb.WriteString(fmt.Sprintf("Mode: `%s`\n", h.cfg.Access.Mode))
-	sb.WriteString(fmt.Sprintf("Your Role: "))
+	sb.WriteString("Your Role: ")
 	if isGlobalAdmin {
 		sb.WriteString("🌍 Global Admin\n")
 	} else if isPlatformAdmin {

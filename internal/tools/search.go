@@ -56,7 +56,7 @@ func (s *Search) Execute(ctx context.Context, params map[string]string) (string,
 
 	count := 5
 	if c := params["count"]; c != "" {
-		fmt.Sscanf(c, "%d", &count)
+		_, _ = fmt.Sscanf(c, "%d", &count)
 		if count < 1 {
 			count = 1
 		}

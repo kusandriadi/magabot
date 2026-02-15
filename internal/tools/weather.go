@@ -98,13 +98,6 @@ func (w *Weather) Execute(ctx context.Context, params map[string]string) (string
 
 // GetForecast gets multi-day forecast
 func (w *Weather) GetForecast(ctx context.Context, location string, days int) (string, error) {
-	if days <= 0 {
-		days = 3
-	}
-	if days > 3 {
-		days = 3
-	}
-
 	// wttr.in text forecast
 	u := fmt.Sprintf("https://wttr.in/%s?format=4&lang=id", url.PathEscape(location))
 

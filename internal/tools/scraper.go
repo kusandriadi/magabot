@@ -393,7 +393,7 @@ func (s *Scraper) newCollector() *colly.Collector {
 
 	c.SetRequestTimeout(s.timeout)
 	
-	c.Limit(&colly.LimitRule{
+	_ = c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: s.parallelism,
 		Delay:       500 * time.Millisecond,

@@ -155,7 +155,7 @@ func TestRouterIntegration(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		r.Start(ctx)
+		_ = r.Start(ctx)
 
 		// Simulate authorized user message
 		msg := &router.Message{
@@ -192,7 +192,7 @@ func TestRouterIntegration(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		r.Start(ctx)
+		_ = r.Start(ctx)
 
 		// Unauthorized user
 		msg := &router.Message{
@@ -273,7 +273,7 @@ func TestRouterIntegration(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		r.Start(ctx)
+		_ = r.Start(ctx)
 
 		// Send messages until rate limited
 		var rateLimited bool
@@ -355,7 +355,7 @@ func TestRouterConcurrency(t *testing.T) {
 				Text:      "Concurrent message",
 				Timestamp: time.Now(),
 			}
-			platform.SimulateMessage(ctx, msg)
+			_, _ = platform.SimulateMessage(ctx, msg)
 		}(i)
 	}
 

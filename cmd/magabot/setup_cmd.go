@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
-	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/util"
@@ -611,47 +610,6 @@ func saveSecret(key, value string) {
 	if err := mgr.Set(ctx, fullKey, value); err != nil {
 		fmt.Printf("⚠️  Warning: could not save secret: %v\n", err)
 	}
-}
-
-// askModel fetches available models from the provider API (using the given key),
-// shows a numbered list, and lets the user pick. If the API call fails, shows the
-// error and asks the user to enter a model name manually.
-func askModel(reader *bufio.Reader, provider, apiKey, baseURL, defaultModel string) string {
-	fmt.Println()
-	fmt.Print("🔄 Fetching available models... ")
-	models, err := llm.FetchModels(provider, apiKey, baseURL)
-	if err != nil {
-		fmt.Println("failed")
-		fmt.Printf("❌ Could not fetch models: %v\n", err)
-		fmt.Println("   Please verify your API key is valid and has access to list models.")
-		fmt.Println()
-		return askString(reader, "Model (enter manually)", defaultModel)
-	}
-	fmt.Println("done")
-
-	fmt.Println()
-	fmt.Println("Available models:")
-	for i, m := range models {
-		desc := ""
-		if m.Description != "" {
-			desc = " - " + m.Description
-		}
-		marker := " "
-		if m.ID == defaultModel {
-			marker = "*"
-		}
-		fmt.Printf("  %s%d. %s%s\n", marker, i+1, m.ID, desc)
-	}
-	fmt.Println()
-
-	input := askString(reader, "Model (number or name)", defaultModel)
-
-	// Try numeric selection
-	if idx := parseNumericChoice(input, len(models)); idx > 0 {
-		return models[idx-1].ID
-	}
-
-	return input
 }
 
 // askString, askInt, askYesNo are defined in wizard.go

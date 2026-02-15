@@ -16,16 +16,16 @@ func TestBackupIntegration(t *testing.T) {
 	dataDir := filepath.Join(tmpDir, "data")
 
 	// Create data directory with test files
-	os.MkdirAll(dataDir, 0755)
-	os.MkdirAll(filepath.Join(dataDir, "sessions"), 0755)
+	_ = os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(filepath.Join(dataDir, "sessions"), 0755)
 
 	// Create test database file
 	dbPath := filepath.Join(dataDir, "magabot.db")
-	os.WriteFile(dbPath, []byte("test database content"), 0600)
+	_ = os.WriteFile(dbPath, []byte("test database content"), 0600)
 
 	// Create test session file
 	sessionFile := filepath.Join(dataDir, "sessions", "test_session.json")
-	os.WriteFile(sessionFile, []byte(`{"key":"value"}`), 0600)
+	_ = os.WriteFile(sessionFile, []byte(`{"key":"value"}`), 0600)
 
 	mgr := backup.New(backupDir, 3)
 
@@ -56,9 +56,9 @@ func TestBackupIntegration(t *testing.T) {
 
 	t.Run("ListBackups", func(t *testing.T) {
 		// Create a few more backups
-		mgr.Create(dataDir, []string{"telegram"})
+		_, _ = mgr.Create(dataDir, []string{"telegram"})
 		time.Sleep(10 * time.Millisecond)
-		mgr.Create(dataDir, []string{"whatsapp"})
+		_, _ = mgr.Create(dataDir, []string{"whatsapp"})
 
 		backups, err := mgr.List()
 		if err != nil {
@@ -110,7 +110,7 @@ func TestBackupIntegration(t *testing.T) {
 
 		// Create 4 backups
 		for i := 0; i < 4; i++ {
-			rotationMgr.Create(dataDir, []string{"test"})
+			_, _ = rotationMgr.Create(dataDir, []string{"test"})
 			time.Sleep(10 * time.Millisecond)
 		}
 
@@ -164,7 +164,7 @@ func TestBackupIntegration(t *testing.T) {
 			t.Fatalf("List should not error on empty dir: %v", err)
 		}
 
-		if backups != nil && len(backups) != 0 {
+		if len(backups) != 0 {
 			t.Error("Should return empty list")
 		}
 	})

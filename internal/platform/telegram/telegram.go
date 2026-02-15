@@ -47,7 +47,9 @@ func New(cfg *Config) (*Bot, error) {
 
 	downloadsDir := cfg.DownloadsDir
 	if downloadsDir != "" {
-		os.MkdirAll(downloadsDir, 0700)
+		if err := os.MkdirAll(downloadsDir, 0700); err != nil {
+			return nil, fmt.Errorf("failed to create downloads directory: %w", err)
+		}
 	}
 
 	return &Bot{
@@ -136,7 +138,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 	var media []string
 
 	// Handle photo messages
-	if msg.Photo != nil && len(msg.Photo) > 0 {
+	if len(msg.Photo) > 0 {
 		// Get the largest photo (last in array)
 		photo := msg.Photo[len(msg.Photo)-1]
 		if path, err := b.downloadFile(photo.FileID, "photo"); err == nil {

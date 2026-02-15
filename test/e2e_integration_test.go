@@ -42,7 +42,7 @@ func TestE2EUserWorkflow(t *testing.T) {
 		AllowDMs:     true,
 		AllowGroups:  true,
 	}
-	cfg.Save()
+	_ = cfg.Save()
 
 	memStore, _ := memory.NewStore(tmpDir, "user1")
 	cronStore, _ := cron.NewJobStore(tmpDir)
@@ -231,7 +231,7 @@ func TestE2EConcurrentUsers(t *testing.T) {
 				sessionMgr.AddMessage(sess, "user", msg)
 
 				// Also save to storage
-				store.SaveMessage(&storage.Message{
+				_ = store.SaveMessage(&storage.Message{
 					Platform:  "telegram",
 					ChatID:    chatID,
 					UserID:    userID,
@@ -273,7 +273,7 @@ func TestE2EErrorRecovery(t *testing.T) {
 
 		// Create and populate database
 		store1, _ := storage.New(dbPath)
-		store1.SaveMessage(&storage.Message{
+		_ = store1.SaveMessage(&storage.Message{
 			Platform:  "telegram",
 			ChatID:    "chat1",
 			UserID:    "user1",
@@ -302,7 +302,7 @@ func TestE2EErrorRecovery(t *testing.T) {
 		// Create config
 		cfg1, _ := config.Load(configPath)
 		cfg1.Bot.Name = "RecoveryBot"
-		cfg1.Save()
+		_ = cfg1.Save()
 
 		// Reload and verify
 		cfg2, err := config.Load(configPath)
@@ -324,7 +324,7 @@ func TestE2EErrorRecovery(t *testing.T) {
 			Backend:     "local",
 			LocalConfig: &secrets.LocalConfig{Path: secretsPath},
 		})
-		mgr1.Set(ctx, "recovery_key", "recovery_value")
+		_ = mgr1.Set(ctx, "recovery_key", "recovery_value")
 
 		// Recreate manager and verify
 		mgr2, _ := secrets.NewFromConfig(&secrets.Config{
@@ -352,7 +352,7 @@ func TestE2EResourceCleanup(t *testing.T) {
 
 		// Add some messages
 		for i := 0; i < 100; i++ {
-			store.SaveMessage(&storage.Message{
+			_ = store.SaveMessage(&storage.Message{
 				Platform:  "telegram",
 				ChatID:    "chat1",
 				UserID:    "user1",
@@ -410,7 +410,7 @@ func TestE2EAdminOperations(t *testing.T) {
 		AllowedUsers: []string{"user1"},
 		AllowDMs:     true,
 	}
-	cfg.Save()
+	_ = cfg.Save()
 
 	t.Run("AllowNewUser", func(t *testing.T) {
 		result := cfg.AllowUser("telegram", "admin1", "new_user")

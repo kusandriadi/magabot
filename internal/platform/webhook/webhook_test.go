@@ -644,7 +644,7 @@ func TestBearerTokensMapping(t *testing.T) {
 			t.Errorf("Expected 200, got %d", rec.Code)
 		}
 		var resp map[string]interface{}
-		json.Unmarshal(rec.Body.Bytes(), &resp)
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 		if resp["response"] != "hello alice" {
 			t.Errorf("Expected 'hello alice', got %v", resp["response"])
 		}
@@ -1381,7 +1381,7 @@ func TestRequestIDInResponse(t *testing.T) {
 	s.handleWebhook(rec, req)
 
 	var resp map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 
 	if resp["request_id"] == nil || resp["request_id"] == "" {
 		t.Error("Response should include request_id")
@@ -1418,7 +1418,7 @@ func TestHMACUsersMapping(t *testing.T) {
 			t.Errorf("Expected 200, got %d", rec.Code)
 		}
 		var resp map[string]interface{}
-		json.Unmarshal(rec.Body.Bytes(), &resp)
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 		if resp["response"] != "hello github:myrepo" {
 			t.Errorf("Expected 'hello github:myrepo', got %v", resp["response"])
 		}

@@ -341,7 +341,7 @@ func (s *Server) cleanupNonces() {
 // generateRequestID creates a unique request ID for tracking
 func generateRequestID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
@@ -514,7 +514,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"ok":         true,
 			"response":   response,
 			"request_id": requestID,
@@ -523,7 +523,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"ok":         true,
 		"request_id": requestID,
 	})
@@ -540,7 +540,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		runtime.ReadMemStats(&m)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":      "ok",
 			"goroutines":  runtime.NumGoroutine(),
 			"heap_alloc":  m.HeapAlloc,
@@ -552,7 +552,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }
 
 // authenticate verifies the request and returns the user_id from token mapping.

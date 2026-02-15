@@ -156,7 +156,7 @@ func TestConfigAdminOperations(t *testing.T) {
 		AllowGroups:  true,
 		AllowDMs:     true,
 	}
-	cfg.Save()
+	_ = cfg.Save()
 
 	// Test AllowUser (as admin)
 	result := cfg.AllowUser("telegram", "admin1", "user2")
@@ -205,7 +205,7 @@ func TestConcurrentAccess(t *testing.T) {
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
 		go func(n int) {
-			memStore.Remember("Concurrent memory "+string(rune('0'+n)), "test")
+			_, _ = memStore.Remember("Concurrent memory "+string(rune('0'+n)), "test")
 			done <- true
 		}(i)
 	}

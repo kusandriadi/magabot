@@ -18,7 +18,7 @@ func TestAgentIntegration(t *testing.T) {
 
 	// Create a test directory
 	testDir := filepath.Join(tmpDir, "workspace")
-	os.MkdirAll(testDir, 0755)
+	_ = os.MkdirAll(testDir, 0755)
 
 	cfg := agent.Config{
 		Main:        agent.AgentClaude,
@@ -92,7 +92,7 @@ func TestAgentIntegration(t *testing.T) {
 	t.Run("FileNotDirectory", func(t *testing.T) {
 		// Create a file
 		filePath := filepath.Join(tmpDir, "testfile.txt")
-		os.WriteFile(filePath, []byte("test"), 0644)
+		_ = os.WriteFile(filePath, []byte("test"), 0644)
 
 		mgr := agent.NewManager(cfg, logger)
 
@@ -111,7 +111,7 @@ func TestAgentIntegration(t *testing.T) {
 		}
 
 		// Create session (may fail due to binary not found)
-		mgr.NewSession("telegram", "chat1", "user1", "claude", testDir)
+		_, _ = mgr.NewSession("telegram", "chat1", "user1", "claude", testDir)
 
 		// GetSession should return nil if session creation failed
 		sess := mgr.GetSession("telegram", "chat1")
@@ -127,7 +127,7 @@ func TestAgentIntegration(t *testing.T) {
 		mgr := agent.NewManager(cfg, logger)
 
 		// Create and close session
-		mgr.NewSession("telegram", "chat1", "user1", "claude", testDir)
+		_, _ = mgr.NewSession("telegram", "chat1", "user1", "claude", testDir)
 		mgr.CloseSession("telegram", "chat1")
 
 		if mgr.HasSession("telegram", "chat1") {
@@ -151,9 +151,9 @@ func TestAgentIntegration(t *testing.T) {
 		mgr := agent.NewManager(cfg, logger)
 
 		// Create sessions for different chats
-		mgr.NewSession("telegram", "chat1", "user1", "claude", testDir)
-		mgr.NewSession("telegram", "chat2", "user2", "claude", testDir)
-		mgr.NewSession("whatsapp", "chat1", "user1", "claude", testDir)
+		_, _ = mgr.NewSession("telegram", "chat1", "user1", "claude", testDir)
+		_, _ = mgr.NewSession("telegram", "chat2", "user2", "claude", testDir)
+		_, _ = mgr.NewSession("whatsapp", "chat1", "user1", "claude", testDir)
 
 		// Each should be independent
 		sess1 := mgr.GetSession("telegram", "chat1")
@@ -247,7 +247,7 @@ func TestExecuteTimeout(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	testDir := filepath.Join(tmpDir, "workspace")
-	os.MkdirAll(testDir, 0755)
+	_ = os.MkdirAll(testDir, 0755)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 

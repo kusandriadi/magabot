@@ -525,7 +525,7 @@ func BenchmarkVaultEncrypt(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		vault.Encrypt(data)
+		_, _ = vault.Encrypt(data)
 	}
 }
 

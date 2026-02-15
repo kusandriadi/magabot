@@ -52,7 +52,7 @@ func TestSecretsLocalBackend(t *testing.T) {
 	})
 
 	t.Run("Update", func(t *testing.T) {
-		backend.Set(ctx, "update_key", "value1")
+		_ = backend.Set(ctx, "update_key", "value1")
 
 		err := backend.Set(ctx, "update_key", "value2")
 		if err != nil {
@@ -66,7 +66,7 @@ func TestSecretsLocalBackend(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		backend.Set(ctx, "delete_key", "to_delete")
+		_ = backend.Set(ctx, "delete_key", "to_delete")
 
 		err := backend.Delete(ctx, "delete_key")
 		if err != nil {
@@ -81,11 +81,11 @@ func TestSecretsLocalBackend(t *testing.T) {
 
 	t.Run("List", func(t *testing.T) {
 		// Clear and add known keys
-		backend.Delete(ctx, "api_key")
-		backend.Delete(ctx, "update_key")
+		_ = backend.Delete(ctx, "api_key")
+		_ = backend.Delete(ctx, "update_key")
 
-		backend.Set(ctx, "key1", "val1")
-		backend.Set(ctx, "key2", "val2")
+		_ = backend.Set(ctx, "key1", "val1")
+		_ = backend.Set(ctx, "key2", "val2")
 
 		keys, err := backend.List(ctx)
 		if err != nil {
@@ -162,7 +162,7 @@ func TestSecretsChainBackend(t *testing.T) {
 	localBackend, _ := secrets.NewLocal(&secrets.LocalConfig{
 		Path: filepath.Join(tmpDir, "secrets.json"),
 	})
-	localBackend.Set(ctx, "local_only", "from_local")
+	_ = localBackend.Set(ctx, "local_only", "from_local")
 
 	// Create env backend
 	os.Setenv("ANTHROPIC_API_KEY", "from_env")
@@ -247,8 +247,8 @@ func TestSecretsChainPriority(t *testing.T) {
 		Path: filepath.Join(tmpDir, "backend2", "secrets.json"),
 	})
 
-	backend1.Set(ctx, "shared_key", "value_from_first")
-	backend2.Set(ctx, "shared_key", "value_from_second")
+	_ = backend1.Set(ctx, "shared_key", "value_from_first")
+	_ = backend2.Set(ctx, "shared_key", "value_from_second")
 
 	chain := secrets.NewChain(backend1, backend2)
 
@@ -308,7 +308,7 @@ func TestSecretsLocalBackendPersistence(t *testing.T) {
 
 	// Create backend and set a secret
 	backend1, _ := secrets.NewLocal(&secrets.LocalConfig{Path: secretsPath})
-	backend1.Set(ctx, "persistent_key", "persistent_value")
+	_ = backend1.Set(ctx, "persistent_key", "persistent_value")
 
 	// Create new backend instance pointing to same location
 	backend2, err := secrets.NewLocal(&secrets.LocalConfig{Path: secretsPath})
