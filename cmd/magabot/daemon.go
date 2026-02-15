@@ -325,14 +325,15 @@ func runDaemon() {
 
 	if cfg.Platforms.Webhook.Enabled {
 		wh, err := webhook.New(&webhook.Config{
-			Port:        cfg.Platforms.Webhook.Port,
-			Path:        cfg.Platforms.Webhook.Path,
-			Bind:        cfg.Platforms.Webhook.Bind,
-			AuthMethod:  cfg.Platforms.Webhook.AuthMethod,
-			BearerToken: cfg.Platforms.Webhook.BearerToken,
-			HMACSecret:  cfg.Platforms.Webhook.HMACSecret,
-			AllowedIPs:  cfg.Platforms.Webhook.AllowedIPs,
-			Logger:      logger.With("platform", "webhook"),
+			Port:         cfg.Platforms.Webhook.Port,
+			Path:         cfg.Platforms.Webhook.Path,
+			Bind:         cfg.Platforms.Webhook.Bind,
+			AuthMethod:   cfg.Platforms.Webhook.AuthMethod,
+			BearerToken:  cfg.Platforms.Webhook.BearerToken,
+			HMACSecret:   cfg.Platforms.Webhook.HMACSecret,
+			AllowedIPs:   cfg.Platforms.Webhook.AllowedIPs,
+			AllowedUsers: cfg.Platforms.Webhook.AllowedUsers,
+			Logger:       logger.With("platform", "webhook"),
 		})
 		if err != nil {
 			logger.Error("init webhook failed", "error", err)

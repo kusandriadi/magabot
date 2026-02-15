@@ -381,6 +381,20 @@ func setupAPIWebhook(reader *bufio.Reader) {
 		fmt.Printf("   Token: %s\n", token)
 	}
 
+	// Allowed users
+	fmt.Println()
+	fmt.Println("  User allowlist (optional, empty = allow all authenticated requests):")
+	fmt.Println("  Format: user_id or prefix:* (e.g., telegram:123, github:*, slack:U1234)")
+	fmt.Println()
+	allowedUsers := askString(reader, "Allowed users (comma-separated)", "")
+	if allowedUsers != "" {
+		users := strings.Split(allowedUsers, ",")
+		for i := range users {
+			users[i] = strings.TrimSpace(users[i])
+		}
+		cfg.Platforms.Webhook.AllowedUsers = users
+	}
+
 	if err := cfg.Save(); err != nil {
 		fmt.Printf("❌ Failed to save config: %v\n", err)
 		return
@@ -395,20 +409,24 @@ func setupAPIWebhook(reader *bufio.Reader) {
 		fmt.Printf(`   curl -X POST http://%s:%d%s \
      -H "Authorization: Bearer %s" \
      -H "Content-Type: application/json" \
-     -d '{"message": "Hello from webhook!"}'
+     -d '{"message": "Hello!", "user_id": "myapp:user123"}'
 `, bind, port, path, cfg.Platforms.Webhook.BearerToken)
 	} else if cfg.Platforms.Webhook.AuthMethod == "hmac" {
 		fmt.Printf(`   # With HMAC signature
    curl -X POST http://%s:%d%s \
      -H "X-Hub-Signature-256: sha256=<signature>" \
      -H "Content-Type: application/json" \
-     -d '{"message": "Hello from webhook!"}'
+     -d '{"message": "Hello!", "user_id": "myapp:user123"}'
 `, bind, port, path)
 	} else {
 		fmt.Printf(`   curl -X POST http://%s:%d%s \
      -H "Content-Type: application/json" \
-     -d '{"message": "Hello from webhook!"}'
+     -d '{"message": "Hello!", "user_id": "myapp:user123"}'
 `, bind, port, path)
+	}
+
+	if len(cfg.Platforms.Webhook.AllowedUsers) > 0 {
+		fmt.Printf("\n   Allowed users: %s\n", strings.Join(cfg.Platforms.Webhook.AllowedUsers, ", "))
 	}
 
 	askRestart(reader)

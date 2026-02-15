@@ -43,6 +43,7 @@ type Config struct {
 	BasicPass     string
 	HMACSecret    string
 	AllowedIPs    []string
+	AllowedUsers  []string // Allowed user IDs (X-User-ID header or payload)
 	MaxBodySize   int64
 	Logger        *slog.Logger
 }
@@ -158,10 +159,29 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Parse message
-	text := s.parsePayload(body, r)
+	// Parse message and user ID from payload
+	text, userID := s.parsePayload(body, r)
 	if text == "" {
 		http.Error(w, "No message found", http.StatusBadRequest)
+		return
+	}
+
+	// User ID from header takes precedence
+	if headerUserID := r.Header.Get("X-User-ID"); headerUserID != "" {
+		userID = headerUserID
+	}
+	// Fallback to X-Webhook-Source for backward compatibility
+	if userID == "" {
+		userID = r.Header.Get("X-Webhook-Source")
+	}
+	if userID == "" {
+		userID = "anonymous"
+	}
+
+	// User allowlist check
+	if !s.checkUser(userID) {
+		s.logger.Warn("webhook blocked by user allowlist", "user_id", userID, "ip", getClientIP(r))
+		http.Error(w, "Forbidden: user not allowed", http.StatusForbidden)
 		return
 	}
 
@@ -169,7 +189,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	msg := &router.Message{
 		Platform:  "webhook",
 		ChatID:    getClientIP(r),
-		UserID:    r.Header.Get("X-Webhook-Source"),
+		UserID:    userID,
 		Text:      text,
 		Timestamp: time.Now(),
 		Raw:       body,
@@ -284,37 +304,80 @@ func (s *Server) checkIP(r *http.Request) bool {
 	return false
 }
 
-// parsePayload extracts message from payload
-func (s *Server) parsePayload(body []byte, r *http.Request) string {
+// checkUser checks if the user ID is allowed
+func (s *Server) checkUser(userID string) bool {
+	if len(s.config.AllowedUsers) == 0 {
+		return true // No allowlist = allow all
+	}
+
+	for _, allowed := range s.config.AllowedUsers {
+		if allowed == userID {
+			return true
+		}
+		// Support wildcards: "telegram:*" matches any telegram user
+		if strings.HasSuffix(allowed, ":*") {
+			prefix := strings.TrimSuffix(allowed, "*")
+			if strings.HasPrefix(userID, prefix) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// parsePayload extracts message and user ID from payload
+func (s *Server) parsePayload(body []byte, r *http.Request) (text string, userID string) {
 	// Try JSON
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err == nil {
+		// Extract user ID from common fields
+		for _, field := range []string{"user_id", "userId", "user", "sender", "from"} {
+			if v, ok := data[field].(string); ok && v != "" {
+				userID = v
+				break
+			}
+		}
+
 		// Common message fields
 		for _, field := range []string{"message", "text", "content", "body", "msg"} {
 			if v, ok := data[field].(string); ok && v != "" {
-				return v
+				text = v
+				break
 			}
+		}
+		if text != "" {
+			return text, userID
 		}
 		
 		// GitHub webhook
 		if commits, ok := data["commits"].([]interface{}); ok && len(commits) > 0 {
 			if commit, ok := commits[0].(map[string]interface{}); ok {
 				if msg, ok := commit["message"].(string); ok {
-					return fmt.Sprintf("GitHub push: %s", msg)
+					text = fmt.Sprintf("GitHub push: %s", msg)
 				}
 			}
+			// GitHub sender
+			if sender, ok := data["sender"].(map[string]interface{}); ok {
+				if login, ok := sender["login"].(string); ok {
+					userID = "github:" + login
+				}
+			}
+			return text, userID
 		}
 		
 		// Grafana alert
 		if title, ok := data["title"].(string); ok {
 			if state, ok := data["state"].(string); ok {
-				return fmt.Sprintf("Grafana [%s]: %s", state, title)
+				text = fmt.Sprintf("Grafana [%s]: %s", state, title)
+				userID = "grafana"
+				return text, userID
 			}
 		}
 	}
 
 	// Fallback: raw body as text
-	return string(body)
+	return string(body), ""
 }
 
 // getClientIP returns the direct TCP peer address for security checks.

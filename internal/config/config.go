@@ -161,16 +161,17 @@ type WhatsAppConfig struct {
 
 // WebhookConfig for generic webhook
 type WebhookConfig struct {
-	Enabled     bool     `yaml:"enabled"`
-	Port        int      `yaml:"port"`
-	Path        string   `yaml:"path"`
-	Bind        string   `yaml:"bind"`
-	Secret      string   `yaml:"secret,omitempty"`
-	AuthMethod  string   `yaml:"auth_method"` // bearer, hmac, none
-	BearerToken string   `yaml:"bearer_token,omitempty"`
-	HMACSecret  string   `yaml:"hmac_secret,omitempty"`
-	Admins      []string `yaml:"admins"`
-	AllowedIPs  []string `yaml:"allowed_ips"`
+	Enabled      bool     `yaml:"enabled"`
+	Port         int      `yaml:"port"`
+	Path         string   `yaml:"path"`
+	Bind         string   `yaml:"bind"`
+	Secret       string   `yaml:"secret,omitempty"`
+	AuthMethod   string   `yaml:"auth_method"` // bearer, hmac, none
+	BearerToken  string   `yaml:"bearer_token,omitempty"`
+	HMACSecret   string   `yaml:"hmac_secret,omitempty"`
+	Admins       []string `yaml:"admins"`
+	AllowedIPs   []string `yaml:"allowed_ips"`
+	AllowedUsers []string `yaml:"allowed_users"` // Allowed user IDs (empty = allow all)
 }
 
 // LLMConfig holds LLM provider settings

@@ -339,54 +339,120 @@ func TestParsePayload(t *testing.T) {
 	t.Run("JSONMessage", func(t *testing.T) {
 		body := []byte(`{"message": "hello world"}`)
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		result := s.parsePayload(body, req)
-		if result != "hello world" {
-			t.Errorf("Expected 'hello world', got %s", result)
+		text, _ := s.parsePayload(body, req)
+		if text != "hello world" {
+			t.Errorf("Expected 'hello world', got %s", text)
 		}
 	})
 
 	t.Run("JSONText", func(t *testing.T) {
 		body := []byte(`{"text": "hello text"}`)
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		result := s.parsePayload(body, req)
-		if result != "hello text" {
-			t.Errorf("Expected 'hello text', got %s", result)
+		text, _ := s.parsePayload(body, req)
+		if text != "hello text" {
+			t.Errorf("Expected 'hello text', got %s", text)
 		}
 	})
 
 	t.Run("JSONContent", func(t *testing.T) {
 		body := []byte(`{"content": "hello content"}`)
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		result := s.parsePayload(body, req)
-		if result != "hello content" {
-			t.Errorf("Expected 'hello content', got %s", result)
+		text, _ := s.parsePayload(body, req)
+		if text != "hello content" {
+			t.Errorf("Expected 'hello content', got %s", text)
 		}
 	})
 
 	t.Run("GitHubPush", func(t *testing.T) {
-		body := []byte(`{"commits": [{"message": "fix bug"}]}`)
+		body := []byte(`{"commits": [{"message": "fix bug"}], "sender": {"login": "testuser"}}`)
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		result := s.parsePayload(body, req)
-		if result != "GitHub push: fix bug" {
-			t.Errorf("Expected 'GitHub push: fix bug', got %s", result)
+		text, userID := s.parsePayload(body, req)
+		if text != "GitHub push: fix bug" {
+			t.Errorf("Expected 'GitHub push: fix bug', got %s", text)
+		}
+		if userID != "github:testuser" {
+			t.Errorf("Expected 'github:testuser', got %s", userID)
 		}
 	})
 
 	t.Run("GrafanaAlert", func(t *testing.T) {
 		body := []byte(`{"title": "CPU High", "state": "alerting"}`)
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		result := s.parsePayload(body, req)
-		if result != "Grafana [alerting]: CPU High" {
-			t.Errorf("Expected 'Grafana [alerting]: CPU High', got %s", result)
+		text, userID := s.parsePayload(body, req)
+		if text != "Grafana [alerting]: CPU High" {
+			t.Errorf("Expected 'Grafana [alerting]: CPU High', got %s", text)
+		}
+		if userID != "grafana" {
+			t.Errorf("Expected 'grafana', got %s", userID)
 		}
 	})
 
 	t.Run("PlainText", func(t *testing.T) {
 		body := []byte(`plain text message`)
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		result := s.parsePayload(body, req)
-		if result != "plain text message" {
-			t.Errorf("Expected 'plain text message', got %s", result)
+		text, _ := s.parsePayload(body, req)
+		if text != "plain text message" {
+			t.Errorf("Expected 'plain text message', got %s", text)
+		}
+	})
+
+	t.Run("WithUserID", func(t *testing.T) {
+		body := []byte(`{"message": "test", "user_id": "telegram:12345"}`)
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		text, userID := s.parsePayload(body, req)
+		if text != "test" {
+			t.Errorf("Expected 'test', got %s", text)
+		}
+		if userID != "telegram:12345" {
+			t.Errorf("Expected 'telegram:12345', got %s", userID)
+		}
+	})
+}
+
+func TestCheckUser(t *testing.T) {
+	t.Run("EmptyAllowlist", func(t *testing.T) {
+		s := newTestServer(&Config{})
+		if !s.checkUser("anyuser") {
+			t.Error("Empty allowlist should allow all users")
+		}
+	})
+
+	t.Run("ExactMatch", func(t *testing.T) {
+		s := newTestServer(&Config{AllowedUsers: []string{"user123"}})
+		if !s.checkUser("user123") {
+			t.Error("Should allow exact match")
+		}
+		if s.checkUser("user456") {
+			t.Error("Should block non-matching user")
+		}
+	})
+
+	t.Run("WildcardPrefix", func(t *testing.T) {
+		s := newTestServer(&Config{AllowedUsers: []string{"telegram:*"}})
+		if !s.checkUser("telegram:12345") {
+			t.Error("Should allow telegram:12345 with telegram:* wildcard")
+		}
+		if !s.checkUser("telegram:67890") {
+			t.Error("Should allow telegram:67890 with telegram:* wildcard")
+		}
+		if s.checkUser("slack:12345") {
+			t.Error("Should block slack:12345 with telegram:* wildcard")
+		}
+	})
+
+	t.Run("MultipleAllowed", func(t *testing.T) {
+		s := newTestServer(&Config{AllowedUsers: []string{"user1", "telegram:*", "github:octocat"}})
+		if !s.checkUser("user1") {
+			t.Error("Should allow user1")
+		}
+		if !s.checkUser("telegram:99999") {
+			t.Error("Should allow telegram users")
+		}
+		if !s.checkUser("github:octocat") {
+			t.Error("Should allow github:octocat")
+		}
+		if s.checkUser("github:other") {
+			t.Error("Should block github:other")
 		}
 	})
 }
