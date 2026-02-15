@@ -215,7 +215,7 @@ If the default provider fails, Magabot automatically tries the next provider in 
 
 ```yaml
 llm:
-  default: anthropic
+  main: anthropic
   fallback_chain:
     - anthropic
     - deepseek
@@ -316,306 +316,183 @@ The Vault client respects standard environment variables: `VAULT_ADDR`, `VAULT_T
 
 ### LLM Setup
 
-#### Anthropic (Claude)
-
-**Option A: API Key**
-
-1. Get an API key from [console.anthropic.com](https://console.anthropic.com/)
-2. Configure:
+Run the LLM setup wizard:
 
 ```bash
-magabot setup anthropic
+magabot setup llm
 ```
 
-Or set manually in `config.yaml`:
+This will guide you through:
+
+```
+🤖 LLM Providers Setup
+──────────────────────
+
+Which LLM provider do you want as default?
+  1. anthropic  - Claude (recommended)
+  2. openai     - GPT-4
+  3. gemini     - Google Gemini
+  4. deepseek   - DeepSeek
+  5. glm        - Zhipu GLM
+
+Default provider [anthropic]: 1
+
+Configure Anthropic (Claude)? [Y/n]: y
+Anthropic API Key (sk-ant-...): ********
+
+Configure OpenAI (GPT)? [y/N]: n
+Configure Google Gemini? [y/N]: n
+Configure DeepSeek? [y/N]: n
+
+✅ LLM providers configured!
+```
+
+#### Get API Keys
+
+| Provider | URL |
+|----------|-----|
+| Anthropic | [console.anthropic.com](https://console.anthropic.com/) |
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| DeepSeek | [platform.deepseek.com](https://platform.deepseek.com/) |
+| GLM | [open.bigmodel.cn](https://open.bigmodel.cn/) |
+
+#### Manual Configuration
+
+You can also set providers directly in `config.yaml`:
 
 ```yaml
 llm:
-  default: "anthropic"
+  main: "anthropic"
+  
   anthropic:
     enabled: true
-    api_key: "sk-ant-api03-..."
+    api_key: "sk-ant-..."
     model: "claude-sonnet-4-20250514"
-    max_tokens: 4096
-    temperature: 0.7
-```
-
-**Option B: Claude CLI OAuth**
-
-If you have Claude CLI installed and authenticated:
-
-```bash
-magabot setup anthropic
-# Select "Claude CLI OAuth" when prompted
-# Tokens are loaded from ~/.claude/.credentials.json
-```
-
-#### OpenAI (GPT)
-
-1. Get an API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-2. Configure:
-
-```bash
-magabot setup openai
-```
-
-Or set manually:
-
-```yaml
-llm:
+  
   openai:
-    enabled: true
+    enabled: false
     api_key: "sk-..."
     model: "gpt-4o"
-    max_tokens: 4096
-```
-
-#### Google Gemini
-
-1. Get an API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-2. Configure:
-
-```bash
-magabot setup gemini
-```
-
-Or set manually:
-
-```yaml
-llm:
+  
   gemini:
-    enabled: true
+    enabled: false
     api_key: "AIza..."
     model: "gemini-2.0-flash"
-```
-
-#### DeepSeek
-
-1. Get an API key from [platform.deepseek.com](https://platform.deepseek.com/)
-2. Configure:
-
-```bash
-magabot setup deepseek
-```
-
-Or set manually:
-
-```yaml
-llm:
+  
   deepseek:
-    enabled: true
+    enabled: false
     api_key: "sk-..."
     model: "deepseek-chat"
-```
-
-#### GLM (Zhipu)
-
-1. Get an API key from [open.bigmodel.cn](https://open.bigmodel.cn/)
-2. Configure:
-
-```bash
-magabot setup glm
-```
-
-Or set manually:
-
-```yaml
-llm:
+  
   glm:
-    enabled: true
-    api_key: "your-glm-key"
+    enabled: false
+    api_key: "..."
     model: "glm-4"
-```
-
-#### Local/Self-hosted
-
-No API key required. Start your local LLM server, then configure Magabot to connect to it.
-
-**Ollama example:**
-
-```bash
-# Start Ollama and pull a model
-ollama pull llama3
-ollama serve
-```
-
-```yaml
-llm:
-  default: "local"
+  
   local:
-    enabled: true
+    enabled: false
     base_url: "http://localhost:11434/v1"
     model: "llama3"
-    max_tokens: 4096
-```
-
-**vLLM example:**
-
-```yaml
-llm:
-  local:
-    enabled: true
-    base_url: "http://localhost:8000/v1"
-    model: "meta-llama/Llama-3-8B-Instruct"
-```
-
-**llama.cpp server example:**
-
-```yaml
-llm:
-  local:
-    enabled: true
-    base_url: "http://localhost:8080/v1"
-    model: "default"
-```
-
-You can also configure the local provider via environment variables:
-
-```bash
-export LOCAL_LLM_URL="http://localhost:11434/v1"
-export LOCAL_LLM_MODEL="llama3"
-export LOCAL_LLM_API_KEY="optional-key"   # if your server requires one
 ```
 
 ---
 
 ### Platform Setup
 
-#### Telegram
-
-1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot` and follow the prompts to create your bot
-3. Copy the bot token (format: `123456789:ABCdefGHI...`)
-4. Configure:
+Run the platform setup wizard:
 
 ```bash
-magabot setup telegram
+magabot setup platform
 ```
 
-Or set manually:
+This will guide you through:
 
-```yaml
-platforms:
-  telegram:
-    enabled: true
-    token: "123456789:ABCdefGHI..."
-    admins: ["your_telegram_user_id"]
-    allowed_users: []
-    allowed_chats: []
-    allow_groups: true
-    allow_dms: true
+```
+📱 Platform Setup
+─────────────────
+
+Which platform do you want to configure?
+  1. telegram   - Telegram Bot
+  2. discord    - Discord Bot
+  3. slack      - Slack App
+  4. whatsapp   - WhatsApp (beta)
+
+Platform [telegram]: 1
+
+🤖 Telegram Setup
+─────────────────
+
+📝 Get your bot token from @BotFather on Telegram
+   1. Open Telegram, search for @BotFather
+   2. Send /newbot and follow the prompts
+   3. Copy the token (format: 123456789:ABCdef...)
+
+Bot Token: ********
+
+📝 Get your Telegram user ID:
+   1. Open Telegram, search for @userinfobot
+   2. Send /start - it will show your ID
+
+Your Telegram User ID: 287676843
+
+Allow group chats? [Y/n]: y
+Allow direct messages? [Y/n]: y
+
+✅ Telegram configured!
 ```
 
-To find your Telegram user ID, message [@userinfobot](https://t.me/userinfobot) on Telegram.
+#### Platform Requirements
 
-#### Discord
+| Platform | Requirements |
+|----------|--------------|
+| Telegram | Bot token from [@BotFather](https://t.me/BotFather) |
+| Discord | Bot token from [Developer Portal](https://discord.com/developers/applications), enable MESSAGE CONTENT INTENT |
+| Slack | Bot Token (xoxb-) + App Token (xapp-) from [api.slack.com/apps](https://api.slack.com/apps) |
+| WhatsApp | QR code scan on first start (beta) |
 
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
-2. Click "New Application" and give it a name
-3. Go to "Bot" in the left sidebar and click "Add Bot"
-4. Copy the bot token
-5. Under "Privileged Gateway Intents", enable "Message Content Intent"
-6. Go to "OAuth2" > "URL Generator", select `bot` scope with `Send Messages` + `Read Message History` permissions
-7. Use the generated URL to invite the bot to your server
-8. Configure:
+### Webhook Setup
 
-```bash
-magabot setup discord
-```
-
-Or set manually:
-
-```yaml
-platforms:
-  discord:
-    enabled: true
-    token: "your-discord-bot-token"
-    prefix: "!"
-    admins: ["your_discord_user_id"]
-    allowed_users: []
-    allowed_chats: []
-```
-
-#### Slack
-
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click "Create New App"
-2. Choose "From scratch" and name your app
-3. Under "Socket Mode", enable it and generate an app-level token (starts with `xapp-`)
-4. Under "OAuth & Permissions", add these Bot Token Scopes: `chat:write`, `app_mentions:read`, `im:history`, `im:read`, `im:write`
-5. Install the app to your workspace and copy the Bot User OAuth Token (starts with `xoxb-`)
-6. Under "Event Subscriptions", enable events and subscribe to: `message.im`, `app_mention`
-7. Configure:
-
-```bash
-magabot setup slack
-```
-
-Or set manually:
-
-```yaml
-platforms:
-  slack:
-    enabled: true
-    bot_token: "xoxb-..."
-    app_token: "xapp-..."
-    admins: ["your_slack_user_id"]
-    allowed_users: []
-    allowed_chats: []
-```
-
-#### WhatsApp
-
-WhatsApp uses the whatsmeow library (pure Go, multi-device protocol). No external bridge or Node.js required.
-
-1. Configure and start:
-
-```bash
-magabot setup whatsapp
-magabot start
-```
-
-2. A QR code will be displayed in the terminal. Scan it with WhatsApp on your phone (Settings > Linked Devices > Link a Device).
-
-```yaml
-platforms:
-  whatsapp:
-    enabled: true
-    admins: ["your_phone_number"]
-    allowed_users: []
-    allowed_chats: []
-```
-
-**Note:** WhatsApp support is in beta. The QR code must be scanned each time the session expires.
-
-#### Webhook
-
-The webhook platform exposes an HTTP endpoint that accepts POST requests with JSON payloads.
+For Telegram and Slack, you can use webhook mode instead of polling/socket mode:
 
 ```bash
 magabot setup webhook
 ```
 
-Or set manually:
+```
+🔗 Webhook Setup
+────────────────
 
-```yaml
-platforms:
-  webhook:
-    enabled: true
-    port: 8080
-    path: "/webhook"
-    bind: "127.0.0.1"
-    auth_method: "bearer"     # none | bearer | hmac
-    bearer_token: "your-secret-token"
-    hmac_secret: ""
+Which platform webhook do you want to configure?
+  1. telegram - Telegram Bot API webhook
+  2. slack    - Slack Events API webhook
+
+Platform [1]: 1
+
+📱 Telegram Webhook Setup
+─────────────────────────
+
+Bot Token: ********
+
+Webhook URL (e.g., https://yourdomain.com/telegram): https://mybot.com
+Local port to listen on [8443]: 8443
+Webhook path [/telegram]: /telegram
+Secret token (leave empty to generate): 
+   Secret: a1b2c3d4...
+
+✅ Telegram webhook configured!
+   URL: https://mybot.com/telegram
+   Port: 8443
 ```
 
-**Authentication methods:**
+**Connection Modes:**
 
-| Method | Description |
-|--------|-------------|
-| `none` | No authentication (not recommended) |
-| `bearer` | Requires `Authorization: Bearer <token>` header |
-| `hmac` | Validates HMAC-SHA256 signature in `X-Signature` header |
+| Platform | Bot Mode | Webhook Mode |
+|----------|----------|--------------|
+| Telegram | Long polling (simple) | HTTPS webhook |
+| Slack | Socket Mode (simple) | Events API |
+| Discord | Gateway only | N/A |
+| WhatsApp | WebSocket only | N/A |
 
 ---
 
@@ -1030,22 +907,10 @@ magabot log                  # Tail log file
 #### Setup
 
 ```bash
-magabot setup                # Full interactive wizard
-magabot setup telegram       # Setup Telegram
-magabot setup discord        # Setup Discord
-magabot setup slack          # Setup Slack
-magabot setup whatsapp       # Setup WhatsApp
-magabot setup webhook        # Setup webhook endpoint
-magabot setup llm            # Setup all LLM providers
-magabot setup anthropic      # Setup Anthropic
-magabot setup openai         # Setup OpenAI
-magabot setup gemini         # Setup Gemini
-magabot setup deepseek       # Setup DeepSeek
-magabot setup glm            # Setup GLM
-magabot setup admin <id>     # Add global admin
-magabot setup paths          # Configure directories
-magabot setup skills         # Configure skills
-magabot setup hooks          # Configure hooks
+magabot setup                # Full interactive wizard (5 steps)
+magabot setup llm            # Configure LLM providers
+magabot setup platform       # Configure chat platform (Telegram/Discord/Slack/WhatsApp)
+magabot setup webhook        # Configure webhook mode (Telegram/Slack)
 ```
 
 #### Config
@@ -1267,7 +1132,7 @@ platforms:
     hmac_secret: ""
 
 llm:
-  default: "anthropic"
+  main: "anthropic"
   fallback_chain: ["anthropic", "deepseek", "openai"]
   system_prompt: "You are a helpful AI assistant."
   max_input_length: 10000
