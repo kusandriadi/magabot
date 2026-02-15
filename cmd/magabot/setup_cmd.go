@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,42 +26,12 @@ func cmdSetup() {
 	subCmd := strings.ToLower(os.Args[2])
 
 	switch subCmd {
-	case "telegram":
-		setupTelegram()
-	case "discord":
-		setupDiscord()
-	case "slack":
-		setupSlack()
-	case "whatsapp":
-		setupWhatsApp()
-	case "webhook":
-		setupWebhook()
 	case "llm":
 		setupLLM()
-	case "anthropic":
-		setupAnthropic()
-	case "openai":
-		setupOpenAI()
-	case "gemini":
-		setupGemini()
-	case "deepseek":
-		setupDeepSeek()
-	case "glm":
-		setupGLM()
-	case "admin":
-		if len(os.Args) >= 4 {
-			setupAdmin(os.Args[3])
-		} else {
-			fmt.Println("Usage: magabot setup admin <user_id>")
-		}
-	case "local":
-		setupLocal()
-	case "hooks":
-		setupHooks()
-	case "paths":
-		setupPaths()
-	case "skills":
-		setupSkills()
+	case "platform":
+		setupPlatform()
+	case "webhook":
+		setupWebhook()
 	default:
 		fmt.Printf("Unknown setup target: %s\n\n", subCmd)
 		printSetupUsage()
@@ -75,35 +44,45 @@ func printSetupUsage() {
 Usage: magabot setup [target]
 
 Targets:
-  (none)          Run full interactive wizard
-
-  Platforms:
-    telegram      Configure Telegram bot
-    discord       Configure Discord bot
-    slack         Configure Slack bot
-    whatsapp      Configure WhatsApp (beta)
-    webhook       Configure Webhook endpoint
-
-  LLM Providers:
-    llm           Configure all LLM settings
-    anthropic     Configure Anthropic (Claude)
-    openai        Configure OpenAI (GPT)
-    gemini        Configure Google Gemini
-    deepseek      Configure DeepSeek
-    glm           Configure Zhipu GLM
-    local         Configure self-hosted LLM (Ollama, vLLM, etc.)
-
-  Other:
-    hooks         Configure event hooks (shell commands)
-    admin <id>    Add global admin by user ID
-    paths         Configure data/skills directories
-    skills        Configure skills settings
+  (none)      Run full interactive wizard
+  llm         Configure LLM providers
+  platform    Configure chat platform (Telegram/Discord/Slack/WhatsApp)
+  webhook     Configure webhook endpoint
 
 Examples:
-  magabot setup                  # Full wizard
-  magabot setup telegram         # Setup Telegram only
-  magabot setup llm              # Setup LLM providers
-  magabot setup admin 287676843  # Add admin`)
+  magabot setup            # Full wizard
+  magabot setup llm        # Setup LLM providers
+  magabot setup platform   # Setup chat platform
+  magabot setup webhook    # Setup webhook endpoint`)
+}
+
+// setupPlatform asks which platform to configure
+func setupPlatform() {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("\n📱 Platform Setup")
+	fmt.Println("─────────────────")
+	fmt.Println()
+	fmt.Println("Which platform do you want to configure?")
+	fmt.Println("  1. telegram   - Telegram Bot")
+	fmt.Println("  2. discord    - Discord Bot")
+	fmt.Println("  3. slack      - Slack App")
+	fmt.Println("  4. whatsapp   - WhatsApp (beta)")
+	fmt.Println()
+
+	platform := askString(reader, "Platform", "telegram")
+
+	switch strings.ToLower(platform) {
+	case "1", "telegram":
+		setupTelegram()
+	case "2", "discord":
+		setupDiscord()
+	case "3", "slack":
+		setupSlack()
+	case "4", "whatsapp":
+		setupWhatsApp()
+	default:
+		fmt.Printf("Unknown platform: %s\n", platform)
+	}
 }
 
 // setupTelegram configures Telegram
@@ -441,461 +420,6 @@ func setupLLM() {
 	askRestart(reader)
 }
 
-// setupAnthropic configures Anthropic only
-func setupAnthropic() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🧠 Anthropic (Claude) Setup")
-	fmt.Println("───────────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("📝 Get your API key from https://console.anthropic.com/")
-	fmt.Println("   (Requires an Anthropic API key starting with sk-ant-)")
-	fmt.Println()
-
-	key := askString(reader, "API Key (sk-ant-...)", "")
-	if key == "" {
-		fmt.Println("❌ API key is required")
-		return
-	}
-
-	if !strings.HasPrefix(key, "sk-ant-") {
-		fmt.Println("⚠️  Warning: key doesn't start with 'sk-ant-'. Are you sure this is an Anthropic API key?")
-		if !askYesNo(reader, "Use this key anyway?", false) {
-			return
-		}
-	}
-
-	saveSecret("llm/anthropic_api_key", key)
-	cfg.LLM.Anthropic.APIKey = key
-	cfg.LLM.Anthropic.Enabled = true
-	cfg.LLM.Main = "anthropic"
-
-	model := askModel(reader, "anthropic", key, cfg.LLM.Anthropic.BaseURL, "claude-sonnet-4-20250514")
-	cfg.LLM.Anthropic.Model = model
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Anthropic configured!")
-
-	askRestart(reader)
-}
-
-// setupOpenAI configures OpenAI only
-func setupOpenAI() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🤖 OpenAI (GPT) Setup")
-	fmt.Println("─────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("📝 Get your API key from https://platform.openai.com/api-keys")
-	fmt.Println()
-
-	key := askString(reader, "API Key (sk-...)", "")
-	if key == "" {
-		fmt.Println("❌ API key is required")
-		return
-	}
-
-	saveSecret("llm/openai_api_key", key)
-	cfg.LLM.OpenAI.Enabled = true
-
-	if cfg.LLM.Main == "" {
-		cfg.LLM.Main = "openai"
-	}
-
-	model := askModel(reader, "openai", key, cfg.LLM.OpenAI.BaseURL, "gpt-4o")
-	cfg.LLM.OpenAI.Model = model
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ OpenAI configured!")
-
-	askRestart(reader)
-}
-
-// setupGemini configures Google Gemini only
-func setupGemini() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n💎 Google Gemini Setup")
-	fmt.Println("──────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("📝 Get your API key from https://makersuite.google.com/app/apikey")
-	fmt.Println()
-
-	key := askString(reader, "API Key", "")
-	if key == "" {
-		fmt.Println("❌ API key is required")
-		return
-	}
-
-	saveSecret("llm/gemini_api_key", key)
-	cfg.LLM.Gemini.Enabled = true
-
-	if cfg.LLM.Main == "" {
-		cfg.LLM.Main = "gemini"
-	}
-
-	model := askModel(reader, "gemini", key, "", "gemini-2.0-flash")
-	cfg.LLM.Gemini.Model = model
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Google Gemini configured!")
-
-	askRestart(reader)
-}
-
-// setupDeepSeek configures DeepSeek only
-func setupDeepSeek() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🔍 DeepSeek Setup")
-	fmt.Println("─────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("📝 Get your API key from https://platform.deepseek.com/")
-	fmt.Println()
-
-	key := askString(reader, "API Key", "")
-	if key == "" {
-		fmt.Println("❌ API key is required")
-		return
-	}
-
-	saveSecret("llm/deepseek_api_key", key)
-	cfg.LLM.DeepSeek.Enabled = true
-
-	if cfg.LLM.Main == "" {
-		cfg.LLM.Main = "deepseek"
-	}
-
-	model := askModel(reader, "deepseek", key, cfg.LLM.DeepSeek.BaseURL, "deepseek-chat")
-	cfg.LLM.DeepSeek.Model = model
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ DeepSeek configured!")
-
-	askRestart(reader)
-}
-
-// setupGLM configures Zhipu GLM only
-func setupGLM() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🇨🇳 Zhipu GLM Setup")
-	fmt.Println("───────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("📝 Get your API key from https://docs.z.ai/")
-	fmt.Println()
-
-	key := askString(reader, "API Key", "")
-	if key == "" {
-		fmt.Println("❌ API key is required")
-		return
-	}
-
-	saveSecret("llm/glm_api_key", key)
-	cfg.LLM.GLM.Enabled = true
-
-	if cfg.LLM.Main == "" {
-		cfg.LLM.Main = "glm"
-	}
-
-	model := askModel(reader, "glm", key, cfg.LLM.GLM.BaseURL, "glm-4.7")
-	cfg.LLM.GLM.Model = model
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Zhipu GLM configured!")
-
-	askRestart(reader)
-}
-
-// setupAdmin adds a global admin
-func setupAdmin(userID string) {
-	cfg := loadOrCreateConfig()
-
-	cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Printf("✅ Added global admin: %s\n", userID)
-
-	reader := bufio.NewReader(os.Stdin)
-	askRestart(reader)
-}
-
-// setupPaths configures directory paths
-func setupPaths() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n📁 Paths Setup")
-	fmt.Println("──────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("Configure directory paths (press Enter for defaults):")
-	fmt.Println()
-
-	cfg.Paths.DataDir = askString(reader, "Data directory", cfg.Paths.DataDir)
-	cfg.Paths.LogsDir = askString(reader, "Logs directory", cfg.Paths.LogsDir)
-	cfg.Paths.MemoryDir = askString(reader, "Memory directory", cfg.Paths.MemoryDir)
-	cfg.Paths.DownloadsDir = askString(reader, "Downloads directory", cfg.Paths.DownloadsDir)
-
-	if err := cfg.EnsureDirectories(); err != nil {
-		fmt.Printf("⚠️  Warning: %v\n", err)
-	}
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Paths configured!")
-	cfg.PrintPaths()
-
-	askRestart(reader)
-}
-
-// setupSkills configures skills settings
-func setupSkills() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🧠 Skills Setup")
-	fmt.Println("───────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	cfg.Skills.Dir = askString(reader, "Skills directory", cfg.Skills.Dir)
-	cfg.Skills.AutoReload = askYesNo(reader, "Enable auto-reload?", true)
-
-	// Create directory
-	if err := os.MkdirAll(cfg.Skills.Dir, 0755); err != nil {
-		fmt.Printf("⚠️  Warning: %v\n", err)
-	}
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Printf("✅ Skills directory: %s\n", cfg.Skills.Dir)
-	fmt.Printf("   Auto-reload: %v\n", cfg.Skills.AutoReload)
-
-	askRestart(reader)
-}
-
-// setupLocal configures a self-hosted LLM provider
-func setupLocal() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🖥️  Local LLM Setup (Self-hosted)")
-	fmt.Println("─────────────────────────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-
-	fmt.Println("  Works with any OpenAI-compatible API server:")
-	fmt.Println("    - Ollama      (default: http://localhost:11434/v1)")
-	fmt.Println("    - vLLM        (default: http://localhost:8000/v1)")
-	fmt.Println("    - llama.cpp   (default: http://localhost:8080/v1)")
-	fmt.Println("    - LocalAI     (default: http://localhost:8080/v1)")
-	fmt.Println()
-
-	cfg.LLM.Local.Enabled = true
-
-	baseURL := askString(reader, "Server URL", "http://localhost:11434/v1")
-	cfg.LLM.Local.BaseURL = baseURL
-
-	model := askString(reader, "Model name", "llama3")
-	cfg.LLM.Local.Model = model
-
-	apiKey := askString(reader, "API key (Enter if none)", "")
-	if apiKey != "" {
-		cfg.LLM.Local.APIKey = apiKey
-	}
-
-	if cfg.LLM.Main == "" {
-		cfg.LLM.Main = "local"
-	}
-
-	// Test connection
-	fmt.Print("\n  🔄 Testing connection... ")
-	testLocal := llm.NewLocal(&llm.LocalConfig{
-		Enabled: true,
-		BaseURL: baseURL,
-		Model:   model,
-		APIKey:  apiKey,
-	})
-	if testLocal.Available() {
-		fmt.Println("✅ Connected!")
-	} else {
-		fmt.Println("⚠️  Server not reachable (will work once started)")
-	}
-
-	if err := cfg.Save(); err != nil {
-		fmt.Printf("❌ Failed to save config: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Println("✅ Local LLM configured!")
-	fmt.Printf("   Server: %s\n", baseURL)
-	fmt.Printf("   Model:  %s\n", model)
-
-	askRestart(reader)
-}
-
-// setupHooks configures event-driven shell command hooks.
-// Hooks are stored in config-hooks.yml (separate from main config).
-func setupHooks() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("\n🪝 Hooks Setup")
-	fmt.Println("──────────────")
-	fmt.Println()
-
-	cfg := loadOrCreateConfig()
-	hooksFilePath := filepath.Join(configDir, "config-hooks.yml")
-
-	fmt.Println("  Hooks run shell commands when bot events occur.")
-	fmt.Println("  Event data is passed as JSON on stdin.")
-	fmt.Printf("  Config: %s\n", hooksFilePath)
-	fmt.Println()
-	fmt.Println("  Events:")
-	fmt.Println("    pre_message   - Before LLM processing (can block/modify)")
-	fmt.Println("    post_response - After LLM response (can modify)")
-	fmt.Println("    on_command    - When a bot command is received")
-	fmt.Println("    on_start      - When bot starts")
-	fmt.Println("    on_stop       - When bot stops")
-	fmt.Println("    on_error      - When an error occurs")
-	fmt.Println()
-
-	// Load existing hooks from file
-	existingHooks, err := config.LoadHooksFile(hooksFilePath)
-	if err != nil {
-		fmt.Printf("  ⚠️  Failed to load hooks file: %v\n", err)
-	}
-
-	// Auto-migrate: if hooks exist in main config but not in file, move them
-	if len(cfg.Hooks) > 0 && len(existingHooks) == 0 {
-		fmt.Printf("  📦 Migrating %d hook(s) from config.yaml to config-hooks.yml\n", len(cfg.Hooks))
-		existingHooks = cfg.Hooks
-		cfg.Hooks = nil
-		if err := cfg.Save(); err != nil {
-			fmt.Printf("  ⚠️  Failed to clear inline hooks: %v\n", err)
-		}
-	}
-
-	// Show existing hooks
-	if len(existingHooks) > 0 {
-		fmt.Println("  Current hooks:")
-		for i, h := range existingHooks {
-			platforms := "all"
-			if len(h.Platforms) > 0 {
-				platforms = strings.Join(h.Platforms, ", ")
-			}
-			fmt.Printf("    %d. [%s] %s → %s (platforms: %s)\n",
-				i+1, h.Event, h.Name, h.Command, platforms)
-		}
-		fmt.Println()
-	}
-
-	for {
-		if !askYesNo(reader, "Add a hook?", len(existingHooks) == 0) {
-			break
-		}
-
-		fmt.Println()
-		name := askString(reader, "Hook name", "")
-		if name == "" {
-			fmt.Println("  ⚠️  Name required, skipping")
-			continue
-		}
-
-		event := askChoice(reader, "Event",
-			[]string{"pre_message", "post_response", "on_command", "on_start", "on_stop", "on_error"},
-			"post_response")
-
-		command := askString(reader, "Shell command", "")
-		if command == "" {
-			fmt.Println("  ⚠️  Command required, skipping")
-			continue
-		}
-
-		timeout := askInt(reader, "Timeout (seconds)", 10)
-
-		platforms := askString(reader, "Platforms (comma-separated, Enter for all)", "")
-		var platformList []string
-		if platforms != "" {
-			for _, p := range strings.Split(platforms, ",") {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					platformList = append(platformList, p)
-				}
-			}
-		}
-
-		async := askYesNo(reader, "Run async (fire-and-forget)?", event != "pre_message" && event != "post_response")
-
-		hook := config.HookConfig{
-			Name:      name,
-			Event:     event,
-			Command:   command,
-			Timeout:   timeout,
-			Platforms: platformList,
-			Async:     async,
-		}
-		existingHooks = append(existingHooks, hook)
-
-		fmt.Printf("  ✅ Added hook: %s → %s\n\n", name, event)
-	}
-
-	// Save to hooks file
-	if err := config.SaveHooksFile(hooksFilePath, existingHooks); err != nil {
-		fmt.Printf("❌ Failed to save hooks file: %v\n", err)
-		return
-	}
-
-	fmt.Println()
-	fmt.Printf("✅ %d hook(s) saved to %s\n", len(existingHooks), hooksFilePath)
-
-	askRestart(reader)
-}
 
 // Helper functions
 
