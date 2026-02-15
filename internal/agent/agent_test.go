@@ -10,8 +10,8 @@ import (
 
 func TestNewManager(t *testing.T) {
 	m := NewManager(Config{}, nil)
-	if m.config.Default != AgentClaude {
-		t.Errorf("default agent = %q, want %q", m.config.Default, AgentClaude)
+	if m.config.Main != AgentClaude {
+		t.Errorf("default agent = %q, want %q", m.config.Main, AgentClaude)
 	}
 	if m.config.Timeout != 120 {
 		t.Errorf("default timeout = %d, want 120", m.config.Timeout)
@@ -19,9 +19,9 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestNewManagerCustom(t *testing.T) {
-	m := NewManager(Config{Default: "codex", Timeout: 60}, nil)
-	if m.config.Default != "codex" {
-		t.Errorf("default = %q, want codex", m.config.Default)
+	m := NewManager(Config{Main: "codex", Timeout: 60}, nil)
+	if m.config.Main != "codex" {
+		t.Errorf("default = %q, want codex", m.config.Main)
 	}
 	if m.config.Timeout != 60 {
 		t.Errorf("timeout = %d, want 60", m.config.Timeout)

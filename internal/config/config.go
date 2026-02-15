@@ -164,8 +164,8 @@ type WebhookConfig struct {
 
 // LLMConfig holds LLM provider settings
 type LLMConfig struct {
-	Default         string          `yaml:"default"`          // Default provider
-	DefaultProvider string          `yaml:"default_provider"` // Alias for default
+	Main         string          `yaml:"main"`          // Main/primary provider
+	MainProvider string          `yaml:"main_provider"` // Alias for main
 	Providers       ProvidersConfig `yaml:"providers"`        // Alternative structure
 	SystemPrompt    string          `yaml:"system_prompt"`
 	MaxInputLength  int             `yaml:"max_input_length"`
@@ -319,7 +319,7 @@ type HookConfig struct {
 
 // AgentConfig holds coding agent session settings
 type AgentConfig struct {
-	Default string `yaml:"default"` // "claude", "codex", "gemini"
+	Main    string `yaml:"main"`    // "claude", "codex", "gemini"
 	Timeout int    `yaml:"timeout"` // seconds, default 120
 }
 
@@ -492,8 +492,8 @@ func (c *Config) setDefaults() {
 	// (already false by default, set explicitly if needed)
 
 	// Agent defaults
-	if c.Agents.Default == "" {
-		c.Agents.Default = "claude"
+	if c.Agents.Main == "" {
+		c.Agents.Main = "claude"
 	}
 	if c.Agents.Timeout <= 0 {
 		c.Agents.Timeout = 120

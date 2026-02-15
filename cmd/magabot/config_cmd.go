@@ -92,7 +92,7 @@ func cmdConfigShow() {
 	fmt.Println()
 
 	fmt.Println("🤖 LLM:")
-	fmt.Printf("  Default: %s\n", cfg.LLM.DefaultProvider)
+	fmt.Printf("  Default: %s\n", cfg.LLM.MainProvider)
 	fmt.Println()
 
 	if len(cfg.Cron.Jobs) > 0 {

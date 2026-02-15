@@ -29,7 +29,7 @@ const maxOutputBytes = 10 * 1024 * 1024
 
 // Config holds agent manager settings.
 type Config struct {
-	Default    string   // default agent type
+	Main       string   // main/primary agent type
 	Timeout    int      // execution timeout in seconds
 	AllowedDirs []string // directories users may target (empty = user home only)
 }
@@ -68,8 +68,8 @@ func NewManager(cfg Config, logger *slog.Logger) *Manager {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if cfg.Default == "" {
-		cfg.Default = AgentClaude
+	if cfg.Main == "" {
+		cfg.Main = AgentClaude
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 120
@@ -96,7 +96,7 @@ func ValidAgent(agent string) bool {
 // Returns an error if the directory is not allowed, doesn't exist, or the agent binary is not in PATH.
 func (m *Manager) NewSession(platform, chatID, userID, agent, dir string) (*Session, error) {
 	if agent == "" {
-		agent = m.config.Default
+		agent = m.config.Main
 	}
 	bin, ok := agentInfo[agent]
 	if !ok {

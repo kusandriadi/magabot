@@ -110,7 +110,7 @@ func runDaemon() {
 
 	// Initialize LLM router
 	llmRouter := llm.NewRouter(&llm.Config{
-		Default:      cfg.LLM.Default,
+		Main:         cfg.LLM.Main,
 		SystemPrompt: cfg.LLM.SystemPrompt,
 		MaxInput:     cfg.LLM.MaxInputLength,
 		Timeout:      time.Duration(cfg.LLM.Timeout) * time.Second,
@@ -207,7 +207,7 @@ func runDaemon() {
 
 	// Initialize agent session manager
 	agentMgr := agent.NewManager(agent.Config{
-		Default: cfg.Agents.Default,
+		Main:    cfg.Agents.Main,
 		Timeout: cfg.Agents.Timeout,
 	}, logger.With("component", "agent"))
 
@@ -458,7 +458,7 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 
 	case "/providers":
 		stats := llmRouter.Stats()
-		return fmt.Sprintf("🤖 *LLM Providers*\n\n• Default: %s\n• Available: %v",
+		return fmt.Sprintf("🤖 *LLM Providers*\n\n• Main: %s\n• Available: %v",
 			stats["default"],
 			stats["available"],
 		), nil

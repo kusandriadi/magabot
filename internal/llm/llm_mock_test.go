@@ -20,21 +20,21 @@ func TestRouterConfigDefaults(t *testing.T) {
 	t.Run("ZeroMaxInput", func(t *testing.T) {
 		r := NewRouter(&Config{MaxInput: 0})
 		if r.maxInput != 10000 {
-			t.Errorf("expected default maxInput 10000, got %d", r.maxInput)
+			t.Errorf("expected main maxInput 10000, got %d", r.maxInput)
 		}
 	})
 
 	t.Run("ZeroTimeout", func(t *testing.T) {
 		r := NewRouter(&Config{Timeout: 0})
 		if r.timeout != 60*time.Second {
-			t.Errorf("expected default timeout 60s, got %v", r.timeout)
+			t.Errorf("expected main timeout 60s, got %v", r.timeout)
 		}
 	})
 
 	t.Run("ZeroRateLimit", func(t *testing.T) {
 		r := NewRouter(&Config{RateLimit: 0})
 		if r.rateLimiter.limit != 10 {
-			t.Errorf("expected default rateLimit 10, got %d", r.rateLimiter.limit)
+			t.Errorf("expected main rateLimit 10, got %d", r.rateLimiter.limit)
 		}
 	})
 
@@ -48,7 +48,7 @@ func TestRouterConfigDefaults(t *testing.T) {
 	t.Run("CustomConfig", func(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 		r := NewRouter(&Config{
-			Default:      "custom",
+			Main:      "custom",
 			SystemPrompt: "Be helpful",
 			MaxInput:     5000,
 			Timeout:      30 * time.Second,
@@ -56,8 +56,8 @@ func TestRouterConfigDefaults(t *testing.T) {
 			Logger:       logger,
 		})
 
-		if r.defaultName != "custom" {
-			t.Errorf("expected default 'custom', got %q", r.defaultName)
+		if r.mainName != "custom" {
+			t.Errorf("expected main 'custom', got %q", r.mainName)
 		}
 		if r.systemPrompt != "Be helpful" {
 			t.Errorf("expected systemPrompt 'Be helpful', got %q", r.systemPrompt)
@@ -81,8 +81,8 @@ func TestRouterRegisterAutoDefault(t *testing.T) {
 	r.Register(mock)
 
 	// Should auto-select as default
-	if r.defaultName != "auto" {
-		t.Errorf("expected auto-selected default 'auto', got %q", r.defaultName)
+	if r.mainName != "auto" {
+		t.Errorf("expected auto-selected main 'auto', got %q", r.mainName)
 	}
 }
 
@@ -95,14 +95,14 @@ func TestRouterRegisterUnavailable(t *testing.T) {
 	r.Register(mock)
 
 	// Should not auto-select unavailable provider as default
-	if r.defaultName == "unavailable" {
+	if r.mainName == "unavailable" {
 		t.Error("should not auto-select unavailable provider")
 	}
 }
 
 func TestRouterCompleteWithSystemPrompt(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:      "mock",
+		Main:      "mock",
 		SystemPrompt: "You are a test assistant",
 		RateLimit:    100,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -141,7 +141,7 @@ func (c *requestCapture) Complete(ctx context.Context, req *Request) (*Response,
 
 func TestRouterChatRateLimit(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "mock",
+		Main:   "mock",
 		RateLimit: 1,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -165,7 +165,7 @@ func TestRouterChatRateLimit(t *testing.T) {
 
 func TestRouterChatInputTooLong(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "mock",
+		Main:   "mock",
 		MaxInput:  20,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -184,7 +184,7 @@ func TestRouterChatInputTooLong(t *testing.T) {
 
 func TestRouterChatInputTooLongWithBlocks(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "mock",
+		Main:   "mock",
 		MaxInput:  50,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -210,7 +210,7 @@ func TestRouterChatInputTooLongWithBlocks(t *testing.T) {
 
 func TestRouterChatWithSystemPrompt(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:      "mock",
+		Main:      "mock",
 		SystemPrompt: "Be helpful",
 		RateLimit:    100,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -236,7 +236,7 @@ func TestRouterChatWithSystemPrompt(t *testing.T) {
 
 func TestRouterProviderFails(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "p1",
+		Main:   "p1",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -255,7 +255,7 @@ func TestRouterProviderFails(t *testing.T) {
 
 func TestRouterProviderNotRegistered(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "nonexistent",
+		Main:   "nonexistent",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -271,7 +271,7 @@ func TestRouterProviderNotRegistered(t *testing.T) {
 
 func TestRouterDefaultNotAvailable(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "unavailable",
+		Main:   "unavailable",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -433,11 +433,11 @@ func TestDetectProviderCaseInsensitive(t *testing.T) {
 // --- Stats Tests ---
 
 func TestRouterStatsEmpty(t *testing.T) {
-	r := NewRouter(&Config{Default: "test", RateLimit: 10})
+	r := NewRouter(&Config{Main: "test", RateLimit: 10})
 	stats := r.Stats()
 
-	if stats["default"] != "test" {
-		t.Errorf("expected default 'test', got %v", stats["default"])
+	if stats["main"] != "test" {
+		t.Errorf("expected main 'test', got %v", stats["main"])
 	}
 	if stats["providers"] != 0 {
 		t.Errorf("expected 0 providers, got %v", stats["providers"])
@@ -445,7 +445,7 @@ func TestRouterStatsEmpty(t *testing.T) {
 }
 
 func TestRouterStatsWithProviders(t *testing.T) {
-	r := NewRouter(&Config{Default: "p1", RateLimit: 10})
+	r := NewRouter(&Config{Main: "p1", RateLimit: 10})
 	r.Register(&mockProvider{name: "p1", available: true})
 	r.Register(&mockProvider{name: "p2", available: false})
 	r.Register(&mockProvider{name: "p3", available: true})
@@ -487,7 +487,7 @@ func TestRouterProvidersList(t *testing.T) {
 
 func TestRouterConcurrentRequests(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "mock",
+		Main:   "mock",
 		RateLimit: 1000,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -542,7 +542,7 @@ func TestRouterConcurrentRegister(t *testing.T) {
 
 func TestRouterCompleteTimeout(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "slow",
+		Main:   "slow",
 		Timeout:   50 * time.Millisecond,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -737,7 +737,7 @@ func TestDeepSeekConfig(t *testing.T) {
 	t.Run("DefaultModel", func(t *testing.T) {
 		p := NewDeepSeek(&DeepSeekConfig{APIKey: "test"})
 		if p.config.Model != "deepseek-chat" {
-			t.Errorf("expected default model 'deepseek-chat', got %q", p.config.Model)
+			t.Errorf("expected main model 'deepseek-chat', got %q", p.config.Model)
 		}
 	})
 
@@ -927,7 +927,7 @@ func TestLocalEnvConfig(t *testing.T) {
 
 func TestTryProvidersContextCancelled(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "slow",
+		Main:   "slow",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -996,7 +996,7 @@ func TestRouterStatsWithNoAvailable(t *testing.T) {
 
 func TestRouterChatSuccess(t *testing.T) {
 	r := NewRouter(&Config{
-		Default:   "mock",
+		Main:   "mock",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})

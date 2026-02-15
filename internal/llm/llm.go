@@ -66,7 +66,7 @@ type Provider interface {
 // Router manages LLM provider
 type Router struct {
 	providers    map[string]Provider
-	defaultName  string
+	mainName     string
 	systemPrompt string
 	maxInput     int
 	timeout      time.Duration
@@ -77,7 +77,7 @@ type Router struct {
 
 // Config for LLM router
 type Config struct {
-	Default      string
+	Main         string
 	SystemPrompt string
 	MaxInput     int
 	Timeout      time.Duration
@@ -104,7 +104,7 @@ func NewRouter(cfg *Config) *Router {
 
 	return &Router{
 		providers:    make(map[string]Provider),
-		defaultName:  cfg.Default,
+		mainName:     cfg.Main,
 		systemPrompt: cfg.SystemPrompt,
 		maxInput:     cfg.MaxInput,
 		timeout:      cfg.Timeout,
@@ -146,10 +146,10 @@ func (r *Router) Register(p Provider) {
 	r.providers[p.Name()] = p
 	r.logger.Info("registered LLM provider", "name", p.Name())
 
-	// Auto-detect default provider if not explicitly set
-	if r.defaultName == "" && p.Available() {
-		r.defaultName = p.Name()
-		r.logger.Info("auto-selected default provider", "name", p.Name())
+	// Auto-detect main provider if not explicitly set
+	if r.mainName == "" && p.Available() {
+		r.mainName = p.Name()
+		r.logger.Info("auto-selected main provider", "name", p.Name())
 	}
 }
 
@@ -218,23 +218,23 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	return r.tryProviders(ctx, req)
 }
 
-// tryProviders attempts the default provider only
+// tryProviders attempts the main provider only
 func (r *Router) tryProviders(ctx context.Context, req *Request) (*Response, error) {
 	r.mu.RLock()
-	defaultProvider, ok := r.providers[r.defaultName]
+	mainProvider, ok := r.providers[r.mainName]
 	r.mu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("%w: provider %q not registered", ErrNoProvider, r.defaultName)
+		return nil, fmt.Errorf("%w: provider %q not registered", ErrNoProvider, r.mainName)
 	}
 
-	if !defaultProvider.Available() {
-		return nil, fmt.Errorf("%w: provider %q not available", ErrNoProvider, r.defaultName)
+	if !mainProvider.Available() {
+		return nil, fmt.Errorf("%w: provider %q not available", ErrNoProvider, r.mainName)
 	}
 
-	resp, err := defaultProvider.Complete(ctx, req)
+	resp, err := mainProvider.Complete(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %w", ErrProviderFailed, r.defaultName, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrProviderFailed, r.mainName, err)
 	}
 
 	return resp, nil
@@ -265,7 +265,7 @@ func (r *Router) Stats() map[string]interface{} {
 	defer r.mu.RUnlock()
 
 	stats := map[string]interface{}{
-		"default":   r.defaultName,
+		"main":      r.mainName,
 		"providers": len(r.providers),
 	}
 

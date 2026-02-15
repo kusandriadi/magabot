@@ -392,7 +392,7 @@ func setupLLM() {
 	fmt.Println()
 
 	defaultLLM := askString(reader, "Default provider", "anthropic")
-	cfg.LLM.Default = defaultLLM
+	cfg.LLM.Main = defaultLLM
 
 	fmt.Println()
 	if askYesNo(reader, "Configure Anthropic (Claude)?", true) {
@@ -470,7 +470,7 @@ func setupAnthropic() {
 	saveSecret("llm/anthropic_api_key", key)
 	cfg.LLM.Anthropic.APIKey = key
 	cfg.LLM.Anthropic.Enabled = true
-	cfg.LLM.Default = "anthropic"
+	cfg.LLM.Main = "anthropic"
 
 	model := askModel(reader, "anthropic", key, cfg.LLM.Anthropic.BaseURL, "claude-sonnet-4-20250514")
 	cfg.LLM.Anthropic.Model = model
@@ -507,8 +507,8 @@ func setupOpenAI() {
 	saveSecret("llm/openai_api_key", key)
 	cfg.LLM.OpenAI.Enabled = true
 
-	if cfg.LLM.Default == "" {
-		cfg.LLM.Default = "openai"
+	if cfg.LLM.Main == "" {
+		cfg.LLM.Main = "openai"
 	}
 
 	model := askModel(reader, "openai", key, cfg.LLM.OpenAI.BaseURL, "gpt-4o")
@@ -546,8 +546,8 @@ func setupGemini() {
 	saveSecret("llm/gemini_api_key", key)
 	cfg.LLM.Gemini.Enabled = true
 
-	if cfg.LLM.Default == "" {
-		cfg.LLM.Default = "gemini"
+	if cfg.LLM.Main == "" {
+		cfg.LLM.Main = "gemini"
 	}
 
 	model := askModel(reader, "gemini", key, "", "gemini-2.0-flash")
@@ -585,8 +585,8 @@ func setupDeepSeek() {
 	saveSecret("llm/deepseek_api_key", key)
 	cfg.LLM.DeepSeek.Enabled = true
 
-	if cfg.LLM.Default == "" {
-		cfg.LLM.Default = "deepseek"
+	if cfg.LLM.Main == "" {
+		cfg.LLM.Main = "deepseek"
 	}
 
 	model := askModel(reader, "deepseek", key, cfg.LLM.DeepSeek.BaseURL, "deepseek-chat")
@@ -624,8 +624,8 @@ func setupGLM() {
 	saveSecret("llm/glm_api_key", key)
 	cfg.LLM.GLM.Enabled = true
 
-	if cfg.LLM.Default == "" {
-		cfg.LLM.Default = "glm"
+	if cfg.LLM.Main == "" {
+		cfg.LLM.Main = "glm"
 	}
 
 	model := askModel(reader, "glm", key, cfg.LLM.GLM.BaseURL, "glm-4.7")
@@ -750,8 +750,8 @@ func setupLocal() {
 		cfg.LLM.Local.APIKey = apiKey
 	}
 
-	if cfg.LLM.Default == "" {
-		cfg.LLM.Default = "local"
+	if cfg.LLM.Main == "" {
+		cfg.LLM.Main = "local"
 	}
 
 	// Test connection
