@@ -1,6 +1,8 @@
 # 🛡️ OWASP Top 10 Compliance
 
-Magabot security assessment against OWASP Top 10 (2021).
+Magabot security assessment against OWASP Top 10 (2021/2025).
+
+**Last Updated:** 2026-02-15
 
 ## Summary
 
@@ -9,15 +11,22 @@ Magabot security assessment against OWASP Top 10 (2021).
 | A01 | Broken Access Control | ✅ Mitigated | 9/10 |
 | A02 | Cryptographic Failures | ✅ Mitigated | 9/10 |
 | A03 | Injection | ✅ Mitigated | 10/10 |
-| A04 | Insecure Design | ✅ Mitigated | 8/10 |
-| A05 | Security Misconfiguration | ✅ Mitigated | 8/10 |
-| A06 | Vulnerable Components | ⚠️ Partial | 7/10 |
+| A04 | Insecure Design | ✅ Mitigated | 9/10 |
+| A05 | Security Misconfiguration | ✅ Mitigated | 9/10 |
+| A06 | Vulnerable Components | ✅ Mitigated | 8/10 |
 | A07 | Auth Failures | ✅ Mitigated | 9/10 |
-| A08 | Integrity Failures | ✅ Mitigated | 8/10 |
-| A09 | Logging Failures | ✅ Mitigated | 8/10 |
-| A10 | SSRF | ✅ Mitigated | 8/10 |
+| A08 | Integrity Failures | ✅ Mitigated | 9/10 |
+| A09 | Logging Failures | ✅ Mitigated | 9/10 |
+| A10 | SSRF | ✅ Mitigated | 9/10 |
 
-**Overall Score: 84/100** ✅
+**Overall Score: 90/100** ✅
+
+## Quick Security Check
+
+Run security check script:
+```bash
+./scripts/security-check.sh
+```
 
 ---
 
