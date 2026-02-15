@@ -1,0 +1,1985 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>llm: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/kusa/magabot/internal/llm/anthropic.go (22.2%)</option>
+				
+				<option value="file1">github.com/kusa/magabot/internal/llm/deepseek.go (85.7%)</option>
+				
+				<option value="file2">github.com/kusa/magabot/internal/llm/gemini.go (24.1%)</option>
+				
+				<option value="file3">github.com/kusa/magabot/internal/llm/glm.go (89.5%)</option>
+				
+				<option value="file4">github.com/kusa/magabot/internal/llm/llm.go (98.0%)</option>
+				
+				<option value="file5">github.com/kusa/magabot/internal/llm/local.go (80.6%)</option>
+				
+				<option value="file6">github.com/kusa/magabot/internal/llm/models.go (34.0%)</option>
+				
+				<option value="file7">github.com/kusa/magabot/internal/llm/oauth.go (0.0%)</option>
+				
+				<option value="file8">github.com/kusa/magabot/internal/llm/openai.go (34.5%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Anthropic Claude provider
+package llm
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "time"
+
+        "github.com/anthropics/anthropic-sdk-go"
+        "github.com/anthropics/anthropic-sdk-go/option"
+)
+
+// Anthropic provider
+type Anthropic struct {
+        apiKey      string
+        model       string
+        maxTokens   int
+        temperature float64
+        baseURL     string
+}
+
+// AnthropicConfig for Anthropic provider
+type AnthropicConfig struct {
+        APIKey      string
+        Model       string
+        MaxTokens   int
+        Temperature float64
+        BaseURL     string
+}
+
+// NewAnthropic creates a new Anthropic provider
+func NewAnthropic(cfg *AnthropicConfig) *Anthropic <span class="cov8" title="1">{
+        apiKey := cfg.APIKey
+
+        // Try to load from environment
+        if apiKey == "" </span><span class="cov8" title="1">{
+                apiKey = os.Getenv("ANTHROPIC_API_KEY")
+        }</span>
+
+        <span class="cov8" title="1">model := cfg.Model
+        if model == "" </span><span class="cov8" title="1">{
+                model = "claude-sonnet-4-20250514"
+        }</span>
+
+        <span class="cov8" title="1">maxTokens := cfg.MaxTokens
+        if maxTokens == 0 </span><span class="cov8" title="1">{
+                maxTokens = 4096
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Anthropic{
+                apiKey:      apiKey,
+                model:       model,
+                maxTokens:   maxTokens,
+                temperature: cfg.Temperature,
+                baseURL:     cfg.BaseURL,
+        }</span>
+}
+
+// Name returns provider name
+func (a *Anthropic) Name() string <span class="cov8" title="1">{
+        return "anthropic"
+}</span>
+
+// Available checks if provider is available
+func (a *Anthropic) Available() bool <span class="cov8" title="1">{
+        return a.apiKey != ""
+}</span>
+
+// Complete sends a completion request
+func (a *Anthropic) Complete(ctx context.Context, req *Request) (*Response, error) <span class="cov0" title="0">{
+        start := time.Now()
+
+        // Build SDK client options
+        var clientOpts []option.RequestOption
+        if a.baseURL != "" </span><span class="cov0" title="0">{
+                clientOpts = append(clientOpts, option.WithBaseURL(a.baseURL))
+        }</span>
+        <span class="cov0" title="0">clientOpts = append(clientOpts, option.WithAPIKey(a.apiKey))
+
+        client := anthropic.NewClient(clientOpts...)
+
+        // Convert messages to Anthropic SDK format
+        var systemBlocks []anthropic.TextBlockParam
+        var messages []anthropic.MessageParam
+
+        for _, m := range req.Messages </span><span class="cov0" title="0">{
+                if m.Role == "system" </span><span class="cov0" title="0">{
+                        systemBlocks = append(systemBlocks, anthropic.TextBlockParam{Text: m.Content})
+                        continue</span>
+                }
+                <span class="cov0" title="0">if m.HasBlocks() </span><span class="cov0" title="0">{
+                        var parts []anthropic.ContentBlockParamUnion
+                        for _, b := range m.Blocks </span><span class="cov0" title="0">{
+                                switch b.Type </span>{
+                                case "text":<span class="cov0" title="0">
+                                        parts = append(parts, anthropic.NewTextBlock(b.Text))</span>
+                                case "image":<span class="cov0" title="0">
+                                        parts = append(parts, anthropic.NewImageBlockBase64(b.MimeType, b.ImageData))</span>
+                                }
+                        }
+                        <span class="cov0" title="0">switch m.Role </span>{
+                        case "user":<span class="cov0" title="0">
+                                messages = append(messages, anthropic.NewUserMessage(parts...))</span>
+                        case "assistant":<span class="cov0" title="0">
+                                messages = append(messages, anthropic.NewAssistantMessage(parts...))</span>
+                        }
+                } else<span class="cov0" title="0"> {
+                        switch m.Role </span>{
+                        case "user":<span class="cov0" title="0">
+                                messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))</span>
+                        case "assistant":<span class="cov0" title="0">
+                                messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))</span>
+                        }
+                }
+        }
+
+        // Build request params
+        <span class="cov0" title="0">maxTokens := int64(a.maxTokens)
+        if req.MaxTokens &gt; 0 </span><span class="cov0" title="0">{
+                maxTokens = int64(req.MaxTokens)
+        }</span>
+
+        <span class="cov0" title="0">params := anthropic.MessageNewParams{
+                Model:     anthropic.Model(a.model),
+                MaxTokens: maxTokens,
+                Messages:  messages,
+        }
+
+        if len(systemBlocks) &gt; 0 </span><span class="cov0" title="0">{
+                params.System = systemBlocks
+        }</span>
+
+        <span class="cov0" title="0">temperature := a.temperature
+        if req.Temperature &gt; 0 </span><span class="cov0" title="0">{
+                temperature = req.Temperature
+        }</span>
+        <span class="cov0" title="0">if temperature &gt; 0 </span><span class="cov0" title="0">{
+                params.Temperature = anthropic.Float(temperature)
+        }</span>
+
+        // Send request
+        <span class="cov0" title="0">message, err := client.Messages.New(ctx, params)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("API error: %v", err)
+        }</span>
+
+        // Extract response text
+        <span class="cov0" title="0">content := ""
+        if len(message.Content) &gt; 0 </span><span class="cov0" title="0">{
+                content = message.Content[0].Text
+        }</span>
+
+        <span class="cov0" title="0">return &amp;Response{
+                Content:      content,
+                Provider:     "anthropic",
+                Model:        a.model,
+                InputTokens:  int(message.Usage.InputTokens),
+                OutputTokens: int(message.Usage.OutputTokens),
+                Latency:      time.Since(start),
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package llm
+
+import (
+        "context"
+        "os"
+
+        "github.com/openai/openai-go/v3"
+        "github.com/openai/openai-go/v3/option"
+)
+
+// DeepSeek API is OpenAI-compatible
+const (
+        deepseekAPIURL = "https://api.deepseek.com/v1"
+)
+
+// DeepSeekConfig holds DeepSeek configuration
+type DeepSeekConfig struct {
+        APIKey      string  `yaml:"api_key" json:"api_key"`
+        Model       string  `yaml:"model" json:"model"`
+        MaxTokens   int     `yaml:"max_tokens" json:"max_tokens"`
+        Temperature float64 `yaml:"temperature" json:"temperature"`
+        BaseURL     string  `yaml:"base_url" json:"base_url"`
+}
+
+// DeepSeek implements the Provider interface for DeepSeek
+type DeepSeek struct {
+        config DeepSeekConfig
+}
+
+// NewDeepSeek creates a new DeepSeek provider
+func NewDeepSeek(config *DeepSeekConfig) *DeepSeek <span class="cov8" title="1">{
+        // Copy to avoid mutating caller's config
+        cfg := *config
+
+        if cfg.APIKey == "" </span><span class="cov8" title="1">{
+                cfg.APIKey = os.Getenv("DEEPSEEK_API_KEY")
+        }</span>
+        <span class="cov8" title="1">if cfg.Model == "" </span><span class="cov8" title="1">{
+                cfg.Model = "deepseek-chat"
+        }</span>
+        <span class="cov8" title="1">if cfg.MaxTokens == 0 </span><span class="cov8" title="1">{
+                cfg.MaxTokens = 4096
+        }</span>
+        <span class="cov8" title="1">if cfg.BaseURL == "" </span><span class="cov8" title="1">{
+                cfg.BaseURL = deepseekAPIURL
+        }</span>
+
+        <span class="cov8" title="1">return &amp;DeepSeek{
+                config: cfg,
+        }</span>
+}
+
+// Name returns the provider name
+func (d *DeepSeek) Name() string <span class="cov8" title="1">{
+        return "deepseek"
+}</span>
+
+// Available returns true if the provider is configured
+func (d *DeepSeek) Available() bool <span class="cov8" title="1">{
+        return d.config.APIKey != ""
+}</span>
+
+// Complete sends a completion request to DeepSeek
+func (d *DeepSeek) Complete(ctx context.Context, req *Request) (*Response, error) <span class="cov0" title="0">{
+        client := openai.NewClient(
+                option.WithAPIKey(d.config.APIKey),
+                option.WithBaseURL(d.config.BaseURL),
+        )
+        return completeOpenAICompatible(ctx, client, "deepseek", d.config.Model, d.config.MaxTokens, d.config.Temperature, req)
+}</span>
+
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Google Gemini provider
+package llm
+
+import (
+        "context"
+        "encoding/base64"
+        "fmt"
+        "os"
+        "time"
+
+        "google.golang.org/genai"
+)
+
+// Gemini provider
+type Gemini struct {
+        apiKey      string
+        model       string
+        maxTokens   int
+        temperature float64
+}
+
+// GeminiConfig for Gemini provider
+type GeminiConfig struct {
+        APIKey      string
+        Model       string
+        MaxTokens   int
+        Temperature float64
+}
+
+// NewGemini creates a new Gemini provider
+func NewGemini(cfg *GeminiConfig) *Gemini <span class="cov8" title="1">{
+        apiKey := cfg.APIKey
+        if apiKey == "" </span><span class="cov8" title="1">{
+                apiKey = os.Getenv("GEMINI_API_KEY")
+        }</span>
+        <span class="cov8" title="1">if apiKey == "" </span><span class="cov8" title="1">{
+                apiKey = os.Getenv("GOOGLE_API_KEY")
+        }</span>
+
+        <span class="cov8" title="1">model := cfg.Model
+        if model == "" </span><span class="cov8" title="1">{
+                model = "gemini-2.0-flash"
+        }</span>
+
+        <span class="cov8" title="1">maxTokens := cfg.MaxTokens
+        if maxTokens == 0 </span><span class="cov8" title="1">{
+                maxTokens = 4096
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Gemini{
+                apiKey:      apiKey,
+                model:       model,
+                maxTokens:   maxTokens,
+                temperature: cfg.Temperature,
+        }</span>
+}
+
+// Name returns provider name
+func (g *Gemini) Name() string <span class="cov8" title="1">{
+        return "gemini"
+}</span>
+
+// Available checks if provider is available
+func (g *Gemini) Available() bool <span class="cov8" title="1">{
+        return g.apiKey != ""
+}</span>
+
+// Complete sends a completion request
+func (g *Gemini) Complete(ctx context.Context, req *Request) (*Response, error) <span class="cov0" title="0">{
+        start := time.Now()
+
+        client, err := genai.NewClient(ctx, &amp;genai.ClientConfig{
+                APIKey:  g.apiKey,
+                Backend: genai.BackendGeminiAPI,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("create client: %w", err)
+        }</span>
+
+        // Convert messages to Gemini format
+        <span class="cov0" title="0">var contents []*genai.Content
+        var systemInstruction *genai.Content
+
+        for _, m := range req.Messages </span><span class="cov0" title="0">{
+                if m.Role == "system" </span><span class="cov0" title="0">{
+                        systemInstruction = &amp;genai.Content{
+                                Parts: []*genai.Part{{Text: m.Content}},
+                        }
+                        continue</span>
+                }
+
+                <span class="cov0" title="0">role := m.Role
+                if role == "assistant" </span><span class="cov0" title="0">{
+                        role = "model"
+                }</span>
+
+                <span class="cov0" title="0">if m.HasBlocks() </span><span class="cov0" title="0">{
+                        var parts []*genai.Part
+                        for _, b := range m.Blocks </span><span class="cov0" title="0">{
+                                switch b.Type </span>{
+                                case "text":<span class="cov0" title="0">
+                                        parts = append(parts, &amp;genai.Part{Text: b.Text})</span>
+                                case "image":<span class="cov0" title="0">
+                                        imageData, decodeErr := base64.StdEncoding.DecodeString(b.ImageData)
+                                        if decodeErr != nil </span><span class="cov0" title="0">{
+                                                return nil, fmt.Errorf("decode image: %w", decodeErr)
+                                        }</span>
+                                        <span class="cov0" title="0">parts = append(parts, &amp;genai.Part{
+                                                InlineData: &amp;genai.Blob{
+                                                        Data:     imageData,
+                                                        MIMEType: b.MimeType,
+                                                },
+                                        })</span>
+                                }
+                        }
+                        <span class="cov0" title="0">contents = append(contents, &amp;genai.Content{
+                                Role:  role,
+                                Parts: parts,
+                        })</span>
+                } else<span class="cov0" title="0"> {
+                        contents = append(contents, &amp;genai.Content{
+                                Role:  role,
+                                Parts: []*genai.Part{{Text: m.Content}},
+                        })
+                }</span>
+        }
+
+        // Build generation config
+        <span class="cov0" title="0">config := &amp;genai.GenerateContentConfig{
+                MaxOutputTokens: int32(g.maxTokens),
+        }
+
+        if systemInstruction != nil </span><span class="cov0" title="0">{
+                config.SystemInstruction = systemInstruction
+        }</span>
+
+        <span class="cov0" title="0">temperature := g.temperature
+        if req.Temperature &gt; 0 </span><span class="cov0" title="0">{
+                temperature = req.Temperature
+        }</span>
+        <span class="cov0" title="0">if temperature &gt; 0 </span><span class="cov0" title="0">{
+                t := float32(temperature)
+                config.Temperature = &amp;t
+        }</span>
+
+        // Send request
+        <span class="cov0" title="0">result, err := client.Models.GenerateContent(ctx, g.model, contents, config)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("API error: %v", err)
+        }</span>
+
+        <span class="cov0" title="0">content := ""
+        if len(result.Candidates) &gt; 0 &amp;&amp; result.Candidates[0].Content != nil &amp;&amp;
+                len(result.Candidates[0].Content.Parts) &gt; 0 </span><span class="cov0" title="0">{
+                content = result.Candidates[0].Content.Parts[0].Text
+        }</span>
+
+        <span class="cov0" title="0">var inputTokens, outputTokens int
+        if result.UsageMetadata != nil </span><span class="cov0" title="0">{
+                inputTokens = int(result.UsageMetadata.PromptTokenCount)
+                outputTokens = int(result.UsageMetadata.CandidatesTokenCount)
+        }</span>
+
+        <span class="cov0" title="0">return &amp;Response{
+                Content:      content,
+                Provider:     "gemini",
+                Model:        g.model,
+                InputTokens:  inputTokens,
+                OutputTokens: outputTokens,
+                Latency:      time.Since(start),
+        }, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Zhipu GLM provider (ChatGLM) via Z.AI API
+package llm
+
+import (
+        "context"
+        "os"
+
+        "github.com/openai/openai-go/v3"
+        "github.com/openai/openai-go/v3/option"
+)
+
+const glmAPIURL = "https://api.z.ai/api/paas/v4"
+
+// GLM provider (Zhipu ChatGLM)
+type GLM struct {
+        apiKey      string
+        model       string
+        maxTokens   int
+        temperature float64
+        baseURL     string
+}
+
+// GLMConfig for GLM provider
+type GLMConfig struct {
+        APIKey      string
+        Model       string
+        MaxTokens   int
+        Temperature float64
+        BaseURL     string
+}
+
+// NewGLM creates a new GLM provider
+func NewGLM(cfg *GLMConfig) *GLM <span class="cov8" title="1">{
+        apiKey := cfg.APIKey
+        if apiKey == "" </span><span class="cov8" title="1">{
+                apiKey = os.Getenv("ZAI_API_KEY")
+        }</span>
+        <span class="cov8" title="1">if apiKey == "" </span><span class="cov8" title="1">{
+                apiKey = os.Getenv("GLM_API_KEY")
+        }</span>
+
+        <span class="cov8" title="1">baseURL := cfg.BaseURL
+        if baseURL == "" </span><span class="cov8" title="1">{
+                baseURL = glmAPIURL
+        }</span>
+
+        <span class="cov8" title="1">model := cfg.Model
+        if model == "" </span><span class="cov8" title="1">{
+                model = "glm-4.7"
+        }</span>
+
+        <span class="cov8" title="1">maxTokens := cfg.MaxTokens
+        if maxTokens == 0 </span><span class="cov8" title="1">{
+                maxTokens = 4096
+        }</span>
+
+        <span class="cov8" title="1">return &amp;GLM{
+                apiKey:      apiKey,
+                model:       model,
+                maxTokens:   maxTokens,
+                temperature: cfg.Temperature,
+                baseURL:     baseURL,
+        }</span>
+}
+
+// Name returns provider name
+func (g *GLM) Name() string <span class="cov8" title="1">{
+        return "glm"
+}</span>
+
+// Available checks if provider is available
+func (g *GLM) Available() bool <span class="cov8" title="1">{
+        return g.apiKey != ""
+}</span>
+
+// Complete sends a completion request
+func (g *GLM) Complete(ctx context.Context, req *Request) (*Response, error) <span class="cov0" title="0">{
+        client := openai.NewClient(
+                option.WithAPIKey(g.apiKey),
+                option.WithBaseURL(g.baseURL),
+        )
+        return completeOpenAICompatible(ctx, client, "glm", g.model, g.maxTokens, g.temperature, req)
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// Package llm provides unified interface for multiple LLM providers
+package llm
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "log/slog"
+        "strings"
+        "sync"
+        "time"
+)
+
+var (
+        ErrNoProvider     = errors.New("no LLM provider available")
+        ErrProviderFailed = errors.New("LLM provider failed")
+        ErrRateLimited    = errors.New("rate limit exceeded")
+        ErrInputTooLong   = errors.New("input too long")
+        ErrTimeout        = errors.New("request timeout")
+)
+
+// ContentBlock represents a content part (text or image)
+type ContentBlock struct {
+        Type      string `json:"type"`                 // "text" or "image"
+        Text      string `json:"text,omitempty"`        // For text blocks
+        MimeType  string `json:"mime_type,omitempty"`   // For image blocks (e.g. "image/jpeg")
+        ImageData string `json:"image_data,omitempty"`  // Base64-encoded image data
+}
+
+// Message represents a chat message
+type Message struct {
+        Role    string         `json:"role"`    // "system", "user", "assistant"
+        Content string         `json:"content"`
+        Blocks  []ContentBlock `json:"blocks,omitempty"` // Multi-modal content blocks
+}
+
+// HasBlocks returns true if the message has multi-modal content blocks
+func (m *Message) HasBlocks() bool <span class="cov8" title="1">{
+        return len(m.Blocks) &gt; 0
+}</span>
+
+// Request represents an LLM request
+type Request struct {
+        Messages    []Message
+        MaxTokens   int
+        Temperature float64
+}
+
+// Response represents an LLM response
+type Response struct {
+        Content      string
+        Provider     string
+        Model        string
+        InputTokens  int
+        OutputTokens int
+        Latency      time.Duration
+}
+
+// Provider interface for LLM providers
+type Provider interface {
+        Name() string
+        Complete(ctx context.Context, req *Request) (*Response, error)
+        Available() bool
+}
+
+// Router manages multiple LLM providers with fallback
+type Router struct {
+        providers     map[string]Provider
+        defaultName   string
+        fallbackChain []string
+        systemPrompt  string
+        maxInput      int
+        timeout       time.Duration
+        rateLimiter   *rateLimiter
+        logger        *slog.Logger
+        mu            sync.RWMutex
+}
+
+// Config for LLM router
+type Config struct {
+        Default       string
+        FallbackChain []string
+        SystemPrompt  string
+        MaxInput      int
+        Timeout       time.Duration
+        RateLimit     int // requests per minute per user
+        Logger        *slog.Logger
+}
+
+// NewRouter creates a new LLM router
+func NewRouter(cfg *Config) *Router <span class="cov8" title="1">{
+        if cfg.MaxInput == 0 </span><span class="cov8" title="1">{
+                cfg.MaxInput = 10000
+        }</span>
+        <span class="cov8" title="1">if cfg.Timeout == 0 </span><span class="cov8" title="1">{
+                cfg.Timeout = 60 * time.Second
+        }</span>
+        <span class="cov8" title="1">if cfg.RateLimit == 0 </span><span class="cov8" title="1">{
+                cfg.RateLimit = 10
+        }</span>
+
+        <span class="cov8" title="1">logger := cfg.Logger
+        if logger == nil </span><span class="cov8" title="1">{
+                logger = slog.Default()
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Router{
+                providers:     make(map[string]Provider),
+                defaultName:   cfg.Default,
+                fallbackChain: cfg.FallbackChain,
+                systemPrompt:  cfg.SystemPrompt,
+                maxInput:      cfg.MaxInput,
+                timeout:       cfg.Timeout,
+                rateLimiter:   newRateLimiter(cfg.RateLimit),
+                logger:        logger,
+        }</span>
+}
+
+// DetectProvider detects the provider name from a model name
+func DetectProvider(model string) string <span class="cov8" title="1">{
+        model = strings.ToLower(model)
+        prefixes := map[string]string{
+                "claude":   "anthropic",
+                "gpt":     "openai",
+                "o1":      "openai",
+                "o3":      "openai",
+                "gemini":  "gemini",
+                "glm":    "glm",
+                "deepseek": "deepseek",
+                "llama":   "local",
+                "mistral": "local",
+                "mixtral": "local",
+                "phi":     "local",
+                "qwen":    "local",
+                "codellama": "local",
+        }
+        for prefix, provider := range prefixes </span><span class="cov8" title="1">{
+                if strings.Contains(model, prefix) </span><span class="cov8" title="1">{
+                        return provider
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+// Register registers a provider
+func (r *Router) Register(p Provider) <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+        r.providers[p.Name()] = p
+        r.logger.Info("registered LLM provider", "name", p.Name())
+
+        // Auto-detect default provider if not explicitly set
+        if r.defaultName == "" &amp;&amp; p.Available() </span><span class="cov8" title="1">{
+                r.defaultName = p.Name()
+                r.logger.Info("auto-selected default provider", "name", p.Name())
+        }</span>
+}
+
+// Complete sends a request to the LLM
+func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, error) <span class="cov8" title="1">{
+        // Rate limit check
+        if !r.rateLimiter.allow(userID) </span><span class="cov8" title="1">{
+                return nil, ErrRateLimited
+        }</span>
+
+        // Input length check
+        <span class="cov8" title="1">if len(text) &gt; r.maxInput </span><span class="cov8" title="1">{
+                return nil, ErrInputTooLong
+        }</span>
+
+        // Build request
+        <span class="cov8" title="1">req := &amp;Request{
+                Messages: []Message{
+                        {Role: "user", Content: text},
+                },
+        }
+
+        // Add system prompt if set
+        if r.systemPrompt != "" </span><span class="cov8" title="1">{
+                req.Messages = append([]Message{{Role: "system", Content: r.systemPrompt}}, req.Messages...)
+        }</span>
+
+        // Apply timeout
+        <span class="cov8" title="1">ctx, cancel := context.WithTimeout(ctx, r.timeout)
+        defer cancel()
+
+        resp, err := r.tryProviders(ctx, req)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return resp, nil</span>
+}
+
+// Chat sends a multi-turn conversation
+func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*Response, error) <span class="cov8" title="1">{
+        if !r.rateLimiter.allow(userID) </span><span class="cov8" title="1">{
+                return nil, ErrRateLimited
+        }</span>
+
+        // Calculate total input length (including multi-modal block data)
+        <span class="cov8" title="1">totalLen := 0
+        for _, m := range messages </span><span class="cov8" title="1">{
+                totalLen += len(m.Content)
+                for _, b := range m.Blocks </span><span class="cov8" title="1">{
+                        totalLen += len(b.Text) + len(b.ImageData)
+                }</span>
+        }
+        <span class="cov8" title="1">if totalLen &gt; r.maxInput </span><span class="cov8" title="1">{
+                return nil, ErrInputTooLong
+        }</span>
+
+        <span class="cov8" title="1">req := &amp;Request{Messages: messages}
+
+        if r.systemPrompt != "" </span><span class="cov8" title="1">{
+                req.Messages = append([]Message{{Role: "system", Content: r.systemPrompt}}, req.Messages...)
+        }</span>
+
+        <span class="cov8" title="1">ctx, cancel := context.WithTimeout(ctx, r.timeout)
+        defer cancel()
+
+        return r.tryProviders(ctx, req)</span>
+}
+
+// tryProviders attempts all providers in order: default, fallback chain, any available
+func (r *Router) tryProviders(ctx context.Context, req *Request) (*Response, error) <span class="cov8" title="1">{
+        var lastErr error
+
+        // Try default provider first
+        r.mu.RLock()
+        defaultProvider, ok := r.providers[r.defaultName]
+        r.mu.RUnlock()
+
+        if ok &amp;&amp; defaultProvider.Available() </span><span class="cov8" title="1">{
+                resp, err := defaultProvider.Complete(ctx, req)
+                if err == nil </span><span class="cov8" title="1">{
+                        return resp, nil
+                }</span>
+                <span class="cov8" title="1">lastErr = fmt.Errorf("%s: %w", r.defaultName, err)
+                r.logger.Warn("default provider failed", "provider", r.defaultName, "error", err)</span>
+        }
+
+        // Try fallback chain
+        <span class="cov8" title="1">for _, name := range r.fallbackChain </span><span class="cov8" title="1">{
+                if name == r.defaultName </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">r.mu.RLock()
+                provider, ok := r.providers[name]
+                r.mu.RUnlock()
+
+                if !ok || !provider.Available() </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">resp, err := provider.Complete(ctx, req)
+                if err == nil </span><span class="cov8" title="1">{
+                        r.logger.Info("used fallback provider", "provider", name)
+                        return resp, nil
+                }</span>
+                <span class="cov8" title="1">lastErr = fmt.Errorf("%s: %w", name, err)
+                r.logger.Warn("fallback provider failed", "provider", name, "error", err)</span>
+        }
+
+        // Last resort: try any available provider
+        <span class="cov8" title="1">r.mu.RLock()
+        type candidate struct {
+                name     string
+                provider Provider
+        }
+        var candidates []candidate
+        for name, provider := range r.providers </span><span class="cov8" title="1">{
+                if name != r.defaultName &amp;&amp; provider.Available() </span><span class="cov8" title="1">{
+                        candidates = append(candidates, candidate{name, provider})
+                }</span>
+        }
+        <span class="cov8" title="1">r.mu.RUnlock()
+
+        for _, c := range candidates </span><span class="cov8" title="1">{
+                resp, err := c.provider.Complete(ctx, req)
+                if err == nil </span><span class="cov8" title="1">{
+                        r.logger.Info("used available provider", "provider", c.name)
+                        return resp, nil
+                }</span>
+                <span class="cov8" title="1">lastErr = fmt.Errorf("%s: %w", c.name, err)</span>
+        }
+
+        <span class="cov8" title="1">if lastErr != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("%w: %w", ErrNoProvider, lastErr)
+        }</span>
+        <span class="cov8" title="1">return nil, ErrNoProvider</span>
+}
+
+// SetSystemPrompt updates the system prompt
+func (r *Router) SetSystemPrompt(prompt string) <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+        r.systemPrompt = prompt
+}</span>
+
+// Providers returns list of registered providers
+func (r *Router) Providers() []string <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        names := make([]string, 0, len(r.providers))
+        for name := range r.providers </span><span class="cov8" title="1">{
+                names = append(names, name)
+        }</span>
+        <span class="cov8" title="1">return names</span>
+}
+
+// Stats returns usage statistics
+func (r *Router) Stats() map[string]interface{} <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        stats := map[string]interface{}{
+                "default":   r.defaultName,
+                "providers": len(r.providers),
+        }
+
+        available := []string{}
+        for name, p := range r.providers </span><span class="cov8" title="1">{
+                if p.Available() </span><span class="cov8" title="1">{
+                        available = append(available, name)
+                }</span>
+        }
+        <span class="cov8" title="1">stats["available"] = available
+
+        return stats</span>
+}
+
+// Simple rate limiter
+type rateLimiter struct {
+        requests  map[string][]time.Time
+        limit     int
+        window    time.Duration
+        mu        sync.Mutex
+        callCount int // tracks calls for periodic cleanup
+}
+
+func newRateLimiter(limit int) *rateLimiter <span class="cov8" title="1">{
+        return &amp;rateLimiter{
+                requests: make(map[string][]time.Time),
+                limit:    limit,
+                window:   time.Minute,
+        }
+}</span>
+
+func (r *rateLimiter) allow(userID string) bool <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        now := time.Now()
+        cutoff := now.Add(-r.window)
+
+        // Periodic cleanup: every 100 calls, purge stale entries
+        r.callCount++
+        if r.callCount%100 == 0 </span><span class="cov8" title="1">{
+                for uid, times := range r.requests </span><span class="cov8" title="1">{
+                        if uid == userID </span><span class="cov8" title="1">{
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">hasRecent := false
+                        for _, t := range times </span><span class="cov8" title="1">{
+                                if t.After(cutoff) </span><span class="cov8" title="1">{
+                                        hasRecent = true
+                                        break</span>
+                                }
+                        }
+                        <span class="cov8" title="1">if !hasRecent </span><span class="cov0" title="0">{
+                                delete(r.requests, uid)
+                        }</span>
+                }
+        }
+
+        // Clean old entries for current user
+        <span class="cov8" title="1">var fresh []time.Time
+        for _, t := range r.requests[userID] </span><span class="cov8" title="1">{
+                if t.After(cutoff) </span><span class="cov8" title="1">{
+                        fresh = append(fresh, t)
+                }</span>
+        }
+
+        <span class="cov8" title="1">if len(fresh) &gt;= r.limit </span><span class="cov8" title="1">{
+                r.requests[userID] = fresh
+                return false
+        }</span>
+
+        <span class="cov8" title="1">fresh = append(fresh, now)
+        r.requests[userID] = fresh
+        return true</span>
+}
+
+// extractAPIMessage extracts a human-readable message from API error strings
+func extractAPIMessage(err error) string <span class="cov8" title="1">{
+        s := err.Error()
+        // Look for "message":"..." in JSON error responses
+        if idx := strings.Index(s, "\"message\":\""); idx != -1 </span><span class="cov8" title="1">{
+                start := idx + len("\"message\":\"")
+                end := strings.Index(s[start:], "\"")
+                if end != -1 </span><span class="cov8" title="1">{
+                        return s[start : start+end]
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+// Helper to format error for user
+func FormatError(err error) string <span class="cov8" title="1">{
+        switch </span>{
+        case errors.Is(err, ErrRateLimited):<span class="cov8" title="1">
+                return "⏳ Too many requests. Please wait a moment."</span>
+        case errors.Is(err, ErrInputTooLong):<span class="cov8" title="1">
+                return "📝 Message too long. Please shorten it."</span>
+        case errors.Is(err, ErrTimeout):<span class="cov8" title="1">
+                return "⏱️ Request timed out. Please try again."</span>
+        case errors.Is(err, ErrNoProvider):<span class="cov8" title="1">
+                if msg := extractAPIMessage(err); msg != "" </span><span class="cov0" title="0">{
+                        return fmt.Sprintf("🔌 Provider error: %s", msg)
+                }</span>
+                <span class="cov8" title="1">return "🔌 No AI provider available."</span>
+        default:<span class="cov8" title="1">
+                return fmt.Sprintf("❌ Error: %v", err)</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">// Local/self-hosted LLM provider (OpenAI-compatible API)
+//
+// Works with any server that exposes an OpenAI-compatible chat completions API:
+//   - Ollama (http://localhost:11434/v1)
+//   - vLLM (http://localhost:8000/v1)
+//   - llama.cpp server (http://localhost:8080/v1)
+//   - LocalAI (http://localhost:8080/v1)
+//   - text-generation-webui with openai extension
+//
+// No API key required by default. Set LOCAL_LLM_URL to override the base URL.
+package llm
+
+import (
+        "context"
+        "fmt"
+        "net/http"
+        "os"
+        "time"
+
+        "github.com/openai/openai-go/v3"
+        "github.com/openai/openai-go/v3/option"
+)
+
+const (
+        defaultLocalURL = "http://localhost:11434/v1" // Ollama default
+)
+
+// LocalConfig holds configuration for a local/self-hosted LLM provider.
+type LocalConfig struct {
+        Enabled     bool    `yaml:"enabled"`
+        BaseURL     string  `yaml:"base_url"`     // Server URL (default: http://localhost:11434/v1)
+        Model       string  `yaml:"model"`        // Model name (default: llama3)
+        APIKey      string  `yaml:"api_key"`      // Optional API key (some servers require it)
+        MaxTokens   int     `yaml:"max_tokens"`
+        Temperature float64 `yaml:"temperature"`
+}
+
+// Local implements the Provider interface for self-hosted OpenAI-compatible LLMs.
+type Local struct {
+        config LocalConfig
+}
+
+// NewLocal creates a new local LLM provider.
+func NewLocal(cfg *LocalConfig) *Local <span class="cov8" title="1">{
+        c := *cfg
+
+        if c.BaseURL == "" </span><span class="cov8" title="1">{
+                c.BaseURL = os.Getenv("LOCAL_LLM_URL")
+        }</span>
+        <span class="cov8" title="1">if c.BaseURL == "" </span><span class="cov8" title="1">{
+                c.BaseURL = defaultLocalURL
+        }</span>
+
+        <span class="cov8" title="1">if c.Model == "" </span><span class="cov8" title="1">{
+                c.Model = os.Getenv("LOCAL_LLM_MODEL")
+        }</span>
+        <span class="cov8" title="1">if c.Model == "" </span><span class="cov8" title="1">{
+                c.Model = "llama3"
+        }</span>
+
+        <span class="cov8" title="1">if c.APIKey == "" </span><span class="cov8" title="1">{
+                c.APIKey = os.Getenv("LOCAL_LLM_API_KEY")
+        }</span>
+        <span class="cov8" title="1">if c.APIKey == "" </span><span class="cov8" title="1">{
+                // Many local servers accept any non-empty key or "none"
+                c.APIKey = "local"
+        }</span>
+
+        <span class="cov8" title="1">if c.MaxTokens == 0 </span><span class="cov8" title="1">{
+                c.MaxTokens = 4096
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Local{config: c}</span>
+}
+
+// Name returns the provider name.
+func (l *Local) Name() string <span class="cov8" title="1">{
+        return "local"
+}</span>
+
+// Available checks if the local LLM server is reachable.
+// Unlike cloud providers that check for an API key, this does a quick HTTP
+// health check against the base URL. The result is not cached — each call
+// makes a fresh check so hot-swapping servers works.
+func (l *Local) Available() bool <span class="cov8" title="1">{
+        if !l.config.Enabled </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        <span class="cov8" title="1">client := &amp;http.Client{Timeout: 2 * time.Second}
+        resp, err := client.Get(l.config.BaseURL + "/models")
+        if err != nil </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">resp.Body.Close()
+        return resp.StatusCode &lt; 500</span>
+}
+
+// Complete sends a chat completion request to the local LLM server.
+func (l *Local) Complete(ctx context.Context, req *Request) (*Response, error) <span class="cov0" title="0">{
+        opts := []option.RequestOption{
+                option.WithAPIKey(l.config.APIKey),
+                option.WithBaseURL(l.config.BaseURL),
+        }
+
+        client := openai.NewClient(opts...)
+
+        resp, err := completeOpenAICompatible(ctx, client, "local", l.config.Model, l.config.MaxTokens, l.config.Temperature, req)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("local LLM (%s): %w", l.config.BaseURL, err)
+        }</span>
+        <span class="cov0" title="0">return resp, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">// Models listing for LLM providers
+package llm
+
+import (
+        "context"
+        "fmt"
+        "sort"
+        "strings"
+        "time"
+
+        "github.com/anthropics/anthropic-sdk-go"
+        anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
+        "github.com/openai/openai-go/v3"
+        openaiOption "github.com/openai/openai-go/v3/option"
+        "google.golang.org/genai"
+)
+
+// ModelInfo represents a model
+type ModelInfo struct {
+        ID          string `json:"id"`
+        Name        string `json:"name"`
+        Provider    string `json:"provider"`
+        Description string `json:"description,omitempty"`
+        MaxTokens   int    `json:"max_tokens,omitempty"`
+}
+
+// ListModels lists available models from a provider via API
+func (r *Router) ListModels(ctx context.Context, providerName string) ([]ModelInfo, error) <span class="cov0" title="0">{
+        r.mu.RLock()
+        provider, ok := r.providers[providerName]
+        r.mu.RUnlock()
+
+        if !ok </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("provider not found: %s", providerName)
+        }</span>
+
+        <span class="cov0" title="0">if !provider.Available() </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("provider not available: %s", providerName)
+        }</span>
+
+        <span class="cov0" title="0">switch p := provider.(type) </span>{
+        case *OpenAI:<span class="cov0" title="0">
+                return listOpenAIModels(ctx, p)</span>
+        case *Gemini:<span class="cov0" title="0">
+                return listGeminiModels(ctx, p)</span>
+        case *GLM:<span class="cov0" title="0">
+                return listGLMModelsAPI(ctx, p)</span>
+        case *Anthropic:<span class="cov0" title="0">
+                return listAnthropicModelsAPI(ctx, p)</span>
+        case *DeepSeek:<span class="cov0" title="0">
+                return listDeepSeekModelsAPI(ctx, p)</span>
+        default:<span class="cov0" title="0">
+                return nil, fmt.Errorf("list models not supported for: %s", providerName)</span>
+        }
+}
+
+// ListAllModels lists models from all available providers
+func (r *Router) ListAllModels(ctx context.Context) map[string][]ModelInfo <span class="cov0" title="0">{
+        result := make(map[string][]ModelInfo)
+
+        r.mu.RLock()
+        providers := make(map[string]Provider)
+        for k, v := range r.providers </span><span class="cov0" title="0">{
+                providers[k] = v
+        }</span>
+        <span class="cov0" title="0">r.mu.RUnlock()
+
+        for name, provider := range providers </span><span class="cov0" title="0">{
+                if !provider.Available() </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov0" title="0">models, err := r.ListModels(ctx, name)
+                if err == nil </span><span class="cov0" title="0">{
+                        result[name] = models
+                }</span>
+        }
+
+        <span class="cov0" title="0">return result</span>
+}
+
+// listAnthropicModelsAPI lists models from the Anthropic API using the SDK
+func listAnthropicModelsAPI(ctx context.Context, a *Anthropic) ([]ModelInfo, error) <span class="cov0" title="0">{
+        var opts []anthropicOption.RequestOption
+        if a.baseURL != "" </span><span class="cov0" title="0">{
+                opts = append(opts, anthropicOption.WithBaseURL(a.baseURL))
+        }</span>
+        <span class="cov0" title="0">opts = append(opts, anthropicOption.WithAPIKey(a.apiKey))
+
+        client := anthropic.NewClient(opts...)
+        pager := client.Models.ListAutoPaging(ctx, anthropic.ModelListParams{})
+
+        var models []ModelInfo
+        for pager.Next() </span><span class="cov0" title="0">{
+                m := pager.Current()
+                models = append(models, ModelInfo{
+                        ID:       m.ID,
+                        Name:     m.DisplayName,
+                        Provider: "anthropic",
+                })
+        }</span>
+        <span class="cov0" title="0">if err := pager.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("list models: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return models, nil</span>
+}
+
+// OpenAI models via SDK
+func listOpenAIModels(ctx context.Context, o *OpenAI) ([]ModelInfo, error) <span class="cov0" title="0">{
+        client := o.newClient()
+
+        // Use auto-paging to list all models
+        pager := client.Models.ListAutoPaging(ctx)
+
+        // Filter chat models only
+        chatPrefixes := []string{"gpt-4", "gpt-3.5", "o1", "o3"}
+        var models []ModelInfo
+
+        for pager.Next() </span><span class="cov0" title="0">{
+                m := pager.Current()
+                for _, prefix := range chatPrefixes </span><span class="cov0" title="0">{
+                        if strings.HasPrefix(m.ID, prefix) </span><span class="cov0" title="0">{
+                                models = append(models, ModelInfo{
+                                        ID:       m.ID,
+                                        Name:     m.ID,
+                                        Provider: "openai",
+                                })
+                                break</span>
+                        }
+                }
+        }
+        <span class="cov0" title="0">if err := pager.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("list models: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">sort.Slice(models, func(i, j int) bool </span><span class="cov0" title="0">{
+                return models[i].ID &gt; models[j].ID // Newest first
+        }</span>)
+
+        <span class="cov0" title="0">return models, nil</span>
+}
+
+// Gemini models via SDK
+func listGeminiModels(ctx context.Context, g *Gemini) ([]ModelInfo, error) <span class="cov0" title="0">{
+        client, err := genai.NewClient(ctx, &amp;genai.ClientConfig{
+                APIKey:  g.apiKey,
+                Backend: genai.BackendGeminiAPI,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("create client: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">var models []ModelInfo
+        for model, err := range client.Models.All(ctx) </span><span class="cov0" title="0">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("list models: %w", err)
+                }</span>
+                // Only include models that support generateContent
+                <span class="cov0" title="0">for _, action := range model.SupportedActions </span><span class="cov0" title="0">{
+                        if action == "generateContent" </span><span class="cov0" title="0">{
+                                id := strings.TrimPrefix(model.Name, "models/")
+                                models = append(models, ModelInfo{
+                                        ID:          id,
+                                        Name:        model.DisplayName,
+                                        Provider:    "gemini",
+                                        Description: model.Description,
+                                })
+                                break</span>
+                        }
+                }
+        }
+
+        <span class="cov0" title="0">return models, nil</span>
+}
+
+// listGLMModelsAPI lists models from the GLM/Z.AI API (OpenAI-compatible)
+func listGLMModelsAPI(ctx context.Context, g *GLM) ([]ModelInfo, error) <span class="cov0" title="0">{
+        return fetchOpenAICompatibleModels(ctx, g.apiKey, g.baseURL,
+                []string{"glm", "chatglm"}, "glm")
+}</span>
+
+// listDeepSeekModelsAPI lists models from the DeepSeek API (OpenAI-compatible)
+func listDeepSeekModelsAPI(ctx context.Context, d *DeepSeek) ([]ModelInfo, error) <span class="cov0" title="0">{
+        return fetchOpenAICompatibleModels(ctx, d.config.APIKey, d.config.BaseURL,
+                []string{"deepseek"}, "deepseek")
+}</span>
+
+// FetchModels fetches available models from a provider's API using the given key.
+// Returns an error if the API call fails — callers should show the error to the user.
+func FetchModels(provider, apiKey, baseURL string) ([]ModelInfo, error) <span class="cov8" title="1">{
+        ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+        defer cancel()
+
+        switch provider </span>{
+        case "anthropic":<span class="cov8" title="1">
+                return fetchAnthropicModels(ctx, apiKey, baseURL)</span>
+        case "openai":<span class="cov8" title="1">
+                return fetchOpenAICompatibleModels(ctx, apiKey, baseURL,
+                        []string{"gpt-4", "gpt-3.5", "o1", "o3", "chatgpt"}, "openai")</span>
+        case "gemini":<span class="cov8" title="1">
+                return fetchGeminiModels(ctx, apiKey)</span>
+        case "deepseek":<span class="cov8" title="1">
+                if baseURL == "" </span><span class="cov8" title="1">{
+                        baseURL = deepseekAPIURL
+                }</span>
+                <span class="cov8" title="1">return fetchOpenAICompatibleModels(ctx, apiKey, baseURL,
+                        []string{"deepseek"}, "deepseek")</span>
+        case "glm":<span class="cov8" title="1">
+                if baseURL == "" </span><span class="cov8" title="1">{
+                        baseURL = glmAPIURL
+                }</span>
+                <span class="cov8" title="1">return fetchOpenAICompatibleModels(ctx, apiKey, baseURL,
+                        []string{"glm", "chatglm"}, "glm")</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("unsupported provider: %s", provider)</span>
+        }
+}
+
+// fetchAnthropicModels lists models from the Anthropic API
+func fetchAnthropicModels(ctx context.Context, apiKey, baseURL string) ([]ModelInfo, error) <span class="cov8" title="1">{
+        var opts []anthropicOption.RequestOption
+        if baseURL != "" </span><span class="cov0" title="0">{
+                opts = append(opts, anthropicOption.WithBaseURL(baseURL))
+        }</span>
+        <span class="cov8" title="1">opts = append(opts, anthropicOption.WithAPIKey(apiKey))
+
+        client := anthropic.NewClient(opts...)
+        pager := client.Models.ListAutoPaging(ctx, anthropic.ModelListParams{})
+
+        var models []ModelInfo
+        for pager.Next() </span><span class="cov0" title="0">{
+                m := pager.Current()
+                models = append(models, ModelInfo{
+                        ID:       m.ID,
+                        Name:     m.DisplayName,
+                        Provider: "anthropic",
+                })
+        }</span>
+        <span class="cov8" title="1">if err := pager.Err(); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("list models: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if len(models) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("no models returned — check your API key")
+        }</span>
+
+        <span class="cov0" title="0">return models, nil</span>
+}
+
+// fetchOpenAICompatibleModels lists models from an OpenAI-compatible API
+func fetchOpenAICompatibleModels(ctx context.Context, apiKey, baseURL string, prefixes []string, providerName string) ([]ModelInfo, error) <span class="cov8" title="1">{
+        opts := []openaiOption.RequestOption{
+                openaiOption.WithAPIKey(apiKey),
+        }
+        if baseURL != "" </span><span class="cov8" title="1">{
+                opts = append(opts, openaiOption.WithBaseURL(baseURL))
+        }</span>
+        <span class="cov8" title="1">client := openai.NewClient(opts...)
+
+        pager := client.Models.ListAutoPaging(ctx)
+
+        var models []ModelInfo
+        for pager.Next() </span><span class="cov0" title="0">{
+                m := pager.Current()
+                for _, prefix := range prefixes </span><span class="cov0" title="0">{
+                        if strings.HasPrefix(strings.ToLower(m.ID), prefix) </span><span class="cov0" title="0">{
+                                models = append(models, ModelInfo{
+                                        ID:       m.ID,
+                                        Name:     m.ID,
+                                        Provider: providerName,
+                                })
+                                break</span>
+                        }
+                }
+        }
+        <span class="cov8" title="1">if err := pager.Err(); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("list models: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if len(models) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("no models returned — check your API key")
+        }</span>
+
+        <span class="cov0" title="0">sort.Slice(models, func(i, j int) bool </span><span class="cov0" title="0">{
+                return models[i].ID &gt; models[j].ID
+        }</span>)
+        <span class="cov0" title="0">return models, nil</span>
+}
+
+// fetchGeminiModels lists models from the Gemini API
+func fetchGeminiModels(ctx context.Context, apiKey string) ([]ModelInfo, error) <span class="cov8" title="1">{
+        client, err := genai.NewClient(ctx, &amp;genai.ClientConfig{
+                APIKey:  apiKey,
+                Backend: genai.BackendGeminiAPI,
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("create client: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">var models []ModelInfo
+        for model, err := range client.Models.All(ctx) </span><span class="cov8" title="1">{
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("list models: %w", err)
+                }</span>
+                <span class="cov0" title="0">for _, action := range model.SupportedActions </span><span class="cov0" title="0">{
+                        if action == "generateContent" </span><span class="cov0" title="0">{
+                                id := strings.TrimPrefix(model.Name, "models/")
+                                models = append(models, ModelInfo{
+                                        ID:          id,
+                                        Name:        model.DisplayName,
+                                        Provider:    "gemini",
+                                        Description: model.Description,
+                                })
+                                break</span>
+                        }
+                }
+        }
+
+        <span class="cov0" title="0">if len(models) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("no models returned — check your API key")
+        }</span>
+
+        <span class="cov0" title="0">return models, nil</span>
+}
+
+// FormatModelList formats models for display
+func FormatModelList(models map[string][]ModelInfo) string <span class="cov8" title="1">{
+        var sb strings.Builder
+
+        providers := make([]string, 0, len(models))
+        for p := range models </span><span class="cov8" title="1">{
+                providers = append(providers, p)
+        }</span>
+        <span class="cov8" title="1">sort.Strings(providers)
+
+        for _, provider := range providers </span><span class="cov8" title="1">{
+                modelList := models[provider]
+                sb.WriteString(fmt.Sprintf("\n**%s** (%d models):\n", strings.ToUpper(provider), len(modelList)))
+                for _, m := range modelList </span><span class="cov8" title="1">{
+                        if len(modelList) &gt; 10 </span><span class="cov0" title="0">{
+                                // Compact for many models
+                                sb.WriteString(fmt.Sprintf("• `%s`\n", m.ID))
+                        }</span> else<span class="cov8" title="1"> {
+                                if m.Description != "" </span><span class="cov8" title="1">{
+                                        sb.WriteString(fmt.Sprintf("• `%s` - %s\n", m.ID, m.Description))
+                                }</span> else<span class="cov0" title="0"> {
+                                        sb.WriteString(fmt.Sprintf("• `%s`\n", m.ID))
+                                }</span>
+                        }
+                }
+        }
+
+        <span class="cov8" title="1">return sb.String()</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">// OAuth token management for LLM providers
+package llm
+
+import (
+        "bytes"
+        "encoding/json"
+        "fmt"
+        "io"
+        "log/slog"
+        "net/http"
+        "net/url"
+        "os"
+        "path/filepath"
+        "runtime"
+        "sync"
+        "time"
+)
+
+// OAuthCredentials represents OAuth tokens
+type OAuthCredentials struct {
+        AccessToken  string `json:"accessToken"`
+        RefreshToken string `json:"refreshToken"`
+        ExpiresAt    int64  `json:"expiresAt"` // Unix milliseconds
+        Provider     string `json:"provider,omitempty"`
+}
+
+// CodexCliCredentials represents ~/.codex/auth.json format
+type CodexCliCredentials struct {
+        Tokens struct {
+                AccessToken  string `json:"access_token"`
+                RefreshToken string `json:"refresh_token"`
+                AccountID    string `json:"account_id"`
+        } `json:"tokens"`
+        LastRefresh string `json:"last_refresh"`
+}
+
+// OAuthManager manages OAuth tokens with auto-refresh
+type OAuthManager struct {
+        credentials map[string]*OAuthCredentials
+        mu          sync.RWMutex
+        httpClient  *http.Client
+}
+
+// NewOAuthManager creates a new OAuth manager
+func NewOAuthManager() *OAuthManager <span class="cov0" title="0">{
+        return &amp;OAuthManager{
+                credentials: make(map[string]*OAuthCredentials),
+                httpClient:  &amp;http.Client{Timeout: 30 * time.Second},
+        }
+}</span>
+
+// checkFilePermissions warns if a credential file is world-readable
+func checkFilePermissions(path string) error <span class="cov0" title="0">{
+        if runtime.GOOS == "windows" </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov0" title="0">info, err := os.Stat(path)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">mode := info.Mode().Perm()
+        // Reject if group or others have any access (should be 0600 or stricter)
+        if mode&amp;0077 != 0 </span><span class="cov0" title="0">{
+                slog.Warn("credential file has unsafe permissions", "path", path, "mode", fmt.Sprintf("%o", mode))
+                return fmt.Errorf("credential file %s has unsafe permissions %o (should be 0600)", path, mode)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+// LoadCodexCliCredentials loads credentials from ~/.codex/auth.json
+func (m *OAuthManager) LoadCodexCliCredentials() (*OAuthCredentials, error) <span class="cov0" title="0">{
+        home, err := os.UserHomeDir()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        // Check CODEX_HOME env first
+        <span class="cov0" title="0">codexHome := os.Getenv("CODEX_HOME")
+        if codexHome == "" </span><span class="cov0" title="0">{
+                codexHome = filepath.Join(home, ".codex")
+        }</span>
+
+        <span class="cov0" title="0">credPath := filepath.Join(codexHome, "auth.json")
+
+        if err := checkFilePermissions(credPath); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("credential file security check failed: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">data, err := os.ReadFile(credPath)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("read codex credentials: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">var creds CodexCliCredentials
+        if err := json.Unmarshal(data, &amp;creds); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("parse codex credentials: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if creds.Tokens.AccessToken == "" </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("no access token in codex credentials")
+        }</span>
+
+        // Calculate expiry (1 hour from last refresh or now)
+        <span class="cov0" title="0">var expiresAt int64
+        if creds.LastRefresh != "" </span><span class="cov0" title="0">{
+                t, err := time.Parse(time.RFC3339, creds.LastRefresh)
+                if err == nil </span><span class="cov0" title="0">{
+                        expiresAt = t.Add(time.Hour).UnixMilli()
+                }</span>
+        }
+        <span class="cov0" title="0">if expiresAt == 0 </span><span class="cov0" title="0">{
+                expiresAt = time.Now().Add(time.Hour).UnixMilli()
+        }</span>
+
+        <span class="cov0" title="0">oauth := &amp;OAuthCredentials{
+                AccessToken:  creds.Tokens.AccessToken,
+                RefreshToken: creds.Tokens.RefreshToken,
+                ExpiresAt:    expiresAt,
+                Provider:     "openai",
+        }
+
+        m.mu.Lock()
+        m.credentials["openai"] = oauth
+        m.mu.Unlock()
+
+        return oauth, nil</span>
+}
+
+// GetAccessToken returns a valid access token, refreshing if needed
+func (m *OAuthManager) GetAccessToken(provider string) (string, error) <span class="cov0" title="0">{
+        m.mu.RLock()
+        creds, ok := m.credentials[provider]
+        if !ok </span><span class="cov0" title="0">{
+                m.mu.RUnlock()
+                return "", fmt.Errorf("no credentials for provider: %s", provider)
+        }</span>
+
+        // Check if token is expired or about to expire (5 min buffer)
+        <span class="cov0" title="0">bufferMs := int64(5 * 60 * 1000) // 5 minutes
+        needsRefresh := time.Now().UnixMilli()+bufferMs &gt;= creds.ExpiresAt
+        token := creds.AccessToken
+        m.mu.RUnlock()
+
+        if !needsRefresh </span><span class="cov0" title="0">{
+                return token, nil
+        }</span>
+
+        // Upgrade to write lock for refresh to prevent duplicate refreshes
+        <span class="cov0" title="0">m.mu.Lock()
+        // Re-check under write lock — another goroutine may have refreshed already
+        creds = m.credentials[provider]
+        if creds == nil </span><span class="cov0" title="0">{
+                m.mu.Unlock()
+                return "", fmt.Errorf("credentials removed for provider: %s", provider)
+        }</span>
+        <span class="cov0" title="0">if time.Now().UnixMilli()+bufferMs &lt; creds.ExpiresAt </span><span class="cov0" title="0">{
+                token = creds.AccessToken
+                m.mu.Unlock()
+                return token, nil
+        }</span>
+        <span class="cov0" title="0">m.mu.Unlock()
+
+        // Refresh outside the lock (network call)
+        newCreds, err := m.refreshToken(provider, creds)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("refresh token: %w", err)
+        }</span>
+        <span class="cov0" title="0">return newCreds.AccessToken, nil</span>
+}
+
+// refreshToken refreshes OAuth token for a provider
+func (m *OAuthManager) refreshToken(provider string, creds *OAuthCredentials) (*OAuthCredentials, error) <span class="cov0" title="0">{
+        switch provider </span>{
+        case "openai":<span class="cov0" title="0">
+                return m.refreshOpenAIToken(creds)</span>
+        default:<span class="cov0" title="0">
+                return nil, fmt.Errorf("unsupported provider for refresh: %s", provider)</span>
+        }
+}
+
+// refreshOpenAIToken refreshes OpenAI Codex OAuth token
+func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCredentials, error) <span class="cov0" title="0">{
+        // OpenAI Codex OAuth refresh endpoint
+        refreshURL := "https://auth.openai.com/oauth/token"
+
+        data := url.Values{}
+        data.Set("grant_type", "refresh_token")
+        data.Set("refresh_token", creds.RefreshToken)
+        data.Set("client_id", "app_codex") // OpenAI Codex client ID
+
+        req, err := http.NewRequest("POST", refreshURL, bytes.NewBufferString(data.Encode()))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+        resp, err := m.httpClient.Do(req)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("refresh request failed: %w", err)
+        }</span>
+        <span class="cov0" title="0">defer resp.Body.Close()
+
+        body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("read refresh response: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if resp.StatusCode != http.StatusOK </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))
+        }</span>
+
+        <span class="cov0" title="0">var result struct {
+                AccessToken  string `json:"access_token"`
+                RefreshToken string `json:"refresh_token"`
+                ExpiresIn    int64  `json:"expires_in"`
+        }
+
+        if err := json.Unmarshal(body, &amp;result); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("parse refresh response: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">newCreds := &amp;OAuthCredentials{
+                AccessToken:  result.AccessToken,
+                RefreshToken: result.RefreshToken,
+                ExpiresAt:    time.Now().UnixMilli() + (result.ExpiresIn * 1000),
+                Provider:     "openai",
+        }
+
+        m.mu.Lock()
+        m.credentials["openai"] = newCreds
+        m.mu.Unlock()
+
+        return newCreds, nil</span>
+}
+
+// IsTokenExpired checks if the token is expired
+func (m *OAuthManager) IsTokenExpired(provider string) bool <span class="cov0" title="0">{
+        m.mu.RLock()
+        creds, ok := m.credentials[provider]
+        m.mu.RUnlock()
+
+        if !ok </span><span class="cov0" title="0">{
+                return true
+        }</span>
+
+        <span class="cov0" title="0">return time.Now().UnixMilli() &gt;= creds.ExpiresAt</span>
+}
+
+// GetExpiryTime returns the token expiry time
+func (m *OAuthManager) GetExpiryTime(provider string) time.Time <span class="cov0" title="0">{
+        m.mu.RLock()
+        creds, ok := m.credentials[provider]
+        m.mu.RUnlock()
+
+        if !ok </span><span class="cov0" title="0">{
+                return time.Time{}
+        }</span>
+
+        <span class="cov0" title="0">return time.UnixMilli(creds.ExpiresAt)</span>
+}
+
+// HasCredentials checks if credentials exist for a provider
+func (m *OAuthManager) HasCredentials(provider string) bool <span class="cov0" title="0">{
+        m.mu.RLock()
+        _, ok := m.credentials[provider]
+        m.mu.RUnlock()
+        return ok
+}</span>
+
+// Global OAuth manager instance
+var globalOAuthManager *OAuthManager
+var oauthOnce sync.Once
+
+// GetOAuthManager returns the global OAuth manager
+func GetOAuthManager() *OAuthManager <span class="cov0" title="0">{
+        oauthOnce.Do(func() </span><span class="cov0" title="0">{
+                globalOAuthManager = NewOAuthManager()
+        }</span>)
+        <span class="cov0" title="0">return globalOAuthManager</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">// OpenAI GPT provider
+package llm
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "time"
+
+        "github.com/openai/openai-go/v3"
+        "github.com/openai/openai-go/v3/option"
+)
+
+// OpenAI provider
+type OpenAI struct {
+        apiKey      string
+        model       string
+        maxTokens   int
+        temperature float64
+        baseURL     string
+}
+
+// OpenAIConfig for OpenAI provider
+type OpenAIConfig struct {
+        APIKey      string
+        Model       string
+        MaxTokens   int
+        Temperature float64
+        BaseURL     string // For Azure or proxy
+}
+
+// NewOpenAI creates a new OpenAI provider
+func NewOpenAI(cfg *OpenAIConfig) *OpenAI <span class="cov8" title="1">{
+        apiKey := cfg.APIKey
+        if apiKey == "" </span><span class="cov8" title="1">{
+                apiKey = os.Getenv("OPENAI_API_KEY")
+        }</span>
+
+        <span class="cov8" title="1">model := cfg.Model
+        if model == "" </span><span class="cov8" title="1">{
+                model = "gpt-4o"
+        }</span>
+
+        <span class="cov8" title="1">maxTokens := cfg.MaxTokens
+        if maxTokens == 0 </span><span class="cov8" title="1">{
+                maxTokens = 4096
+        }</span>
+
+        <span class="cov8" title="1">return &amp;OpenAI{
+                apiKey:      apiKey,
+                model:       model,
+                maxTokens:   maxTokens,
+                temperature: cfg.Temperature,
+                baseURL:     cfg.BaseURL,
+        }</span>
+}
+
+// Name returns provider name
+func (o *OpenAI) Name() string <span class="cov8" title="1">{
+        return "openai"
+}</span>
+
+// Available checks if provider is available
+func (o *OpenAI) Available() bool <span class="cov8" title="1">{
+        return o.apiKey != ""
+}</span>
+
+// newClient creates an OpenAI SDK client with the provider's configuration
+func (o *OpenAI) newClient() openai.Client <span class="cov0" title="0">{
+        opts := []option.RequestOption{
+                option.WithAPIKey(o.apiKey),
+        }
+        if o.baseURL != "" </span><span class="cov0" title="0">{
+                opts = append(opts, option.WithBaseURL(o.baseURL))
+        }</span>
+        <span class="cov0" title="0">return openai.NewClient(opts...)</span>
+}
+
+// Complete sends a completion request
+func (o *OpenAI) Complete(ctx context.Context, req *Request) (*Response, error) <span class="cov0" title="0">{
+        client := o.newClient()
+        return completeOpenAICompatible(ctx, client, "openai", o.model, o.maxTokens, o.temperature, req)
+}</span>
+
+// openaiCompatibleParams holds the resolved parameters for an OpenAI-compatible request.
+type openaiCompatibleParams struct {
+        maxTokens   int64
+        temperature float64
+}
+
+// resolveParams merges provider defaults with request-level overrides.
+func resolveParams(providerMaxTokens int, providerTemp float64, req *Request) openaiCompatibleParams <span class="cov8" title="1">{
+        maxTokens := int64(providerMaxTokens)
+        if req.MaxTokens &gt; 0 </span><span class="cov8" title="1">{
+                maxTokens = int64(req.MaxTokens)
+        }</span>
+        <span class="cov8" title="1">temperature := providerTemp
+        if req.Temperature &gt; 0 </span><span class="cov8" title="1">{
+                temperature = req.Temperature
+        }</span>
+        <span class="cov8" title="1">return openaiCompatibleParams{maxTokens: maxTokens, temperature: temperature}</span>
+}
+
+// completeOpenAICompatible is the shared completion logic for OpenAI-compatible providers
+// (OpenAI, DeepSeek, GLM). It converts messages, builds params, calls the SDK, and
+// extracts the response.
+func completeOpenAICompatible(
+        ctx context.Context,
+        client openai.Client,
+        providerName, model string,
+        maxTokens int,
+        temperature float64,
+        req *Request,
+) (*Response, error) <span class="cov0" title="0">{
+        start := time.Now()
+
+        messages := convertToOpenAIMessages(req.Messages)
+
+        p := resolveParams(maxTokens, temperature, req)
+
+        params := openai.ChatCompletionNewParams{
+                Model:     openai.ChatModel(model),
+                Messages:  messages,
+                MaxTokens: openai.Int(p.maxTokens),
+        }
+
+        if p.temperature &gt; 0 </span><span class="cov0" title="0">{
+                params.Temperature = openai.Float(p.temperature)
+        }</span>
+
+        <span class="cov0" title="0">completion, err := client.Chat.Completions.New(ctx, params)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("API error: %v", err)
+        }</span>
+
+        <span class="cov0" title="0">content := ""
+        if len(completion.Choices) &gt; 0 </span><span class="cov0" title="0">{
+                content = completion.Choices[0].Message.Content
+        }</span>
+
+        <span class="cov0" title="0">return &amp;Response{
+                Content:      content,
+                Provider:     providerName,
+                Model:        model,
+                InputTokens:  int(completion.Usage.PromptTokens),
+                OutputTokens: int(completion.Usage.CompletionTokens),
+                Latency:      time.Since(start),
+        }, nil</span>
+}
+
+// convertToOpenAIMessages converts internal messages to OpenAI SDK format.
+// Shared by all OpenAI-compatible providers (OpenAI, DeepSeek, GLM).
+func convertToOpenAIMessages(msgs []Message) []openai.ChatCompletionMessageParamUnion <span class="cov0" title="0">{
+        var messages []openai.ChatCompletionMessageParamUnion
+        for _, m := range msgs </span><span class="cov0" title="0">{
+                if m.HasBlocks() </span><span class="cov0" title="0">{
+                        var parts []openai.ChatCompletionContentPartUnionParam
+                        for _, b := range m.Blocks </span><span class="cov0" title="0">{
+                                switch b.Type </span>{
+                                case "text":<span class="cov0" title="0">
+                                        parts = append(parts, openai.TextContentPart(b.Text))</span>
+                                case "image":<span class="cov0" title="0">
+                                        parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+                                                URL: "data:" + b.MimeType + ";base64," + b.ImageData,
+                                        }))</span>
+                                }
+                        }
+                        <span class="cov0" title="0">switch m.Role </span>{
+                        case "system":<span class="cov0" title="0">
+                                messages = append(messages, openai.SystemMessage(m.Content))</span>
+                        case "user":<span class="cov0" title="0">
+                                messages = append(messages, openai.UserMessage(parts))</span>
+                        case "assistant":<span class="cov0" title="0">
+                                messages = append(messages, openai.AssistantMessage(m.Content))</span>
+                        }
+                } else<span class="cov0" title="0"> {
+                        switch m.Role </span>{
+                        case "system":<span class="cov0" title="0">
+                                messages = append(messages, openai.SystemMessage(m.Content))</span>
+                        case "user":<span class="cov0" title="0">
+                                messages = append(messages, openai.UserMessage(m.Content))</span>
+                        case "assistant":<span class="cov0" title="0">
+                                messages = append(messages, openai.AssistantMessage(m.Content))</span>
+                        }
+                }
+        }
+        <span class="cov0" title="0">return messages</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
