@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -528,10 +529,28 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleHealth handles health check
+// handleHealth handles health check with optional metrics
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
+
+	// Return JSON metrics if requested
+	if r.URL.Query().Get("metrics") == "true" {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":      "ok",
+			"goroutines":  runtime.NumGoroutine(),
+			"heap_alloc":  m.HeapAlloc,
+			"heap_sys":    m.HeapSys,
+			"gc_cycles":   m.NumGC,
+			"go_version":  runtime.Version(),
+		})
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }

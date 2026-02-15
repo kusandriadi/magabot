@@ -461,17 +461,53 @@ func TestCheckUser(t *testing.T) {
 
 func TestHandleHealth(t *testing.T) {
 	s := newTestServer(&Config{})
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
 
-	s.handleHealth(rec, req)
+	t.Run("BasicHealth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		rec := httptest.NewRecorder()
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("Expected 200, got %d", rec.Code)
-	}
-	if rec.Body.String() != "OK" {
-		t.Errorf("Expected 'OK', got %s", rec.Body.String())
-	}
+		s.handleHealth(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected 200, got %d", rec.Code)
+		}
+		if rec.Body.String() != "OK" {
+			t.Errorf("Expected 'OK', got %s", rec.Body.String())
+		}
+	})
+
+	t.Run("HealthWithMetrics", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/health?metrics=true", nil)
+		rec := httptest.NewRecorder()
+
+		s.handleHealth(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected 200, got %d", rec.Code)
+		}
+
+		var metrics map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &metrics); err != nil {
+			t.Fatalf("Failed to parse metrics JSON: %v", err)
+		}
+
+		// Verify required fields
+		requiredFields := []string{"status", "goroutines", "heap_alloc", "heap_sys", "gc_cycles", "go_version"}
+		for _, field := range requiredFields {
+			if _, ok := metrics[field]; !ok {
+				t.Errorf("Missing required field: %s", field)
+			}
+		}
+
+		if metrics["status"] != "ok" {
+			t.Errorf("Expected status 'ok', got %v", metrics["status"])
+		}
+
+		// Goroutines should be a positive number
+		if goroutines, ok := metrics["goroutines"].(float64); !ok || goroutines <= 0 {
+			t.Errorf("Expected positive goroutine count, got %v", metrics["goroutines"])
+		}
+	})
 }
 
 func TestGetClientIP(t *testing.T) {
