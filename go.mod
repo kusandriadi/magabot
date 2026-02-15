@@ -2,8 +2,6 @@ module github.com/kusa/magabot
 
 go 1.24.0
 
-toolchain go1.24.13
-
 require (
 	github.com/anthropics/anthropic-sdk-go v1.22.0
 	github.com/go-rod/rod v0.116.0
