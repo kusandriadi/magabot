@@ -700,116 +700,485 @@ func TestFailureTracker(t *testing.T) {
 	}
 }
 
-func TestIPRateLimiting(t *testing.T) {
-	s := newTestServer(&Config{
-		AuthMethod:     "none",
-		AllowedUsers:   []string{"testuser"},
-		RateLimitPerIP: 2,
-		RateLimitWindow: 100 * time.Millisecond,
+// ==== Integration Tests: Rate Limiting ====
+
+func TestIPRateLimitingIntegration(t *testing.T) {
+	t.Run("BasicRateLimit", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "none",
+			AllowedUsers:    []string{"testuser"},
+			RateLimitPerIP:  3,
+			RateLimitWindow: 100 * time.Millisecond,
+		})
+
+		makeRequest := func(ip string) *httptest.ResponseRecorder {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = ip + ":12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec
+		}
+
+		// First 3 requests should succeed
+		for i := 1; i <= 3; i++ {
+			rec := makeRequest("192.168.1.100")
+			if rec.Code != http.StatusOK {
+				t.Errorf("Request %d should succeed, got %d", i, rec.Code)
+			}
+		}
+
+		// 4th request should be rate limited
+		rec := makeRequest("192.168.1.100")
+		if rec.Code != http.StatusTooManyRequests {
+			t.Errorf("Request 4 should be rate limited, got %d", rec.Code)
+		}
+
+		// Should have Retry-After header
+		if rec.Header().Get("Retry-After") == "" {
+			t.Error("Rate limited response should have Retry-After header")
+		}
 	})
 
-	makeRequest := func() int {
-		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
-		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
-		req.RemoteAddr = "192.168.1.100:12345"
-		rec := httptest.NewRecorder()
-		s.handleWebhook(rec, req)
-		return rec.Code
-	}
+	t.Run("DifferentIPsIndependent", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "none",
+			AllowedUsers:    []string{"testuser"},
+			RateLimitPerIP:  2,
+			RateLimitWindow: 100 * time.Millisecond,
+		})
 
-	// First 2 should succeed
-	if code := makeRequest(); code != http.StatusOK {
-		t.Errorf("Request 1 should succeed, got %d", code)
-	}
-	if code := makeRequest(); code != http.StatusOK {
-		t.Errorf("Request 2 should succeed, got %d", code)
-	}
+		makeRequest := func(ip string) int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = ip + ":12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
 
-	// 3rd should be rate limited
-	if code := makeRequest(); code != http.StatusTooManyRequests {
-		t.Errorf("Request 3 should be rate limited, got %d", code)
-	}
+		// IP1: 2 requests OK, 3rd blocked
+		makeRequest("10.0.0.1")
+		makeRequest("10.0.0.1")
+		if code := makeRequest("10.0.0.1"); code != http.StatusTooManyRequests {
+			t.Errorf("IP1 request 3 should be blocked, got %d", code)
+		}
+
+		// IP2: still has fresh quota
+		if code := makeRequest("10.0.0.2"); code != http.StatusOK {
+			t.Errorf("IP2 should still work, got %d", code)
+		}
+		if code := makeRequest("10.0.0.2"); code != http.StatusOK {
+			t.Errorf("IP2 request 2 should work, got %d", code)
+		}
+	})
+
+	t.Run("WindowExpiration", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "none",
+			AllowedUsers:    []string{"testuser"},
+			RateLimitPerIP:  2,
+			RateLimitWindow: 50 * time.Millisecond,
+		})
+
+		makeRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = "172.16.0.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// Exhaust rate limit
+		makeRequest()
+		makeRequest()
+		if code := makeRequest(); code != http.StatusTooManyRequests {
+			t.Errorf("Should be rate limited, got %d", code)
+		}
+
+		// Wait for window to expire
+		time.Sleep(60 * time.Millisecond)
+
+		// Should work again
+		if code := makeRequest(); code != http.StatusOK {
+			t.Errorf("Should work after window expires, got %d", code)
+		}
+	})
+
+	t.Run("DisabledWhenZero", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "none",
+			AllowedUsers:    []string{"testuser"},
+			RateLimitPerIP:  0, // Disabled
+			RateLimitWindow: 100 * time.Millisecond,
+		})
+
+		makeRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = "1.2.3.4:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// Should allow unlimited requests
+		for i := 0; i < 100; i++ {
+			if code := makeRequest(); code != http.StatusOK {
+				t.Errorf("Request %d should succeed when rate limit disabled, got %d", i, code)
+				break
+			}
+		}
+	})
 }
 
-func TestUserRateLimiting(t *testing.T) {
-	s := newTestServer(&Config{
-		AuthMethod:       "none",
-		AllowedUsers:     []string{"user1", "user2"},
-		RateLimitPerUser: 2,
-		RateLimitWindow:  100 * time.Millisecond,
+func TestUserRateLimitingIntegration(t *testing.T) {
+	t.Run("BasicUserRateLimit", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:       "none",
+			AllowedUsers:     []string{"user1", "user2"},
+			RateLimitPerUser: 3,
+			RateLimitWindow:  100 * time.Millisecond,
+		})
+
+		makeRequest := func(userID string, ip string) *httptest.ResponseRecorder {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "` + userID + `"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = ip + ":12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec
+		}
+
+		// User1: first 3 succeed from different IPs
+		for i := 1; i <= 3; i++ {
+			ip := fmt.Sprintf("10.0.0.%d", i)
+			rec := makeRequest("user1", ip)
+			if rec.Code != http.StatusOK {
+				t.Errorf("User1 request %d should succeed, got %d", i, rec.Code)
+			}
+		}
+
+		// User1: 4th blocked even from new IP
+		rec := makeRequest("user1", "10.0.0.99")
+		if rec.Code != http.StatusTooManyRequests {
+			t.Errorf("User1 request 4 should be rate limited, got %d", rec.Code)
+		}
+		if rec.Header().Get("Retry-After") == "" {
+			t.Error("Rate limited response should have Retry-After header")
+		}
 	})
 
-	makeRequest := func(userID string, ip string) int {
-		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "` + userID + `"}`))
-		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
-		req.RemoteAddr = ip + ":12345"
-		rec := httptest.NewRecorder()
-		s.handleWebhook(rec, req)
-		return rec.Code
-	}
+	t.Run("DifferentUsersIndependent", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:       "none",
+			AllowedUsers:     []string{"alice", "bob", "charlie"},
+			RateLimitPerUser: 2,
+			RateLimitWindow:  100 * time.Millisecond,
+		})
 
-	// User1: first 2 succeed
-	makeRequest("user1", "1.1.1.1")
-	makeRequest("user1", "2.2.2.2") // Different IP, same user
+		makeRequest := func(userID string) int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "` + userID + `"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = "192.168.1.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
 
-	// User1: 3rd blocked
-	if code := makeRequest("user1", "3.3.3.3"); code != http.StatusTooManyRequests {
-		t.Errorf("User1 request 3 should be rate limited, got %d", code)
-	}
+		// Alice: exhaust quota
+		makeRequest("alice")
+		makeRequest("alice")
+		if code := makeRequest("alice"); code != http.StatusTooManyRequests {
+			t.Errorf("Alice request 3 should be blocked, got %d", code)
+		}
 
-	// User2: still works
-	if code := makeRequest("user2", "1.1.1.1"); code != http.StatusOK {
-		t.Errorf("User2 should still work, got %d", code)
-	}
+		// Bob: fresh quota
+		if code := makeRequest("bob"); code != http.StatusOK {
+			t.Errorf("Bob should work, got %d", code)
+		}
+
+		// Charlie: also fresh
+		if code := makeRequest("charlie"); code != http.StatusOK {
+			t.Errorf("Charlie should work, got %d", code)
+		}
+	})
+
+	t.Run("UserRateLimitWithTokenAuth", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod: "bearer",
+			BearerTokens: map[string]string{
+				"token-github": "github:webhook",
+				"token-ci":     "ci:jenkins",
+			},
+			AllowedUsers:     []string{"github:webhook", "ci:jenkins"},
+			RateLimitPerUser: 2,
+			RateLimitWindow:  100 * time.Millisecond,
+		})
+
+		makeRequest := func(token string) int {
+			body := bytes.NewReader([]byte(`{"message": "test"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.RemoteAddr = "1.1.1.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// GitHub token: 2 OK, 3rd blocked
+		makeRequest("token-github")
+		makeRequest("token-github")
+		if code := makeRequest("token-github"); code != http.StatusTooManyRequests {
+			t.Errorf("GitHub request 3 should be blocked, got %d", code)
+		}
+
+		// CI token: still works (different user)
+		if code := makeRequest("token-ci"); code != http.StatusOK {
+			t.Errorf("CI should work, got %d", code)
+		}
+	})
+
+	t.Run("WindowExpiration", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:       "none",
+			AllowedUsers:     []string{"testuser"},
+			RateLimitPerUser: 2,
+			RateLimitWindow:  50 * time.Millisecond,
+		})
+
+		makeRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = "1.1.1.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// Exhaust quota
+		makeRequest()
+		makeRequest()
+		if code := makeRequest(); code != http.StatusTooManyRequests {
+			t.Errorf("Should be rate limited, got %d", code)
+		}
+
+		// Wait for window
+		time.Sleep(60 * time.Millisecond)
+
+		// Should work again
+		if code := makeRequest(); code != http.StatusOK {
+			t.Errorf("Should work after window expires, got %d", code)
+		}
+	})
+
+	t.Run("CombinedIPAndUserRateLimit", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:       "none",
+			AllowedUsers:     []string{"user1", "user2"},
+			RateLimitPerIP:   5,
+			RateLimitPerUser: 2,
+			RateLimitWindow:  100 * time.Millisecond,
+		})
+
+		makeRequest := func(userID, ip string) int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "` + userID + `"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.RemoteAddr = ip + ":12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// User1 from IP1: 2 OK
+		makeRequest("user1", "10.0.0.1")
+		makeRequest("user1", "10.0.0.1")
+
+		// User1 blocked by user limit (even though IP still has quota)
+		if code := makeRequest("user1", "10.0.0.1"); code != http.StatusTooManyRequests {
+			t.Errorf("User1 should be blocked by user limit, got %d", code)
+		}
+
+		// User2 from same IP still works (different user)
+		if code := makeRequest("user2", "10.0.0.1"); code != http.StatusOK {
+			t.Errorf("User2 from same IP should work, got %d", code)
+		}
+	})
 }
 
-func TestAuthFailureLockout(t *testing.T) {
-	s := newTestServer(&Config{
-		AuthMethod:      "bearer",
-		BearerToken:     "correct-token",
-		AllowedUsers:    []string{"testuser"},
-		MaxAuthFailures: 2,
-		AuthLockoutTime: 100 * time.Millisecond,
+func TestAuthFailureLockoutIntegration(t *testing.T) {
+	t.Run("BasicLockout", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "bearer",
+			BearerToken:     "correct-token",
+			AllowedUsers:    []string{"testuser"},
+			MaxAuthFailures: 3,
+			AuthLockoutTime: 100 * time.Millisecond,
+		})
+
+		badRequest := func(ip string) int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer wrong-token")
+			req.RemoteAddr = ip + ":12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		goodRequest := func(ip string) int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer correct-token")
+			req.RemoteAddr = ip + ":12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// 3 bad requests -> lockout
+		for i := 1; i <= 3; i++ {
+			if code := badRequest("10.0.0.1"); code != http.StatusUnauthorized {
+				t.Errorf("Bad request %d should return 401, got %d", i, code)
+			}
+		}
+
+		// IP is now locked - even good requests blocked
+		if code := goodRequest("10.0.0.1"); code != http.StatusTooManyRequests {
+			t.Errorf("Locked IP should return 429, got %d", code)
+		}
+
+		// Different IP still works
+		if code := goodRequest("10.0.0.2"); code != http.StatusOK {
+			t.Errorf("Different IP should work, got %d", code)
+		}
 	})
 
-	badRequest := func() int {
-		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
-		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
-		req.Header.Set("Authorization", "Bearer wrong-token")
-		req.RemoteAddr = "10.0.0.1:12345"
-		rec := httptest.NewRecorder()
-		s.handleWebhook(rec, req)
-		return rec.Code
-	}
+	t.Run("LockoutExpiration", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "bearer",
+			BearerToken:     "secret",
+			AllowedUsers:    []string{"testuser"},
+			MaxAuthFailures: 2,
+			AuthLockoutTime: 50 * time.Millisecond,
+		})
 
-	goodRequest := func() int {
-		body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
-		req := httptest.NewRequest(http.MethodPost, "/webhook", body)
-		req.Header.Set("Authorization", "Bearer correct-token")
-		req.RemoteAddr = "10.0.0.1:12345"
-		rec := httptest.NewRecorder()
-		s.handleWebhook(rec, req)
-		return rec.Code
-	}
+		badRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer wrong")
+			req.RemoteAddr = "192.168.1.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
 
-	// First 2 bad requests return 401
-	if code := badRequest(); code != http.StatusUnauthorized {
-		t.Errorf("Bad request 1 should return 401, got %d", code)
-	}
-	if code := badRequest(); code != http.StatusUnauthorized {
-		t.Errorf("Bad request 2 should return 401, got %d", code)
-	}
+		goodRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer secret")
+			req.RemoteAddr = "192.168.1.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
 
-	// IP is now locked - even good requests blocked
-	if code := goodRequest(); code != http.StatusTooManyRequests {
-		t.Errorf("Locked IP should return 429, got %d", code)
-	}
+		// Trigger lockout
+		badRequest()
+		badRequest()
 
-	// Wait for lockout to expire
-	time.Sleep(150 * time.Millisecond)
-	if code := goodRequest(); code != http.StatusOK {
-		t.Errorf("Good request after lockout should succeed, got %d", code)
-	}
+		// Locked
+		if code := goodRequest(); code != http.StatusTooManyRequests {
+			t.Errorf("Should be locked, got %d", code)
+		}
+
+		// Wait for expiration
+		time.Sleep(60 * time.Millisecond)
+
+		// Should work again
+		if code := goodRequest(); code != http.StatusOK {
+			t.Errorf("Should work after lockout expires, got %d", code)
+		}
+	})
+
+	t.Run("SuccessResetsFailureCount", func(t *testing.T) {
+		s := newTestServer(&Config{
+			AuthMethod:      "bearer",
+			BearerToken:     "secret",
+			AllowedUsers:    []string{"testuser"},
+			MaxAuthFailures: 3,
+			AuthLockoutTime: 100 * time.Millisecond,
+		})
+
+		badRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer wrong")
+			req.RemoteAddr = "172.16.0.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		goodRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("Authorization", "Bearer secret")
+			req.RemoteAddr = "172.16.0.1:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// 2 failures
+		badRequest()
+		badRequest()
+
+		// Success resets counter
+		if code := goodRequest(); code != http.StatusOK {
+			t.Errorf("Good request should succeed, got %d", code)
+		}
+
+		// Can now have 2 more failures before lockout
+		badRequest()
+		badRequest()
+
+		// Still not locked (counter was reset)
+		if code := goodRequest(); code != http.StatusOK {
+			t.Errorf("Should not be locked yet, got %d", code)
+		}
+	})
+
+	t.Run("DifferentAuthMethods", func(t *testing.T) {
+		// Test with HMAC auth
+		s := newTestServer(&Config{
+			AuthMethod:      "hmac",
+			HMACSecret:      "supersecret",
+			AllowedUsers:    []string{"testuser"},
+			MaxAuthFailures: 2,
+			AuthLockoutTime: 100 * time.Millisecond,
+		})
+
+		badRequest := func() int {
+			body := bytes.NewReader([]byte(`{"message": "test", "user_id": "testuser"}`))
+			req := httptest.NewRequest(http.MethodPost, "/webhook", body)
+			req.Header.Set("X-Hub-Signature-256", "sha256=wrongsignature")
+			req.RemoteAddr = "8.8.8.8:12345"
+			rec := httptest.NewRecorder()
+			s.handleWebhook(rec, req)
+			return rec.Code
+		}
+
+		// 2 failures trigger lockout
+		badRequest()
+		badRequest()
+
+		// 3rd is blocked by lockout (not auth)
+		if code := badRequest(); code != http.StatusTooManyRequests {
+			t.Errorf("Should be locked out, got %d", code)
+		}
+	})
 }
 
 func TestTimestampValidation(t *testing.T) {
