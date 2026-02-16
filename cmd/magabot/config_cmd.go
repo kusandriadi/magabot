@@ -113,7 +113,7 @@ func cmdConfigEdit() {
 	}
 	if editor == "" {
 		// Try common editors
-		for _, e := range []string{"nano", "vim", "vi"} {
+		for _, e := range []string{"nano", "vim", "vi", "notepad"} {
 			if _, err := exec.LookPath(e); err == nil {
 				editor = e
 				break

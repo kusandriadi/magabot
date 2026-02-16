@@ -205,7 +205,7 @@ func TestStripANSI(t *testing.T) {
 func TestSessionMsgCount(t *testing.T) {
 	sess := &agent.Session{
 		Agent:    "claude",
-		Dir:      "/tmp",
+		Dir:      os.TempDir(),
 		Platform: "telegram",
 		ChatID:   "chat1",
 		UserID:   "user1",

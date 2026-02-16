@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+// maxTotalExtractSize limits the total bytes extracted from an archive (2 GB).
+const maxTotalExtractSize = 2 * 1024 * 1024 * 1024
+
+// maxFileExtractSize limits bytes extracted per file (500 MB).
+const maxFileExtractSize = 500 * 1024 * 1024
+
 // Manager handles backup operations
 type Manager struct {
 	backupPath string
@@ -51,13 +57,19 @@ func (m *Manager) Create(dataDir string, platforms []string) (*BackupInfo, error
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
 	gw := gzip.NewWriter(f)
-	defer gw.Close()
-
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+
+	var closed bool
+	defer func() {
+		if !closed {
+			tw.Close()
+			gw.Close()
+			f.Close()
+			os.Remove(backupFile) // cleanup incomplete backup
+		}
+	}()
 
 	// Files to backup
 	filesToBackup := []string{
@@ -99,10 +111,17 @@ func (m *Manager) Create(dataDir string, platforms []string) (*BackupInfo, error
 		return nil, fmt.Errorf("write manifest: %w", err)
 	}
 
-	// Get final size
-	tw.Close()
-	gw.Close()
-	f.Close()
+	// Close writers explicitly for error checking
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("close tar writer: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return nil, fmt.Errorf("close gzip writer: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("close file: %w", err)
+	}
+	closed = true
 
 	stat, err := os.Stat(backupFile)
 	if err != nil {
@@ -149,15 +168,20 @@ func (m *Manager) addToArchive(tw *tar.Writer, path, baseDir string) error {
 			return nil
 		}
 
-		f, err := os.Open(file)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		_, err = io.Copy(tw, f)
-		return err
+		return copyFileToArchive(tw, file)
 	})
+}
+
+// copyFileToArchive copies a single file into the tar writer.
+// Extracted so that defer f.Close() fires per-file instead of accumulating.
+func copyFileToArchive(tw *tar.Writer, file string) error {
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(tw, f)
+	return err
 }
 
 // Restore restores from a backup
@@ -177,6 +201,8 @@ func (m *Manager) Restore(filename, dataDir string) error {
 	defer gr.Close()
 
 	tr := tar.NewReader(gr)
+
+	var totalExtracted int64
 
 	for {
 		header, err := tr.Next()
@@ -209,12 +235,17 @@ func (m *Manager) Restore(filename, dataDir string) error {
 				return err
 			}
 
-			// Limit extraction to 500MB per file to prevent decompression bombs
-			if _, err := io.Copy(outFile, io.LimitReader(tr, 500*1024*1024)); err != nil {
-				outFile.Close()
+			// Limit extraction per file
+			n, err := io.Copy(outFile, io.LimitReader(tr, maxFileExtractSize))
+			outFile.Close()
+			if err != nil {
 				return err
 			}
-			outFile.Close()
+
+			totalExtracted += n
+			if totalExtracted > maxTotalExtractSize {
+				return fmt.Errorf("total extraction size exceeds limit (%d bytes)", maxTotalExtractSize)
+			}
 		}
 	}
 

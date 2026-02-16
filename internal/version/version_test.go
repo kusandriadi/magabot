@@ -114,3 +114,40 @@ func TestFull_DefaultValues(t *testing.T) {
 		t.Errorf("expected default build_time 'unknown', got %q", full["build_time"])
 	}
 }
+
+func TestInfo_OutputFormat(t *testing.T) {
+	info := version.Info()
+
+	// Verify the overall format: "magabot <ver> (commit: <x>, built: <x>, <go>)"
+	if !strings.HasPrefix(info, "magabot ") {
+		t.Errorf("Info() should start with 'magabot ', got %q", info)
+	}
+	if !strings.Contains(info, "(") || !strings.HasSuffix(info, ")") {
+		t.Errorf("Info() should have parenthesized section, got %q", info)
+	}
+	if !strings.Contains(info, "commit:") {
+		t.Errorf("Info() missing 'commit:', got %q", info)
+	}
+	if !strings.Contains(info, "built:") {
+		t.Errorf("Info() missing 'built:', got %q", info)
+	}
+}
+
+func TestBuildInfo_FieldsPopulated(t *testing.T) {
+	// The exported vars should have their default values when not set via ldflags
+	if version.Version == "" {
+		t.Error("Version should not be empty")
+	}
+	if version.GitCommit == "" {
+		t.Error("GitCommit should not be empty")
+	}
+	if version.BuildTime == "" {
+		t.Error("BuildTime should not be empty")
+	}
+	if version.GoVersion == "" {
+		t.Error("GoVersion should not be empty")
+	}
+	if !strings.HasPrefix(version.GoVersion, "go") {
+		t.Errorf("GoVersion should start with 'go', got %q", version.GoVersion)
+	}
+}

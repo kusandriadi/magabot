@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/kusa/magabot/internal/cron"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // CronCommands returns cron management commands
@@ -78,7 +79,7 @@ func cronListCmd(dataDir string) *cobra.Command {
 				
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 					job.ID,
-					truncate(job.Name, 20),
+					util.Truncate(job.Name, 20),
 					job.Schedule,
 					status,
 					strings.Join(channels, ","),
@@ -440,9 +441,3 @@ func cronShowCmd(dataDir string) *cobra.Command {
 	return cmd
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
-}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -75,7 +76,7 @@ func TestNewSessionInvalidAgent(t *testing.T) {
 }
 
 func TestNewSessionInvalidDir(t *testing.T) {
-	m := NewManager(Config{AllowedDirs: []string{"/tmp"}}, nil)
+	m := NewManager(Config{AllowedDirs: []string{os.TempDir()}}, nil)
 
 	_, err := m.NewSession("telegram", "123", "user1", "claude", "/nonexistent/path/xyz")
 	if err == nil {
@@ -100,10 +101,11 @@ func TestNewSessionNotADir(t *testing.T) {
 }
 
 func TestNewSessionDisallowedDir(t *testing.T) {
-	m := NewManager(Config{AllowedDirs: []string{"/tmp/safe-only"}}, nil)
+	safeOnly := filepath.Join(t.TempDir(), "safe-only")
+	m := NewManager(Config{AllowedDirs: []string{safeOnly}}, nil)
 
-	// /tmp itself is not under /tmp/safe-only
-	_, err := m.NewSession("telegram", "123", "user1", "claude", "/tmp")
+	// os.TempDir() itself is not under safeOnly
+	_, err := m.NewSession("telegram", "123", "user1", "claude", os.TempDir())
 	if err == nil {
 		t.Error("expected error for disallowed directory")
 	}
@@ -125,7 +127,11 @@ func TestValidateDir(t *testing.T) {
 	}
 
 	// Root should NOT be allowed
-	if err := m.validateDir("/"); err == nil {
+	root := "/"
+	if runtime.GOOS == "windows" {
+		root = filepath.VolumeName(home) + string(filepath.Separator)
+	}
+	if err := m.validateDir(root); err == nil {
 		t.Error("root should not be allowed")
 	}
 }

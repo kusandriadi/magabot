@@ -213,6 +213,42 @@ func (s *Store) AuditLog(platform, userID, action, details string) error {
 	return err
 }
 
+// AuditEntry represents a single audit log record.
+type AuditEntry struct {
+	ID        int64
+	Timestamp time.Time
+	Platform  string
+	UserID    string
+	Action    string
+	Details   string
+}
+
+// GetAuditLogs retrieves the most recent audit log entries, ordered newest first.
+func (s *Store) GetAuditLogs(limit int) ([]AuditEntry, error) {
+	rows, err := s.db.Query(
+		`SELECT id, timestamp, platform, user_id, action, details
+		 FROM audit_log ORDER BY id DESC LIMIT ?`, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		var platform, userID, details sql.NullString
+		if err := rows.Scan(&e.ID, &e.Timestamp, &platform, &userID, &e.Action, &details); err != nil {
+			return nil, err
+		}
+		e.Platform = platform.String
+		e.UserID = userID.String
+		e.Details = details.String
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
 // PurgeOldMessages deletes messages older than retention days
 func (s *Store) PurgeOldMessages(retentionDays int) (int64, error) {
 	if retentionDays <= 0 {

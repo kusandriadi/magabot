@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -365,5 +366,167 @@ _ = store.AddWithEmbedding("1", "updated", []float32{0, 1, 0}, nil)
 	count, _ := store.Count()
 	if count != 1 {
 		t.Errorf("expected count 1, got %d", count)
+	}
+}
+
+// --- Table name validation tests ---
+
+func TestNewVectorStore_InvalidTableName(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	tests := []struct {
+		name      string
+		tableName string
+	}{
+		{"SQL injection", "x; DROP TABLE y"},
+		{"special chars", "table-name!"},
+		{"starts with number", "1table"},
+		{"empty after default", ""}, // empty uses default "embeddings" which is valid
+		{"too long", strings.Repeat("a", 65)},
+		{"spaces", "my table"},
+		{"quotes", "table'name"},
+		{"semicolon", "table;name"},
+		{"parentheses", "table(name)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.tableName == "" {
+				t.Skip("empty table name defaults to 'embeddings'")
+			}
+			_, err := NewVectorStore(VectorStoreConfig{
+				DBPath:    tmpDir + "/test.db",
+				TableName: tt.tableName,
+			})
+			if err == nil {
+				t.Errorf("expected error for table name %q, got nil", tt.tableName)
+			}
+		})
+	}
+}
+
+func TestNewVectorStore_ValidTableNames(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	validNames := []string{
+		"embeddings",
+		"test_table",
+		"_private",
+		"MyTable123",
+		"a",
+		strings.Repeat("a", 64), // exactly at limit
+	}
+
+	for _, name := range validNames {
+		t.Run(name, func(t *testing.T) {
+			store, err := NewVectorStore(VectorStoreConfig{
+				DBPath:    tmpDir + "/" + name + ".db",
+				TableName: name,
+			})
+			if err != nil {
+				t.Errorf("expected valid table name %q to succeed, got: %v", name, err)
+				return
+			}
+			store.Close()
+		})
+	}
+}
+
+func TestSearchByVector_EmptyStore(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	store, err := NewVectorStore(VectorStoreConfig{
+		DBPath:     tmpDir + "/test.db",
+		Dimensions: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	results, err := store.SearchByVector([]float32{1, 0, 0}, 10)
+	if err != nil {
+		t.Fatalf("expected no error on empty store, got: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results from empty store, got %d", len(results))
+	}
+}
+
+func TestAddAndSearch_SortOrder(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	store, err := NewVectorStore(VectorStoreConfig{
+		DBPath:     tmpDir + "/test.db",
+		Dimensions: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	// Add entries with known similarities to query vector [1, 0, 0]
+	entries := []struct {
+		id        string
+		embedding []float32
+	}{
+		{"low", []float32{0, 1, 0}},       // similarity ~ 0
+		{"high", []float32{1, 0, 0}},      // similarity = 1
+		{"medium", []float32{0.7, 0.7, 0}}, // similarity ~ 0.7
+	}
+	for _, e := range entries {
+		if err := store.AddWithEmbedding(e.id, "content", e.embedding, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	results, err := store.SearchByVector([]float32{1, 0, 0}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+
+	// Verify descending similarity order
+	for i := 1; i < len(results); i++ {
+		if results[i].Similarity > results[i-1].Similarity {
+			t.Errorf("results not sorted: [%d].Similarity=%f > [%d].Similarity=%f",
+				i, results[i].Similarity, i-1, results[i-1].Similarity)
+		}
+	}
+
+	if results[0].Entry.ID != "high" {
+		t.Errorf("expected highest similarity first, got %s", results[0].Entry.ID)
+	}
+}
+
+func TestCosineSimilarity_ZeroVector(t *testing.T) {
+	zero := []float32{0, 0, 0}
+	nonzero := []float32{1, 2, 3}
+
+	result := CosineSimilarity(zero, nonzero)
+	if result != 0 {
+		t.Errorf("expected 0 for zero vector, got %f", result)
+	}
+
+	result = CosineSimilarity(zero, zero)
+	if result != 0 {
+		t.Errorf("expected 0 for both zero vectors, got %f", result)
+	}
+}
+
+func TestCosineSimilarity_MismatchedDimensions(t *testing.T) {
+	a := []float32{1, 2}
+	b := []float32{1, 2, 3, 4}
+
+	result := CosineSimilarity(a, b)
+	if result != 0 {
+		t.Errorf("expected 0 for mismatched dimensions, got %f", result)
 	}
 }

@@ -99,10 +99,6 @@ func TestFire_NoHooks(t *testing.T) {
 }
 
 func TestFire_Echo(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{Name: "echo-hook", Event: "on_start", Command: "echo hello"},
 	}
@@ -121,10 +117,6 @@ func TestFire_Echo(t *testing.T) {
 }
 
 func TestFire_PlatformFilter(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "telegram-only",
@@ -146,10 +138,6 @@ func TestFire_PlatformFilter(t *testing.T) {
 }
 
 func TestFire_PlatformFilter_Matching(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "telegram-only",
@@ -168,10 +156,6 @@ func TestFire_PlatformFilter_Matching(t *testing.T) {
 }
 
 func TestFire_PlatformFilter_EmptyMatchesAll(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "all-platforms",
@@ -189,10 +173,6 @@ func TestFire_PlatformFilter_EmptyMatchesAll(t *testing.T) {
 }
 
 func TestFire_PlatformFilter_CaseInsensitive(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "tg-hook",
@@ -210,10 +190,6 @@ func TestFire_PlatformFilter_CaseInsensitive(t *testing.T) {
 }
 
 func TestFire_BlockedHook(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{Name: "fail-hook", Event: "pre_message", Command: "exit 1"},
 	}
@@ -226,10 +202,6 @@ func TestFire_BlockedHook(t *testing.T) {
 }
 
 func TestFire_BlockedHook_SuccessfulNotBlocked(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{Name: "ok-hook", Event: "pre_message", Command: "exit 0"},
 	}
@@ -242,10 +214,6 @@ func TestFire_BlockedHook_SuccessfulNotBlocked(t *testing.T) {
 }
 
 func TestFire_EventMismatch(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{Name: "start-hook", Event: "on_start", Command: "echo should-not-run"},
 	}
@@ -259,12 +227,14 @@ func TestFire_EventMismatch(t *testing.T) {
 }
 
 func TestFireAsync_DoesNotBlock(t *testing.T) {
+	// Use a cross-platform long-running command
+	command := "sleep 5"
 	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
+		command = "waitfor /t 5 pause 2>nul || exit 0"
 	}
 
 	hooksConfig := []config.HookConfig{
-		{Name: "slow-hook", Event: "on_start", Command: "sleep 5"},
+		{Name: "slow-hook", Event: "on_start", Command: command},
 	}
 	m := hooks.NewManager(hooksConfig, newLogger())
 
@@ -290,10 +260,6 @@ func TestFireAsync_NoHooks(t *testing.T) {
 }
 
 func TestFire_MultipleHooksSameEvent(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{Name: "hook-1", Event: "on_start", Command: "echo first"},
 		{Name: "hook-2", Event: "on_start", Command: "echo second"},
@@ -308,10 +274,6 @@ func TestFire_MultipleHooksSameEvent(t *testing.T) {
 }
 
 func TestFire_AsyncHookInSyncFire(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell test not supported on Windows")
-	}
-
 	hooksConfig := []config.HookConfig{
 		{Name: "async-in-sync", Event: "on_start", Command: "echo async-output", Async: true},
 	}
@@ -325,5 +287,60 @@ func TestFire_AsyncHookInSyncFire(t *testing.T) {
 		// This is acceptable; the hook runs asynchronously, so output may or may not be captured.
 		// The important thing is that Fire returns without hanging.
 		t.Logf("note: async hook output appeared in sync Fire result: %q", result.Output)
+	}
+}
+
+// --- Negative tests ---
+
+func TestFire_CommandNotFound(t *testing.T) {
+	hooksConfig := []config.HookConfig{
+		{Name: "bad-cmd", Event: "on_start", Command: "nonexistent_command_xyz_12345"},
+	}
+	m := hooks.NewManager(hooksConfig, newLogger())
+
+	result := m.Fire(hooks.OnStart, &hooks.EventData{})
+	if !result.Blocked {
+		t.Error("expected Blocked=true for nonexistent command")
+	}
+}
+
+func TestFire_Timeout(t *testing.T) {
+	// Use a command that runs longer than the timeout.
+	// Use exec-style sleep to avoid orphan child processes with sh -c.
+	command := "sleep 5"
+	if runtime.GOOS == "windows" {
+		command = "waitfor /t 5 pause 2>nul || exit 0"
+	}
+
+	hooksConfig := []config.HookConfig{
+		{Name: "timeout-hook", Event: "on_start", Command: command, Timeout: 1},
+	}
+	m := hooks.NewManager(hooksConfig, newLogger())
+
+	result := m.Fire(hooks.OnStart, &hooks.EventData{})
+	// The hook should be blocked due to timeout-induced kill.
+	if !result.Blocked {
+		t.Error("expected Blocked=true for timed-out command")
+	}
+}
+
+func TestFire_LargeOutput(t *testing.T) {
+	// Generate output larger than maxOutputBytes (1 MB) — should not OOM or hang
+	// On both platforms, echo in a loop produces enough output.
+	command := "dd if=/dev/zero bs=1024 count=2048 2>/dev/null | tr '\\0' 'A'"
+	if runtime.GOOS == "windows" {
+		t.Skip("dd not available on Windows")
+	}
+
+	hooksConfig := []config.HookConfig{
+		{Name: "large-output", Event: "on_start", Command: command, Timeout: 10},
+	}
+	m := hooks.NewManager(hooksConfig, newLogger())
+
+	result := m.Fire(hooks.OnStart, &hooks.EventData{})
+	// Should complete without hanging or OOM.
+	// Output should be truncated to maxOutputBytes (1 MB).
+	if len(result.Output) > 1*1024*1024+100 {
+		t.Errorf("expected output truncated to ~1MB, got %d bytes", len(result.Output))
 	}
 }

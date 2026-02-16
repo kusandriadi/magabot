@@ -16,6 +16,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +26,18 @@ import (
 
 	"github.com/kusa/magabot/internal/util"
 )
+
+// validTableName matches safe SQL identifiers: starts with letter or underscore,
+// contains only alphanumeric and underscores, max 64 characters.
+var validTableName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`)
+
+// validateTableName checks that the table name is a safe SQL identifier.
+func validateTableName(name string) error {
+	if !validTableName.MatchString(name) {
+		return fmt.Errorf("invalid table name %q: must match [a-zA-Z_][a-zA-Z0-9_]{0,63}", name)
+	}
+	return nil
+}
 
 // Provider identifies the embedding API provider.
 type Provider string
@@ -637,6 +651,9 @@ func NewVectorStore(cfg VectorStoreConfig) (*VectorStore, error) {
 	if cfg.TableName == "" {
 		cfg.TableName = "embeddings"
 	}
+	if err := validateTableName(cfg.TableName); err != nil {
+		return nil, err
+	}
 	if cfg.Dimensions <= 0 {
 		cfg.Dimensions = 1536
 	}
@@ -867,13 +884,9 @@ _ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 	}
 
 	// Sort by similarity (descending)
-	for i := 0; i < len(results)-1; i++ {
-		for j := i + 1; j < len(results); j++ {
-			if results[j].Similarity > results[i].Similarity {
-				results[i], results[j] = results[j], results[i]
-			}
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Similarity > results[j].Similarity
+	})
 
 	// Limit results
 	if len(results) > limit {
