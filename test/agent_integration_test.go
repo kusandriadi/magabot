@@ -18,7 +18,9 @@ func TestAgentIntegration(t *testing.T) {
 
 	// Create a test directory
 	testDir := filepath.Join(tmpDir, "workspace")
-	_ = os.MkdirAll(testDir, 0755)
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := agent.Config{
 		Main:        agent.AgentClaude,
@@ -92,7 +94,9 @@ func TestAgentIntegration(t *testing.T) {
 	t.Run("FileNotDirectory", func(t *testing.T) {
 		// Create a file
 		filePath := filepath.Join(tmpDir, "testfile.txt")
-		_ = os.WriteFile(filePath, []byte("test"), 0644)
+		if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		mgr := agent.NewManager(cfg, logger)
 
@@ -247,7 +251,9 @@ func TestExecuteTimeout(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	testDir := filepath.Join(tmpDir, "workspace")
-	_ = os.MkdirAll(testDir, 0755)
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 

@@ -141,11 +141,17 @@ func TestSessionWorkflow(t *testing.T) {
 
 // TestConfigAdminOperations tests admin operations
 func TestConfigAdminOperations(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "magabot-admin-*")
+	tmpDir, err := os.MkdirTemp("", "magabot-admin-*")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	cfg, _ := config.Load(configPath)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 
 	// Setup initial admin
 	cfg.Access.GlobalAdmins = []string{"admin1"}
@@ -156,7 +162,9 @@ func TestConfigAdminOperations(t *testing.T) {
 		AllowGroups:  true,
 		AllowDMs:     true,
 	}
-	_ = cfg.Save()
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
 
 	// Test AllowUser (as admin)
 	result := cfg.AllowUser("telegram", "admin1", "user2")
@@ -196,10 +204,16 @@ func TestConfigAdminOperations(t *testing.T) {
 
 // TestConcurrentAccess tests thread safety
 func TestConcurrentAccess(t *testing.T) {
-	tmpDir, _ := os.MkdirTemp("", "magabot-concurrent-*")
+	tmpDir, err := os.MkdirTemp("", "magabot-concurrent-*")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.RemoveAll(tmpDir)
 
-	memStore, _ := memory.NewStore(tmpDir, "concurrent-user")
+	memStore, err := memory.NewStore(tmpDir, "concurrent-user")
+	if err != nil {
+		t.Fatalf("Failed to create memory store: %v", err)
+	}
 
 	// Concurrent writes
 	done := make(chan bool, 10)

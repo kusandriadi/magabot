@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -134,9 +135,12 @@ func (l *Local) save() error {
 		os.Remove(tmpName)
 		return err
 	}
-	if err := os.Chmod(tmpName, 0600); err != nil {
-		os.Remove(tmpName)
-		return err
+	// Set restrictive permissions on Unix; Windows uses ACLs instead.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(tmpName, 0600); err != nil {
+			os.Remove(tmpName)
+			return err
+		}
 	}
 
 	return os.Rename(tmpName, l.path)

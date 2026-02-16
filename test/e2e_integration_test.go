@@ -27,13 +27,22 @@ func TestE2EUserWorkflow(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup all components
-	store, _ := storage.New(filepath.Join(tmpDir, "magabot.db"))
+	store, err := storage.New(filepath.Join(tmpDir, "magabot.db"))
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
 	defer store.Close()
 
-	vault, _ := security.NewVault(security.GenerateKey())
+	vault, err := security.NewVault(security.GenerateKey())
+	if err != nil {
+		t.Fatalf("Failed to create vault: %v", err)
+	}
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	cfg, _ := config.Load(configPath)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 	cfg.Bot.Name = "E2EBot"
 	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
@@ -42,11 +51,22 @@ func TestE2EUserWorkflow(t *testing.T) {
 		AllowDMs:     true,
 		AllowGroups:  true,
 	}
-	_ = cfg.Save()
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
 
-	memStore, _ := memory.NewStore(tmpDir, "user1")
-	cronStore, _ := cron.NewJobStore(tmpDir)
-	secretsMgr, _ := secrets.NewFromConfig(&secrets.Config{Backend: "local", LocalConfig: &secrets.LocalConfig{Path: filepath.Join(tmpDir, "secrets.json")}})
+	memStore, err := memory.NewStore(tmpDir, "user1")
+	if err != nil {
+		t.Fatalf("Failed to create memory store: %v", err)
+	}
+	cronStore, err := cron.NewJobStore(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create cron store: %v", err)
+	}
+	secretsMgr, err := secrets.NewFromConfig(&secrets.Config{Backend: "local", LocalConfig: &secrets.LocalConfig{Path: filepath.Join(tmpDir, "secrets.json")}})
+	if err != nil {
+		t.Fatalf("Failed to create secrets manager: %v", err)
+	}
 	toolsMgr := tools.NewManager(logger)
 	sessionMgr := session.NewManager(func(p, c, m string) error { return nil }, 50, nil)
 
@@ -169,7 +189,10 @@ func TestE2EUserWorkflow(t *testing.T) {
 			t.Fatalf("Failed to save message: %v", err)
 		}
 
-		messages, _ := store.GetMessages("telegram", "chat1", 10)
+		messages, err := store.GetMessages("telegram", "chat1", 10)
+		if err != nil {
+			t.Fatalf("Failed to get messages: %v", err)
+		}
 		if len(messages) == 0 {
 			t.Error("Should retrieve saved message")
 		}
@@ -201,7 +224,10 @@ func TestE2EConcurrentUsers(t *testing.T) {
 	tmpDir := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	store, _ := storage.New(filepath.Join(tmpDir, "concurrent.db"))
+	store, err := storage.New(filepath.Join(tmpDir, "concurrent.db"))
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
 	defer store.Close()
 
 	sessionMgr := session.NewManager(func(p, c, m string) error { return nil }, 50, logger)
@@ -258,7 +284,7 @@ func TestE2EConcurrentUsers(t *testing.T) {
 	}
 
 	// Verify data integrity
-	stats, _ := store.Stats()
+	stats, err := store.Stats()
 	if stats == nil {
 		t.Error("Should get storage stats")
 	}
@@ -272,16 +298,23 @@ func TestE2EErrorRecovery(t *testing.T) {
 		dbPath := filepath.Join(tmpDir, "recovery.db")
 
 		// Create and populate database
-		store1, _ := storage.New(dbPath)
-		_ = store1.SaveMessage(&storage.Message{
+		store1, err := storage.New(dbPath)
+		if err != nil {
+			t.Fatalf("Failed to create storage: %v", err)
+		}
+		if err := store1.SaveMessage(&storage.Message{
 			Platform:  "telegram",
 			ChatID:    "chat1",
 			UserID:    "user1",
 			Content:   "Test message",
 			Timestamp: time.Now(),
 			Direction: "in",
-		})
-		_ = store1.Close()
+		}); err != nil {
+			t.Fatalf("Failed to save message: %v", err)
+		}
+		if err := store1.Close(); err != nil {
+			t.Fatalf("Failed to close storage: %v", err)
+		}
 
 		// Reopen and verify data persisted
 		store2, err := storage.New(dbPath)
@@ -290,7 +323,10 @@ func TestE2EErrorRecovery(t *testing.T) {
 		}
 		defer store2.Close()
 
-		messages, _ := store2.GetMessages("telegram", "chat1", 10)
+		messages, err := store2.GetMessages("telegram", "chat1", 10)
+		if err != nil {
+			t.Fatalf("Failed to get messages: %v", err)
+		}
 		if len(messages) == 0 {
 			t.Error("Data should persist after reopen")
 		}
@@ -300,9 +336,14 @@ func TestE2EErrorRecovery(t *testing.T) {
 		configPath := filepath.Join(tmpDir, "recovery_config.yaml")
 
 		// Create config
-		cfg1, _ := config.Load(configPath)
+		cfg1, err := config.Load(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
 		cfg1.Bot.Name = "RecoveryBot"
-		_ = cfg1.Save()
+		if err := cfg1.Save(); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
 
 		// Reload and verify
 		cfg2, err := config.Load(configPath)
@@ -320,17 +361,25 @@ func TestE2EErrorRecovery(t *testing.T) {
 		ctx := context.Background()
 
 		// Create and set secret
-		mgr1, _ := secrets.NewFromConfig(&secrets.Config{
+		mgr1, err := secrets.NewFromConfig(&secrets.Config{
 			Backend:     "local",
 			LocalConfig: &secrets.LocalConfig{Path: secretsPath},
 		})
-		_ = mgr1.Set(ctx, "recovery_key", "recovery_value")
+		if err != nil {
+			t.Fatalf("Failed to create secrets manager: %v", err)
+		}
+		if err := mgr1.Set(ctx, "recovery_key", "recovery_value"); err != nil {
+			t.Fatalf("Failed to set secret: %v", err)
+		}
 
 		// Recreate manager and verify
-		mgr2, _ := secrets.NewFromConfig(&secrets.Config{
+		mgr2, err := secrets.NewFromConfig(&secrets.Config{
 			Backend:     "local",
 			LocalConfig: &secrets.LocalConfig{Path: secretsPath},
 		})
+		if err != nil {
+			t.Fatalf("Failed to recreate secrets manager: %v", err)
+		}
 
 		value, err := mgr2.Get(ctx, "recovery_key")
 		if err != nil {
@@ -348,18 +397,23 @@ func TestE2EResourceCleanup(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	t.Run("StorageCleanup", func(t *testing.T) {
-		store, _ := storage.New(filepath.Join(tmpDir, "cleanup.db"))
+		store, err := storage.New(filepath.Join(tmpDir, "cleanup.db"))
+		if err != nil {
+			t.Fatalf("Failed to create storage: %v", err)
+		}
 
 		// Add some messages
 		for i := 0; i < 100; i++ {
-			_ = store.SaveMessage(&storage.Message{
+			if err := store.SaveMessage(&storage.Message{
 				Platform:  "telegram",
 				ChatID:    "chat1",
 				UserID:    "user1",
 				Content:   "Message",
 				Timestamp: time.Now().AddDate(0, 0, -100), // Old messages
 				Direction: "in",
-			})
+			}); err != nil {
+				t.Fatalf("Failed to save message %d: %v", i, err)
+			}
 		}
 
 		// Purge old messages
@@ -378,7 +432,9 @@ func TestE2EResourceCleanup(t *testing.T) {
 			t.Errorf("Vacuum failed: %v", err)
 		}
 
-		_ = store.Close()
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
 	})
 
 	t.Run("SessionManagerCleanup", func(t *testing.T) {
@@ -402,7 +458,10 @@ func TestE2EAdminOperations(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	configPath := filepath.Join(tmpDir, "admin_config.yaml")
-	cfg, _ := config.Load(configPath)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
@@ -410,7 +469,9 @@ func TestE2EAdminOperations(t *testing.T) {
 		AllowedUsers: []string{"user1"},
 		AllowDMs:     true,
 	}
-	_ = cfg.Save()
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
 
 	t.Run("AllowNewUser", func(t *testing.T) {
 		result := cfg.AllowUser("telegram", "admin1", "new_user")

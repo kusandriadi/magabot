@@ -77,18 +77,26 @@ func TestRouterIntegration(t *testing.T) {
 
 	// Setup vault
 	key := security.GenerateKey()
-	vault, _ := security.NewVault(key)
+	vault, err := security.NewVault(key)
+	if err != nil {
+		t.Fatalf("Failed to create vault: %v", err)
+	}
 
 	// Setup config
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	cfg, _ := config.Load(configPath)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
 		AllowedUsers: []string{"user1", "user2"},
 		AllowDMs:     true,
 	}
-	_ = cfg.Save()
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
 
 	// Setup authorizer
 	auth := security.NewAuthorizer()
@@ -155,7 +163,9 @@ func TestRouterIntegration(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		_ = r.Start(ctx)
+		if err := r.Start(ctx); err != nil {
+			t.Fatalf("Failed to start router: %v", err)
+		}
 
 		// Simulate authorized user message
 		msg := &router.Message{
@@ -192,7 +202,9 @@ func TestRouterIntegration(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		_ = r.Start(ctx)
+		if err := r.Start(ctx); err != nil {
+			t.Fatalf("Failed to start router: %v", err)
+		}
 
 		// Unauthorized user
 		msg := &router.Message{
@@ -273,7 +285,9 @@ func TestRouterIntegration(t *testing.T) {
 		})
 
 		ctx := context.Background()
-		_ = r.Start(ctx)
+		if err := r.Start(ctx); err != nil {
+			t.Fatalf("Failed to start router: %v", err)
+		}
 
 		// Send messages until rate limited
 		var rateLimited bool
@@ -305,20 +319,31 @@ func TestRouterConcurrency(t *testing.T) {
 	tmpDir := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	store, _ := storage.New(filepath.Join(tmpDir, "concurrent.db"))
+	store, err := storage.New(filepath.Join(tmpDir, "concurrent.db"))
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
 	defer store.Close()
 
 	key := security.GenerateKey()
-	vault, _ := security.NewVault(key)
+	vault, err := security.NewVault(key)
+	if err != nil {
+		t.Fatalf("Failed to create vault: %v", err)
+	}
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	cfg, _ := config.Load(configPath)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
 		AllowedUsers: []string{},
 		AllowDMs:     true,
 	}
-	_ = cfg.Save()
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
 
 	auth := security.NewAuthorizer()
 	auth.SetAllowedUsers("telegram", []string{}) // Allow all
@@ -339,7 +364,9 @@ func TestRouterConcurrency(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	_ = r.Start(ctx)
+	if err := r.Start(ctx); err != nil {
+		t.Fatalf("Failed to start router: %v", err)
+	}
 	defer r.Stop()
 
 	// Concurrent message handling

@@ -16,16 +16,24 @@ func TestBackupIntegration(t *testing.T) {
 	dataDir := filepath.Join(tmpDir, "data")
 
 	// Create data directory with test files
-	_ = os.MkdirAll(dataDir, 0755)
-	_ = os.MkdirAll(filepath.Join(dataDir, "sessions"), 0755)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "sessions"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create test database file
 	dbPath := filepath.Join(dataDir, "magabot.db")
-	_ = os.WriteFile(dbPath, []byte("test database content"), 0600)
+	if err := os.WriteFile(dbPath, []byte("test database content"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create test session file
 	sessionFile := filepath.Join(dataDir, "sessions", "test_session.json")
-	_ = os.WriteFile(sessionFile, []byte(`{"key":"value"}`), 0600)
+	if err := os.WriteFile(sessionFile, []byte(`{"key":"value"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	mgr := backup.New(backupDir, 3)
 
@@ -56,9 +64,13 @@ func TestBackupIntegration(t *testing.T) {
 
 	t.Run("ListBackups", func(t *testing.T) {
 		// Create a few more backups
-		_, _ = mgr.Create(dataDir, []string{"telegram"})
+		if _, err := mgr.Create(dataDir, []string{"telegram"}); err != nil {
+			t.Fatalf("Failed to create backup: %v", err)
+		}
 		time.Sleep(10 * time.Millisecond)
-		_, _ = mgr.Create(dataDir, []string{"whatsapp"})
+		if _, err := mgr.Create(dataDir, []string{"whatsapp"}); err != nil {
+			t.Fatalf("Failed to create backup: %v", err)
+		}
 
 		backups, err := mgr.List()
 		if err != nil {
@@ -79,14 +91,19 @@ func TestBackupIntegration(t *testing.T) {
 
 	t.Run("RestoreBackup", func(t *testing.T) {
 		// Create a backup
-		info, _ := mgr.Create(dataDir, []string{"telegram"})
+		info, err := mgr.Create(dataDir, []string{"telegram"})
+		if err != nil {
+			t.Fatalf("Failed to create backup: %v", err)
+		}
 
 		// Create a new restore directory
 		restoreDir := filepath.Join(tmpDir, "restore")
-		_ = os.MkdirAll(restoreDir, 0755)
+		if err := os.MkdirAll(restoreDir, 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		// Restore
-		err := mgr.Restore(info.Filename, restoreDir)
+		err = mgr.Restore(info.Filename, restoreDir)
 		if err != nil {
 			t.Fatalf("Failed to restore backup: %v", err)
 		}
@@ -110,21 +127,29 @@ func TestBackupIntegration(t *testing.T) {
 
 		// Create 4 backups
 		for i := 0; i < 4; i++ {
-			_, _ = rotationMgr.Create(dataDir, []string{"test"})
+			if _, err := rotationMgr.Create(dataDir, []string{"test"}); err != nil {
+				t.Fatalf("Failed to create backup %d: %v", i, err)
+			}
 			time.Sleep(10 * time.Millisecond)
 		}
 
 		// Should only keep 2
-		backups, _ := rotationMgr.List()
+		backups, err := rotationMgr.List()
+		if err != nil {
+			t.Fatalf("Failed to list backups: %v", err)
+		}
 		if len(backups) > 2 {
 			t.Errorf("Should keep only 2 backups, got %d", len(backups))
 		}
 	})
 
 	t.Run("DeleteBackup", func(t *testing.T) {
-		info, _ := mgr.Create(dataDir, []string{"test"})
+		info, err := mgr.Create(dataDir, []string{"test"})
+		if err != nil {
+			t.Fatalf("Failed to create backup: %v", err)
+		}
 
-		err := mgr.Delete(info.Filename)
+		err = mgr.Delete(info.Filename)
 		if err != nil {
 			t.Fatalf("Failed to delete backup: %v", err)
 		}
@@ -176,9 +201,15 @@ func TestBackupPathTraversal(t *testing.T) {
 	dataDir := filepath.Join(tmpDir, "data")
 	restoreDir := filepath.Join(tmpDir, "restore")
 
-	_ = os.MkdirAll(dataDir, 0755)
-	_ = os.MkdirAll(restoreDir, 0755)
-	_ = os.WriteFile(filepath.Join(dataDir, "magabot.db"), []byte("test"), 0600)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(restoreDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "magabot.db"), []byte("test"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	mgr := backup.New(backupDir, 5)
 
@@ -206,7 +237,9 @@ func TestBackupEmptyDataDir(t *testing.T) {
 	backupDir := filepath.Join(tmpDir, "backups")
 	emptyDataDir := filepath.Join(tmpDir, "empty_data")
 
-	_ = os.MkdirAll(emptyDataDir, 0755)
+	if err := os.MkdirAll(emptyDataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	mgr := backup.New(backupDir, 5)
 
@@ -230,14 +263,18 @@ func TestBackupLargeFile(t *testing.T) {
 	backupDir := filepath.Join(tmpDir, "backups")
 	dataDir := filepath.Join(tmpDir, "data")
 
-	_ = os.MkdirAll(dataDir, 0755)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a larger file (1MB)
 	largeData := make([]byte, 1024*1024)
 	for i := range largeData {
 		largeData[i] = byte(i % 256)
 	}
-	_ = os.WriteFile(filepath.Join(dataDir, "magabot.db"), largeData, 0600)
+	if err := os.WriteFile(filepath.Join(dataDir, "magabot.db"), largeData, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	mgr := backup.New(backupDir, 5)
 
@@ -253,7 +290,9 @@ func TestBackupLargeFile(t *testing.T) {
 
 	// Verify restore
 	restoreDir := filepath.Join(tmpDir, "restore")
-	_ = os.MkdirAll(restoreDir, 0755)
+	if err = os.MkdirAll(restoreDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	err = mgr.Restore(info.Filename, restoreDir)
 	if err != nil {
@@ -261,7 +300,10 @@ func TestBackupLargeFile(t *testing.T) {
 	}
 
 	// Verify restored file size
-	restoredData, _ := os.ReadFile(filepath.Join(restoreDir, "magabot.db"))
+	restoredData, err := os.ReadFile(filepath.Join(restoreDir, "magabot.db"))
+	if err != nil {
+		t.Fatalf("Failed to read restored file: %v", err)
+	}
 	if len(restoredData) != len(largeData) {
 		t.Errorf("Restored file size mismatch: got %d, want %d", len(restoredData), len(largeData))
 	}

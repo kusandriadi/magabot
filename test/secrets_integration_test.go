@@ -52,21 +52,25 @@ func TestSecretsLocalBackend(t *testing.T) {
 	})
 
 	t.Run("Update", func(t *testing.T) {
-		_ = backend.Set(ctx, "update_key", "value1")
+		if err := backend.Set(ctx, "update_key", "value1"); err != nil {
+			t.Fatalf("Failed to set initial value: %v", err)
+		}
 
 		err := backend.Set(ctx, "update_key", "value2")
 		if err != nil {
 			t.Fatalf("Failed to update secret: %v", err)
 		}
 
-		value, _ := backend.Get(ctx, "update_key")
+		value, err := backend.Get(ctx, "update_key")
 		if value != "value2" {
 			t.Errorf("Expected 'value2', got '%s'", value)
 		}
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		_ = backend.Set(ctx, "delete_key", "to_delete")
+		if err := backend.Set(ctx, "delete_key", "to_delete"); err != nil {
+			t.Fatalf("Failed to set key for deletion: %v", err)
+		}
 
 		err := backend.Delete(ctx, "delete_key")
 		if err != nil {
@@ -80,12 +84,16 @@ func TestSecretsLocalBackend(t *testing.T) {
 	})
 
 	t.Run("List", func(t *testing.T) {
-		// Clear and add known keys
-		_ = backend.Delete(ctx, "api_key")
-		_ = backend.Delete(ctx, "update_key")
+		// Clear and add known keys (ignore errors — keys may not exist)
+		backend.Delete(ctx, "api_key")   //nolint:errcheck
+		backend.Delete(ctx, "update_key") //nolint:errcheck
 
-		_ = backend.Set(ctx, "key1", "val1")
-		_ = backend.Set(ctx, "key2", "val2")
+		if err := backend.Set(ctx, "key1", "val1"); err != nil {
+			t.Fatalf("Failed to set key1: %v", err)
+		}
+		if err := backend.Set(ctx, "key2", "val2"); err != nil {
+			t.Fatalf("Failed to set key2: %v", err)
+		}
 
 		keys, err := backend.List(ctx)
 		if err != nil {
@@ -159,10 +167,15 @@ func TestSecretsChainBackend(t *testing.T) {
 	ctx := context.Background()
 
 	// Create local backend
-	localBackend, _ := secrets.NewLocal(&secrets.LocalConfig{
+	localBackend, err := secrets.NewLocal(&secrets.LocalConfig{
 		Path: filepath.Join(tmpDir, "secrets.json"),
 	})
-	_ = localBackend.Set(ctx, "local_only", "from_local")
+	if err != nil {
+		t.Fatalf("Failed to create local backend: %v", err)
+	}
+	if err := localBackend.Set(ctx, "local_only", "from_local"); err != nil {
+		t.Fatalf("Failed to set local secret: %v", err)
+	}
 
 	// Create env backend
 	os.Setenv("ANTHROPIC_API_KEY", "from_env")
@@ -240,20 +253,33 @@ func TestSecretsChainPriority(t *testing.T) {
 	ctx := context.Background()
 
 	// Create two local backends with same key but different values
-	backend1, _ := secrets.NewLocal(&secrets.LocalConfig{
+	backend1, err := secrets.NewLocal(&secrets.LocalConfig{
 		Path: filepath.Join(tmpDir, "backend1", "secrets.json"),
 	})
-	backend2, _ := secrets.NewLocal(&secrets.LocalConfig{
+	if err != nil {
+		t.Fatalf("Failed to create backend1: %v", err)
+	}
+	backend2, err := secrets.NewLocal(&secrets.LocalConfig{
 		Path: filepath.Join(tmpDir, "backend2", "secrets.json"),
 	})
+	if err != nil {
+		t.Fatalf("Failed to create backend2: %v", err)
+	}
 
-	_ = backend1.Set(ctx, "shared_key", "value_from_first")
-	_ = backend2.Set(ctx, "shared_key", "value_from_second")
+	if err := backend1.Set(ctx, "shared_key", "value_from_first"); err != nil {
+		t.Fatalf("Failed to set on backend1: %v", err)
+	}
+	if err := backend2.Set(ctx, "shared_key", "value_from_second"); err != nil {
+		t.Fatalf("Failed to set on backend2: %v", err)
+	}
 
 	chain := secrets.NewChain(backend1, backend2)
 
 	// Should return value from first backend
-	value, _ := chain.Get(ctx, "shared_key")
+	value, err := chain.Get(ctx, "shared_key")
+	if err != nil {
+		t.Fatalf("Failed to get from chain: %v", err)
+	}
 	if value != "value_from_first" {
 		t.Errorf("Expected 'value_from_first', got '%s'", value)
 	}
@@ -307,8 +333,13 @@ func TestSecretsLocalBackendPersistence(t *testing.T) {
 	secretsPath := filepath.Join(tmpDir, "persistent_secrets.json")
 
 	// Create backend and set a secret
-	backend1, _ := secrets.NewLocal(&secrets.LocalConfig{Path: secretsPath})
-	_ = backend1.Set(ctx, "persistent_key", "persistent_value")
+	backend1, err := secrets.NewLocal(&secrets.LocalConfig{Path: secretsPath})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
+	if err := backend1.Set(ctx, "persistent_key", "persistent_value"); err != nil {
+		t.Fatalf("Failed to set secret: %v", err)
+	}
 
 	// Create new backend instance pointing to same location
 	backend2, err := secrets.NewLocal(&secrets.LocalConfig{Path: secretsPath})
@@ -331,9 +362,12 @@ func TestSecretsSpecialCharacters(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := context.Background()
 
-	backend, _ := secrets.NewLocal(&secrets.LocalConfig{
+	backend, err := secrets.NewLocal(&secrets.LocalConfig{
 		Path: filepath.Join(tmpDir, "secrets.json"),
 	})
+	if err != nil {
+		t.Fatalf("Failed to create backend: %v", err)
+	}
 
 	testCases := []struct {
 		key   string

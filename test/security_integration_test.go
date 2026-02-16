@@ -386,7 +386,7 @@ func TestSessionManager(t *testing.T) {
 	})
 
 	t.Run("Validate", func(t *testing.T) {
-		_ = mgr.GetOrCreate("telegram", "validUser")
+		mgr.GetOrCreate("telegram", "validUser")
 
 		err := mgr.Validate("telegram", "validUser")
 		if err != nil {

@@ -96,7 +96,9 @@ exit 0
 		blockContent := `#!/bin/bash
 exit 1
 `
-		_ = os.WriteFile(blockScript, []byte(blockContent), 0755)
+		if err := os.WriteFile(blockScript, []byte(blockContent), 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		hookCfg := []config.HookConfig{
 			{
@@ -192,10 +194,14 @@ exit 1
 	t.Run("MultipleHooks", func(t *testing.T) {
 		// Create two scripts
 		script1 := filepath.Join(tmpDir, "hook1.sh")
-		_ = os.WriteFile(script1, []byte("#!/bin/bash\necho 'first'\nexit 0"), 0755)
+		if err := os.WriteFile(script1, []byte("#!/bin/bash\necho 'first'\nexit 0"), 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		script2 := filepath.Join(tmpDir, "hook2.sh")
-		_ = os.WriteFile(script2, []byte("#!/bin/bash\necho 'second'\nexit 0"), 0755)
+		if err := os.WriteFile(script2, []byte("#!/bin/bash\necho 'second'\nexit 0"), 0755); err != nil {
+			t.Fatal(err)
+		}
 
 		hookCfg := []config.HookConfig{
 			{

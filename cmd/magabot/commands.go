@@ -36,7 +36,9 @@ func cmdStart() {
 	}
 
 	// Save PID
-	_ = os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0600)
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write PID file: %v\n", err)
+	}
 
 	fmt.Printf("✅ Magabot started (PID: %d)\n", pid)
 	fmt.Printf("   Logs: %s\n", logFile)
@@ -161,11 +163,18 @@ func cmdGenKey() {
 // Helper functions
 
 func ensureDirs() {
-	_ = os.MkdirAll(configDir, 0700)
-	_ = os.MkdirAll(dataDir, 0700)
-	_ = os.MkdirAll(logDir, 0700)
-	_ = os.MkdirAll(filepath.Join(dataDir, "sessions"), 0700)
-	_ = os.MkdirAll(filepath.Join(dataDir, "backups"), 0700)
+	dirs := []string{
+		configDir,
+		dataDir,
+		logDir,
+		filepath.Join(dataDir, "sessions"),
+		filepath.Join(dataDir, "backups"),
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create directory %s: %v\n", dir, err)
+		}
+	}
 }
 
 func getPID() int {

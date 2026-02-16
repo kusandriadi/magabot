@@ -47,6 +47,9 @@ const (
 	ProviderVoyage   Provider = "voyage"
 	ProviderLocal    Provider = "local"    // Local embedding server (e.g., sentence-transformers)
 	ProviderCohere   Provider = "cohere"
+
+	// maxResponseSize limits embedding API response reads to prevent OOM (10 MB).
+	maxResponseSize = 10 * 1024 * 1024
 )
 
 // defaultDimensions holds the default embedding dimensions for each model.
@@ -330,8 +333,6 @@ func (c *Client) embedOpenAI(ctx context.Context, texts []string) ([]Embedding, 
 	}
 	defer resp.Body.Close()
 
-	// Limit response size to prevent OOM (10 MB max)
-	const maxResponseSize = 10 * 1024 * 1024
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
@@ -411,8 +412,6 @@ func (c *Client) embedVoyage(ctx context.Context, texts []string) ([]Embedding, 
 	}
 	defer resp.Body.Close()
 
-	// Limit response size to prevent OOM (10 MB max)
-	const maxResponseSize = 10 * 1024 * 1024
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
@@ -484,8 +483,6 @@ func (c *Client) embedCohere(ctx context.Context, texts []string) ([]Embedding, 
 	}
 	defer resp.Body.Close()
 
-	// Limit response size to prevent OOM (10 MB max)
-	const maxResponseSize = 10 * 1024 * 1024
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
@@ -547,8 +544,6 @@ func (c *Client) embedLocal(ctx context.Context, texts []string) ([]Embedding, e
 	}
 	defer resp.Body.Close()
 
-	// Limit response size to prevent OOM (10 MB max)
-	const maxResponseSize = 10 * 1024 * 1024
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)

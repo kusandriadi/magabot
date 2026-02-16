@@ -158,13 +158,19 @@ func TestToolsManagerIntegration(t *testing.T) {
 		ctx := context.Background()
 
 		// With parameter
-		result, _ := mgr.Execute(ctx, "greeter", map[string]string{"name": "Alice"})
+		result, err := mgr.Execute(ctx, "greeter", map[string]string{"name": "Alice"})
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
 		if result != "Hello, Alice!" {
 			t.Errorf("Expected 'Hello, Alice!', got '%s'", result)
 		}
 
 		// Without parameter
-		result, _ = mgr.Execute(ctx, "greeter", map[string]string{})
+		result, err = mgr.Execute(ctx, "greeter", map[string]string{})
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
 		if result != "Hello, World!" {
 			t.Errorf("Expected 'Hello, World!', got '%s'", result)
 		}

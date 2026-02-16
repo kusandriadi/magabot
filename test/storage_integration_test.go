@@ -59,10 +59,15 @@ func TestStorageIntegration(t *testing.T) {
 				Timestamp: time.Now().Add(time.Duration(i) * time.Second),
 				Direction: "in",
 			}
-			_ = store.SaveMessage(msg)
+			if err := store.SaveMessage(msg); err != nil {
+				t.Fatalf("Failed to save message %d: %v", i, err)
+			}
 		}
 
-		messages, _ := store.GetMessages("telegram", "chat_order", 10)
+		messages, err := store.GetMessages("telegram", "chat_order", 10)
+		if err != nil {
+			t.Fatalf("Failed to get messages: %v", err)
+		}
 		if len(messages) != 5 {
 			t.Errorf("Expected 5 messages, got %d", len(messages))
 		}
@@ -94,7 +99,10 @@ func TestStorageIntegration(t *testing.T) {
 			t.Fatalf("Failed to update session: %v", err)
 		}
 
-		data, _ = store.GetSession("whatsapp")
+		data, err = store.GetSession("whatsapp")
+		if err != nil {
+			t.Fatalf("Failed to get updated session: %v", err)
+		}
 		if data != "updated_session" {
 			t.Errorf("Expected 'updated_session', got %s", data)
 		}
@@ -104,7 +112,10 @@ func TestStorageIntegration(t *testing.T) {
 			t.Fatalf("Failed to delete session: %v", err)
 		}
 
-		data, _ = store.GetSession("whatsapp")
+		data, err = store.GetSession("whatsapp")
+		if err != nil {
+			t.Fatalf("Failed to get deleted session: %v", err)
+		}
 		if data != "" {
 			t.Errorf("Expected empty string after delete, got %s", data)
 		}
@@ -126,8 +137,8 @@ func TestStorageIntegration(t *testing.T) {
 			t.Errorf("Expected 'secret123', got %s", value)
 		}
 
-		// Get non-existent config
-		value, _ = store.GetConfig("nonexistent")
+		// Get non-existent config — returns empty string, no error
+		value, err = store.GetConfig("nonexistent")
 		if value != "" {
 			t.Errorf("Expected empty for nonexistent key, got %s", value)
 		}
@@ -150,7 +161,9 @@ func TestStorageIntegration(t *testing.T) {
 			Timestamp: time.Now().AddDate(0, 0, -100), // 100 days ago
 			Direction: "in",
 		}
-		_ = store.SaveMessage(oldMsg)
+		if err := store.SaveMessage(oldMsg); err != nil {
+			t.Fatalf("Failed to save old message: %v", err)
+		}
 
 		// Add recent message
 		newMsg := &storage.Message{
@@ -161,7 +174,9 @@ func TestStorageIntegration(t *testing.T) {
 			Timestamp: time.Now(),
 			Direction: "in",
 		}
-		_ = store.SaveMessage(newMsg)
+		if err := store.SaveMessage(newMsg); err != nil {
+			t.Fatalf("Failed to save new message: %v", err)
+		}
 
 		// Purge messages older than 30 days
 		deleted, err := store.PurgeOldMessages(30)
@@ -174,7 +189,10 @@ func TestStorageIntegration(t *testing.T) {
 		}
 
 		// Verify new message still exists
-		messages, _ := store.GetMessages("telegram", "purge_test", 10)
+		messages, err := store.GetMessages("telegram", "purge_test", 10)
+		if err != nil {
+			t.Fatalf("Failed to get messages after purge: %v", err)
+		}
 		found := false
 		for _, m := range messages {
 			if m.Content == "new message" {
@@ -255,9 +273,16 @@ func TestStorageReopen(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "reopen.db")
 
 	// Create and write
-	store, _ := storage.New(dbPath)
-	_ = store.SetConfig("test_key", "test_value")
-	_ = store.Close()
+	store, err := storage.New(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	if err := store.SetConfig("test_key", "test_value"); err != nil {
+		t.Fatalf("Failed to set config: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Failed to close store: %v", err)
+	}
 
 	// Reopen and verify
 	store2, err := storage.New(dbPath)
@@ -266,7 +291,10 @@ func TestStorageReopen(t *testing.T) {
 	}
 	defer store2.Close()
 
-	value, _ := store2.GetConfig("test_key")
+	value, err := store2.GetConfig("test_key")
+	if err != nil {
+		t.Fatalf("Failed to get config: %v", err)
+	}
 	if value != "test_value" {
 		t.Errorf("Expected 'test_value' after reopen, got %s", value)
 	}
@@ -281,7 +309,10 @@ func TestStorageInvalidPath(t *testing.T) {
 
 func TestStoragePlatformIsolation(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, _ := storage.New(filepath.Join(tmpDir, "isolation.db"))
+	store, err := storage.New(filepath.Join(tmpDir, "isolation.db"))
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
 	defer store.Close()
 
 	// Save messages for different platforms
@@ -295,12 +326,17 @@ func TestStoragePlatformIsolation(t *testing.T) {
 			Timestamp: time.Now(),
 			Direction: "in",
 		}
-		_ = store.SaveMessage(msg)
+		if err := store.SaveMessage(msg); err != nil {
+			t.Fatalf("Failed to save message for %s: %v", p, err)
+		}
 	}
 
 	// Verify isolation
 	for _, p := range platforms {
-		messages, _ := store.GetMessages(p, "chat1", 10)
+		messages, err := store.GetMessages(p, "chat1", 10)
+		if err != nil {
+			t.Fatalf("Failed to get messages for %s: %v", p, err)
+		}
 		if len(messages) != 1 {
 			t.Errorf("Platform %s: expected 1 message, got %d", p, len(messages))
 		}

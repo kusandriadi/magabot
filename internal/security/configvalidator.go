@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -66,6 +67,11 @@ func (v *ConfigValidator) addIssue(severity, category, description, suggestion s
 }
 
 func (v *ConfigValidator) validateFilePermissions(configPath, dataDir string) {
+	// Windows uses ACLs, not Unix permission bits — skip this check.
+	if runtime.GOOS == "windows" {
+		return
+	}
+
 	// Check config file permissions
 	if info, err := os.Stat(configPath); err == nil {
 		mode := info.Mode().Perm()
@@ -321,8 +327,13 @@ func (v *ConfigValidator) FormatIssues() string {
 	return sb.String()
 }
 
-// FixPermissions attempts to fix file permission issues
+// FixPermissions attempts to fix file permission issues.
+// On Windows, this is a no-op since Windows uses ACLs, not Unix permission bits.
 func FixPermissions(configPath, dataDir string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+
 	// Fix config file
 	if err := os.Chmod(configPath, 0600); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("chmod config: %w", err)
