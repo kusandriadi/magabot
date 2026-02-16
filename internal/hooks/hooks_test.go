@@ -2,6 +2,7 @@ package hooks_test
 
 import (
 	"log/slog"
+	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -13,6 +14,18 @@ import (
 
 func newLogger() *slog.Logger {
 	return slog.Default()
+}
+
+// skipIfNoShell skips the test when the platform shell (sh or cmd) is not available.
+func skipIfNoShell(t *testing.T) {
+	t.Helper()
+	shell := "sh"
+	if runtime.GOOS == "windows" {
+		shell = "cmd"
+	}
+	if _, err := exec.LookPath(shell); err != nil {
+		t.Skipf("shell %q not in PATH, skipping", shell)
+	}
 }
 
 func TestNewManager_NilHooks(t *testing.T) {
@@ -99,6 +112,7 @@ func TestFire_NoHooks(t *testing.T) {
 }
 
 func TestFire_Echo(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{Name: "echo-hook", Event: "on_start", Command: "echo hello"},
 	}
@@ -138,6 +152,7 @@ func TestFire_PlatformFilter(t *testing.T) {
 }
 
 func TestFire_PlatformFilter_Matching(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "telegram-only",
@@ -156,6 +171,7 @@ func TestFire_PlatformFilter_Matching(t *testing.T) {
 }
 
 func TestFire_PlatformFilter_EmptyMatchesAll(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "all-platforms",
@@ -173,6 +189,7 @@ func TestFire_PlatformFilter_EmptyMatchesAll(t *testing.T) {
 }
 
 func TestFire_PlatformFilter_CaseInsensitive(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{
 			Name:      "tg-hook",
@@ -190,6 +207,7 @@ func TestFire_PlatformFilter_CaseInsensitive(t *testing.T) {
 }
 
 func TestFire_BlockedHook(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{Name: "fail-hook", Event: "pre_message", Command: "exit 1"},
 	}
@@ -202,6 +220,7 @@ func TestFire_BlockedHook(t *testing.T) {
 }
 
 func TestFire_BlockedHook_SuccessfulNotBlocked(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{Name: "ok-hook", Event: "pre_message", Command: "exit 0"},
 	}
@@ -260,6 +279,7 @@ func TestFireAsync_NoHooks(t *testing.T) {
 }
 
 func TestFire_MultipleHooksSameEvent(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{Name: "hook-1", Event: "on_start", Command: "echo first"},
 		{Name: "hook-2", Event: "on_start", Command: "echo second"},
@@ -293,6 +313,7 @@ func TestFire_AsyncHookInSyncFire(t *testing.T) {
 // --- Negative tests ---
 
 func TestFire_CommandNotFound(t *testing.T) {
+	skipIfNoShell(t)
 	hooksConfig := []config.HookConfig{
 		{Name: "bad-cmd", Event: "on_start", Command: "nonexistent_command_xyz_12345"},
 	}
@@ -305,6 +326,7 @@ func TestFire_CommandNotFound(t *testing.T) {
 }
 
 func TestFire_Timeout(t *testing.T) {
+	skipIfNoShell(t)
 	// Use a command that runs longer than the timeout.
 	// Use exec-style sleep to avoid orphan child processes with sh -c.
 	command := "sleep 5"

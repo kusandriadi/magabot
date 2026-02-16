@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -83,8 +84,14 @@ func TestCreate_Success(t *testing.T) {
 }
 
 func TestCreate_InvalidPath(t *testing.T) {
-	// Use a path that cannot be created
-	m := New("/dev/null/impossible/path", 5)
+	// Use a path that cannot be created on any platform.
+	// On Unix, /dev/null is a file so subdirs fail.
+	// On Windows, NUL is a reserved device name.
+	invalidPath := "/dev/null/impossible/path"
+	if runtime.GOOS == "windows" {
+		invalidPath = `NUL\impossible\path`
+	}
+	m := New(invalidPath, 5)
 	_, err := m.Create(t.TempDir(), []string{})
 	if err == nil {
 		t.Error("expected error for invalid backup path")

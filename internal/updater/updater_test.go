@@ -82,10 +82,18 @@ func TestFindAsset(t *testing.T) {
 
 	expectedName := fmt.Sprintf("magabot_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 
+	// Build assets list ensuring the expected name maps to "current" URL,
+	// with a decoy asset for a different platform.
+	decoyOS := "linux"
+	if runtime.GOOS == "linux" {
+		decoyOS = "darwin"
+	}
+	decoyName := fmt.Sprintf("magabot_%s_%s.tar.gz", decoyOS, runtime.GOARCH)
+
 	release := &Release{
 		TagName: "v1.0.0",
 		Assets: []Asset{
-			{Name: "magabot_windows_amd64.tar.gz", Size: 1000, BrowserDownloadURL: "https://example.com/win"},
+			{Name: decoyName, Size: 1000, BrowserDownloadURL: "https://example.com/decoy"},
 			{Name: expectedName, Size: 2000, BrowserDownloadURL: "https://example.com/current"},
 			{Name: "checksums.txt", Size: 100, BrowserDownloadURL: "https://example.com/checksums"},
 		},
