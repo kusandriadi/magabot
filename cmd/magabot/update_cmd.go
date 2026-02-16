@@ -102,7 +102,7 @@ func cmdUpdateApply() {
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 
 	if confirm != "y" && confirm != "yes" {
-		fmt.Println("Cancelled.")
+		fmt.Println("Canceled.")
 		return
 	}
 

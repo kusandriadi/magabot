@@ -22,12 +22,12 @@ import (
 type Status string
 
 const (
-	StatusPending   Status = "pending"
-	StatusRunning   Status = "running"
-	StatusComplete  Status = "complete"
-	StatusFailed    Status = "failed"
-	StatusCanceled  Status = "canceled"
-	StatusTimeout   Status = "timeout"
+	StatusPending  Status = "pending"
+	StatusRunning  Status = "running"
+	StatusComplete Status = "complete"
+	StatusFailed   Status = "failed"
+	StatusCanceled Status = "canceled"
+	StatusTimeout  Status = "timeout"
 )
 
 // Agent represents a spawned sub-agent with its own isolated session.
@@ -35,20 +35,20 @@ type Agent struct {
 	mu sync.RWMutex
 
 	ID          string                 `json:"id"`
-	ParentID    string                 `json:"parent_id,omitempty"`    // Parent agent ID (empty for root)
-	Name        string                 `json:"name,omitempty"`         // Human-readable name
-	Task        string                 `json:"task"`                   // Task description/prompt
+	ParentID    string                 `json:"parent_id,omitempty"` // Parent agent ID (empty for root)
+	Name        string                 `json:"name,omitempty"`      // Human-readable name
+	Task        string                 `json:"task"`                // Task description/prompt
 	Status      Status                 `json:"status"`
 	Result      string                 `json:"result,omitempty"`
 	Error       string                 `json:"error,omitempty"`
-	Context     map[string]interface{} `json:"context,omitempty"`      // Shared context data
-	Messages    []Message              `json:"messages,omitempty"`     // Agent's conversation history
-	Metadata    map[string]string      `json:"metadata,omitempty"`     // Custom metadata
-	Platform    string                 `json:"platform,omitempty"`     // Originating platform
-	ChatID      string                 `json:"chat_id,omitempty"`      // Originating chat
-	UserID      string                 `json:"user_id,omitempty"`      // Originating user
-	Priority    int                    `json:"priority"`               // 0=normal, higher=urgent
-	Timeout     time.Duration          `json:"timeout"`                // Max execution time
+	Context     map[string]interface{} `json:"context,omitempty"`  // Shared context data
+	Messages    []Message              `json:"messages,omitempty"` // Agent's conversation history
+	Metadata    map[string]string      `json:"metadata,omitempty"` // Custom metadata
+	Platform    string                 `json:"platform,omitempty"` // Originating platform
+	ChatID      string                 `json:"chat_id,omitempty"`  // Originating chat
+	UserID      string                 `json:"user_id,omitempty"`  // Originating user
+	Priority    int                    `json:"priority"`           // 0=normal, higher=urgent
+	Timeout     time.Duration          `json:"timeout"`            // Max execution time
 	CreatedAt   time.Time              `json:"created_at"`
 	StartedAt   *time.Time             `json:"started_at,omitempty"`
 	CompletedAt *time.Time             `json:"completed_at,omitempty"`
@@ -61,7 +61,7 @@ type Agent struct {
 // Message represents a message in an agent's conversation or mailbox.
 type Message struct {
 	ID        string                 `json:"id"`
-	Role      string                 `json:"role"`       // user, assistant, system, agent
+	Role      string                 `json:"role"` // user, assistant, system, agent
 	Content   string                 `json:"content"`
 	FromAgent string                 `json:"from_agent,omitempty"` // Sender agent ID
 	ToAgent   string                 `json:"to_agent,omitempty"`   // Target agent ID
@@ -85,25 +85,25 @@ type NotifyFunc func(agent *Agent)
 type Registry struct {
 	mu sync.RWMutex
 
-	agents      map[string]*Agent // All agents by ID
+	agents      map[string]*Agent   // All agents by ID
 	byParent    map[string][]string // Parent ID -> child agent IDs
 	executor    TaskExecutor
 	notifyFunc  NotifyFunc
 	persistPath string
 	counter     atomic.Int64
 	logger      *slog.Logger
-	maxAgents   int           // Max concurrent agents
-	maxDepth    int           // Max nesting depth
-	maxHistory  int           // Max messages per agent
+	maxAgents   int // Max concurrent agents
+	maxDepth    int // Max nesting depth
+	maxHistory  int // Max messages per agent
 }
 
 // Config holds registry configuration.
 type Config struct {
-	DataDir     string        // Directory for persistence
-	MaxAgents   int           // Max concurrent agents (default: 50)
-	MaxDepth    int           // Max nesting depth (default: 5)
-	MaxHistory  int           // Max messages per agent (default: 100)
-	Logger      *slog.Logger
+	DataDir    string // Directory for persistence
+	MaxAgents  int    // Max concurrent agents (default: 50)
+	MaxDepth   int    // Max nesting depth (default: 5)
+	MaxHistory int    // Max messages per agent (default: 100)
+	Logger     *slog.Logger
 }
 
 // NewRegistry creates a new sub-agent registry.
@@ -158,16 +158,16 @@ func (r *Registry) SetNotifyFunc(fn NotifyFunc) {
 
 // SpawnOptions configures a new sub-agent.
 type SpawnOptions struct {
-	Name      string
-	Task      string
-	ParentID  string
-	Platform  string
-	ChatID    string
-	UserID    string
-	Context   map[string]interface{}
-	Metadata  map[string]string
-	Priority  int
-	Timeout   time.Duration
+	Name     string
+	Task     string
+	ParentID string
+	Platform string
+	ChatID   string
+	UserID   string
+	Context  map[string]interface{}
+	Metadata map[string]string
+	Priority int
+	Timeout  time.Duration
 }
 
 // MaxTaskLength is the maximum allowed task description length.

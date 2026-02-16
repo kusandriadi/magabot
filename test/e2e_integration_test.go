@@ -285,6 +285,9 @@ func TestE2EConcurrentUsers(t *testing.T) {
 
 	// Verify data integrity
 	stats, err := store.Stats()
+	if err != nil {
+		t.Fatalf("Failed to get stats: %v", err)
+	}
 	if stats == nil {
 		t.Error("Should get storage stats")
 	}

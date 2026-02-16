@@ -74,7 +74,7 @@ func RunWizard() {
 		fmt.Println("⚠️  Existing configuration found!")
 		fmt.Println()
 		if !askYesNo(reader, "Do you want to overwrite it?", false) {
-			fmt.Println("\n👋 Setup cancelled. Your existing config is preserved.")
+			fmt.Println("\n👋 Setup canceled. Your existing config is preserved.")
 			return
 		}
 		fmt.Println()

@@ -22,12 +22,12 @@ import (
 
 // Config holds updater configuration
 type Config struct {
-	RepoOwner    string // GitHub owner (e.g., "kusandriadi")
-	RepoName     string // GitHub repo (e.g., "magabot")
+	RepoOwner      string // GitHub owner (e.g., "kusandriadi")
+	RepoName       string // GitHub repo (e.g., "magabot")
 	CurrentVersion string
-	BinaryName   string
-	CheckInterval time.Duration
-	AutoUpdate   bool
+	BinaryName     string
+	CheckInterval  time.Duration
+	AutoUpdate     bool
 }
 
 // Release represents a GitHub release
@@ -65,7 +65,7 @@ func New(config Config) *Updater {
 	if config.CheckInterval == 0 {
 		config.CheckInterval = 24 * time.Hour
 	}
-	
+
 	return &Updater{
 		config: config,
 		client: util.NewHTTPClient(0),
@@ -78,10 +78,10 @@ func (u *Updater) CheckUpdate(ctx context.Context) (*Release, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	
+
 	// Compare versions
 	hasUpdate := isNewerVersion(u.config.CurrentVersion, release.TagName)
-	
+
 	return release, hasUpdate, nil
 }
 
@@ -89,34 +89,34 @@ func (u *Updater) CheckUpdate(ctx context.Context) (*Release, bool, error) {
 func (u *Updater) getLatestRelease(ctx context.Context) (*Release, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest",
 		u.config.RepoOwner, u.config.RepoName)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", "magabot-updater")
-	
+
 	resp, err := u.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check updates: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode == 404 {
 		return nil, fmt.Errorf("no releases found")
 	}
-	
+
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("GitHub API error: %d", resp.StatusCode)
 	}
-	
+
 	var release Release
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 10*1024*1024)).Decode(&release); err != nil {
 		return nil, fmt.Errorf("failed to parse release: %w", err)
 	}
-	
+
 	return &release, nil
 }
 
@@ -169,30 +169,30 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 		}
 		tmpFile = extractedPath
 	}
-	
+
 	// Make executable
 	if err := os.Chmod(tmpFile, 0755); err != nil { // #nosec G302 -- binary must be executable
 		os.Remove(tmpFile)
 		return fmt.Errorf("failed to chmod: %w", err)
 	}
-	
+
 	// Backup current binary
 	backupPath := execPath + ".backup"
 	if err := os.Rename(execPath, backupPath); err != nil {
 		os.Remove(tmpFile)
 		return fmt.Errorf("failed to backup current binary: %w", err)
 	}
-	
+
 	// Move new binary
 	if err := os.Rename(tmpFile, execPath); err != nil {
 		// Restore backup
 		_ = os.Rename(backupPath, execPath)
 		return fmt.Errorf("failed to install update: %w", err)
 	}
-	
+
 	// Remove backup (optional, keep for safety)
 	// os.Remove(backupPath)
-	
+
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (u *Updater) findAsset(release *Release) *Asset {
 	// Build expected filename patterns
 	os := runtime.GOOS
 	arch := runtime.GOARCH
-	
+
 	// Common naming patterns
 	patterns := []string{
 		fmt.Sprintf("%s_%s_%s", u.config.BinaryName, os, arch),
@@ -209,7 +209,7 @@ func (u *Updater) findAsset(release *Release) *Asset {
 		fmt.Sprintf("%s_%s_%s.tar.gz", u.config.BinaryName, os, arch),
 		fmt.Sprintf("%s-%s-%s.tar.gz", u.config.BinaryName, os, arch),
 	}
-	
+
 	// Also check for amd64 -> x86_64 mapping
 	if arch == "amd64" {
 		patterns = append(patterns,
@@ -218,7 +218,7 @@ func (u *Updater) findAsset(release *Release) *Asset {
 			fmt.Sprintf("%s_%s_x86_64.tar.gz", u.config.BinaryName, os),
 		)
 	}
-	
+
 	for _, asset := range release.Assets {
 		name := strings.ToLower(asset.Name)
 		for _, pattern := range patterns {
@@ -227,7 +227,7 @@ func (u *Updater) findAsset(release *Release) *Asset {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -237,17 +237,17 @@ func (u *Updater) downloadAsset(ctx context.Context, asset *Asset, destPath stri
 	if err != nil {
 		return err
 	}
-	
+
 	resp, err := u.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("download failed: %d", resp.StatusCode)
 	}
-	
+
 	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
@@ -400,13 +400,13 @@ func (u *Updater) Rollback() error {
 		return err
 	}
 	execPath, _ = filepath.EvalSymlinks(execPath)
-	
+
 	backupPath := execPath + ".backup"
-	
+
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 		return fmt.Errorf("no backup found")
 	}
-	
+
 	// Swap files
 	tmpPath := execPath + ".tmp"
 	if err := os.Rename(execPath, tmpPath); err != nil {
@@ -417,7 +417,7 @@ func (u *Updater) Rollback() error {
 		return err
 	}
 	_ = os.Remove(tmpPath)
-	
+
 	return nil
 }
 
@@ -461,7 +461,7 @@ func parseVersion(v string) [3]int {
 		if idx := strings.IndexAny(s, "-+"); idx >= 0 {
 			s = s[:idx]
 		}
-	_, _ = fmt.Sscanf(s, "%d", &parts[i]) // #nosec G602 -- parts is pre-allocated with known size
+		_, _ = fmt.Sscanf(s, "%d", &parts[i]) // #nosec G602 -- parts is pre-allocated with known size
 	}
 	return parts
 }
@@ -471,12 +471,12 @@ func FormatReleaseInfo(release *Release, hasUpdate bool) string {
 	if release == nil {
 		return "Unable to check for updates"
 	}
-	
+
 	status := "✅ You're up to date"
 	if hasUpdate {
 		status = "🆕 Update available!"
 	}
-	
+
 	return fmt.Sprintf(`%s
 
 📦 Latest: %s

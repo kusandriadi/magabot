@@ -31,7 +31,7 @@ type Session struct {
 	UserID      string                 `json:"user_id"`
 	Platform    string                 `json:"platform"`
 	ChatID      string                 `json:"chat_id"`
-	Task        string                 `json:"task,omitempty"`       // For sub-sessions
+	Task        string                 `json:"task,omitempty"` // For sub-sessions
 	Status      Status                 `json:"status"`
 	Result      string                 `json:"result,omitempty"`
 	Error       string                 `json:"error,omitempty"`
@@ -62,7 +62,7 @@ type Manager struct {
 	sessions   map[string]*Session
 	notify     NotifyFunc
 	taskRunner TaskRunner
-	maxHistory int // Max messages to keep per session
+	maxHistory int          // Max messages to keep per session
 	subCounter atomic.Int64 // monotonic counter for unique sub-session IDs
 	logger     *slog.Logger
 }
@@ -97,14 +97,14 @@ func (m *Manager) SetTaskRunner(runner TaskRunner) {
 // GetOrCreate gets an existing session or creates a new one
 func (m *Manager) GetOrCreate(platform, chatID, userID string) *Session {
 	key := fmt.Sprintf("%s:%s", platform, chatID)
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if session, ok := m.sessions[key]; ok {
 		return session
 	}
-	
+
 	session := &Session{
 		ID:        key,
 		Type:      "main",
@@ -116,7 +116,7 @@ func (m *Manager) GetOrCreate(platform, chatID, userID string) *Session {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	
+
 	m.sessions[key] = session
 	return session
 }
@@ -143,14 +143,14 @@ func (m *Manager) SessionStatus(id string) (Status, string, string, *time.Time) 
 func (m *Manager) AddMessage(session *Session, role, content string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	session.Messages = append(session.Messages, Message{
 		Role:      role,
 		Content:   content,
 		Timestamp: time.Now(),
 	})
 	session.UpdatedAt = time.Now()
-	
+
 	// Trim history if too long
 	if len(session.Messages) > m.maxHistory {
 		session.Messages = session.Messages[len(session.Messages)-m.maxHistory:]
@@ -181,7 +181,7 @@ func (m *Manager) GetHistory(session *Session, limit int) []Message {
 // Spawn creates a sub-session for background task
 func (m *Manager) Spawn(parent *Session, task string) (*Session, error) {
 	subID := fmt.Sprintf("%s:sub:%d", parent.ID, m.subCounter.Add(1))
-	
+
 	sub := &Session{
 		ID:        subID,
 		ParentID:  parent.ID,
@@ -194,14 +194,14 @@ func (m *Manager) Spawn(parent *Session, task string) (*Session, error) {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	
+
 	m.mu.Lock()
 	m.sessions[subID] = sub
 	m.mu.Unlock()
-	
+
 	// Run task in background
 	go m.runSubSession(sub)
-	
+
 	return sub, nil
 }
 
@@ -216,10 +216,10 @@ func (m *Manager) runSubSession(session *Session) {
 	session.Status = StatusRunning
 	session.cancelFunc = cancel
 	m.mu.Unlock()
-	
+
 	var result string
 	var err error
-	
+
 	if m.taskRunner != nil {
 		// Get parent context
 		parent := m.Get(session.ParentID)
@@ -227,18 +227,18 @@ func (m *Manager) runSubSession(session *Session) {
 		if parent != nil {
 			context = m.GetHistory(parent, 10)
 		}
-		
+
 		result, err = m.taskRunner.Execute(ctx, session.Task, context)
 	} else {
 		err = fmt.Errorf("no task runner configured")
 	}
-	
+
 	now := time.Now()
-	
+
 	m.mu.Lock()
 	session.CompletedAt = &now
 	session.UpdatedAt = now
-	
+
 	if err != nil {
 		session.Status = StatusFailed
 		session.Error = err.Error()
@@ -249,7 +249,7 @@ func (m *Manager) runSubSession(session *Session) {
 		m.logger.Info("sub-session completed", "id", session.ID)
 	}
 	m.mu.Unlock()
-	
+
 	// Notify parent
 	m.notifyCompletion(session)
 }
@@ -259,18 +259,18 @@ func (m *Manager) notifyCompletion(session *Session) {
 	if m.notify == nil {
 		return
 	}
-	
+
 	var message string
 	if session.Status == StatusComplete {
-		message = fmt.Sprintf("✅ *Task Complete*\n\n📋 %s\n\n%s", 
-			util.Truncate(session.Task, 100), 
+		message = fmt.Sprintf("✅ *Task Complete*\n\n📋 %s\n\n%s",
+			util.Truncate(session.Task, 100),
 			util.Truncate(session.Result, 1000))
 	} else {
 		message = fmt.Sprintf("❌ *Task Failed*\n\n📋 %s\n\n⚠️ %s",
 			util.Truncate(session.Task, 100),
 			session.Error)
 	}
-	
+
 	if err := m.notify(session.Platform, session.ChatID, message); err != nil {
 		m.logger.Error("failed to notify", "error", err)
 	}
@@ -280,7 +280,7 @@ func (m *Manager) notifyCompletion(session *Session) {
 func (m *Manager) List(userID string, includeComplete bool) []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	result := make([]*Session, 0)
 	for _, session := range m.sessions {
 		if userID != "" && session.UserID != userID {
@@ -291,7 +291,7 @@ func (m *Manager) List(userID string, includeComplete bool) []*Session {
 		}
 		result = append(result, session)
 	}
-	
+
 	return result
 }
 
@@ -299,14 +299,14 @@ func (m *Manager) List(userID string, includeComplete bool) []*Session {
 func (m *Manager) ListSubSessions(parentID string) []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	result := make([]*Session, 0)
 	for _, session := range m.sessions {
 		if session.ParentID == parentID {
 			result = append(result, session)
 		}
 	}
-	
+
 	return result
 }
 
@@ -341,10 +341,10 @@ func (m *Manager) Cancel(sessionID string) error {
 func (m *Manager) Clear(olderThan time.Duration) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	cutoff := time.Now().Add(-olderThan)
 	count := 0
-	
+
 	for id, session := range m.sessions {
 		if session.Status == StatusComplete || session.Status == StatusFailed || session.Status == StatusCanceled {
 			if session.CompletedAt != nil && session.CompletedAt.Before(cutoff) {
@@ -353,7 +353,7 @@ func (m *Manager) Clear(olderThan time.Duration) int {
 			}
 		}
 	}
-	
+
 	return count
 }
 
@@ -361,7 +361,7 @@ func (m *Manager) Clear(olderThan time.Duration) int {
 func (m *Manager) SetContext(session *Session, key string, value interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if session.Context == nil {
 		session.Context = make(map[string]interface{})
 	}
@@ -372,7 +372,7 @@ func (m *Manager) SetContext(session *Session, key string, value interface{}) {
 func (m *Manager) GetContext(session *Session, key string) interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	if session.Context == nil {
 		return nil
 	}

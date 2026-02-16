@@ -62,6 +62,9 @@ func TestSecretsLocalBackend(t *testing.T) {
 		}
 
 		value, err := backend.Get(ctx, "update_key")
+		if err != nil {
+			t.Fatalf("Failed to get updated key: %v", err)
+		}
 		if value != "value2" {
 			t.Errorf("Expected 'value2', got '%s'", value)
 		}
@@ -85,7 +88,7 @@ func TestSecretsLocalBackend(t *testing.T) {
 
 	t.Run("List", func(t *testing.T) {
 		// Clear and add known keys (ignore errors — keys may not exist)
-		backend.Delete(ctx, "api_key")   //nolint:errcheck
+		backend.Delete(ctx, "api_key")    //nolint:errcheck
 		backend.Delete(ctx, "update_key") //nolint:errcheck
 
 		if err := backend.Set(ctx, "key1", "val1"); err != nil {

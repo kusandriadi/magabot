@@ -940,7 +940,7 @@ func TestTryProvidersContextCancelled(t *testing.T) {
 
 	_, err := r.Complete(ctx, "user1", "hi")
 	if err == nil {
-		t.Error("expected error for cancelled context")
+		t.Error("expected error for canceled context")
 	}
 }
 

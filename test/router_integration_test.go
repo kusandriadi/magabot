@@ -18,12 +18,12 @@ import (
 
 // MockPlatform implements router.Platform for testing
 type MockPlatform struct {
-	name      string
-	handler   router.MessageHandler
-	started   bool
-	stopped   bool
-	messages  []string
-	mu        sync.Mutex
+	name     string
+	handler  router.MessageHandler
+	started  bool
+	stopped  bool
+	messages []string
+	mu       sync.Mutex
 }
 
 func NewMockPlatform(name string) *MockPlatform {

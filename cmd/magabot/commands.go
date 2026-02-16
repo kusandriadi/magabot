@@ -113,7 +113,7 @@ func cmdReset() {
 	fmt.Print("⚠️  This will reset your config but keep platform sessions. Continue? [y/N]: ")
 	answer, _ := reader.ReadString('\n')
 	if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-		fmt.Println("Reset cancelled.")
+		fmt.Println("Reset canceled.")
 		return
 	}
 
@@ -137,7 +137,7 @@ func cmdUninstall() {
 	fmt.Print("⚠️  This will completely remove magabot and all data. Continue? [y/N]: ")
 	answer, _ := reader.ReadString('\n')
 	if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-		fmt.Println("Uninstall cancelled.")
+		fmt.Println("Uninstall canceled.")
 		return
 	}
 

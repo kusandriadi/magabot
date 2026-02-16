@@ -139,6 +139,9 @@ func TestStorageIntegration(t *testing.T) {
 
 		// Get non-existent config — returns empty string, no error
 		value, err = store.GetConfig("nonexistent")
+		if err != nil {
+			t.Fatalf("GetConfig nonexistent should not error: %v", err)
+		}
 		if value != "" {
 			t.Errorf("Expected empty for nonexistent key, got %s", value)
 		}

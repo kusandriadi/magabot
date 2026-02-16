@@ -229,7 +229,7 @@ func TestExecuteCancelledContext(t *testing.T) {
 	sess := &Session{Agent: AgentClaude, Dir: dir}
 	_, err := m.Execute(ctx, sess, "test")
 	if err == nil {
-		t.Error("expected error from cancelled context")
+		t.Error("expected error from canceled context")
 	}
 }
 

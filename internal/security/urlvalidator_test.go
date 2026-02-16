@@ -93,7 +93,7 @@ func TestURLValidatorBlockedHosts(t *testing.T) {
 		"http://127.0.0.1/",
 		"http://0.0.0.0/",
 		"http://169.254.169.254/latest/meta-data/", // AWS metadata
-		"http://metadata.google.internal/",          // GCP metadata
+		"http://metadata.google.internal/",         // GCP metadata
 	}
 
 	for _, url := range blockedHosts {
@@ -169,9 +169,9 @@ func TestURLValidatorAllowedPorts(t *testing.T) {
 	v := NewURLValidator()
 
 	allowedURLs := []string{
-		"http://example.com/",      // default (80)
+		"http://example.com/", // default (80)
 		"http://example.com:80/",
-		"https://example.com/",     // default (443)
+		"https://example.com/", // default (443)
 		"https://example.com:443/",
 		"http://example.com:8080/",
 		"https://example.com:8443/",
@@ -326,10 +326,10 @@ func TestURLValidatorReservedIP(t *testing.T) {
 	v := NewURLValidator()
 
 	reservedURLs := []string{
-		"http://100.64.0.1/", // CGNAT
-		"http://192.0.2.1/",  // TEST-NET-1
+		"http://100.64.0.1/",   // CGNAT
+		"http://192.0.2.1/",    // TEST-NET-1
 		"http://198.51.100.1/", // TEST-NET-2
-		"http://203.0.113.1/", // TEST-NET-3
+		"http://203.0.113.1/",  // TEST-NET-3
 	}
 
 	for _, url := range reservedURLs {

@@ -529,7 +529,7 @@ func BenchmarkVaultEncrypt(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-_, _ = vault.Encrypt(data)
+		_, _ = vault.Encrypt(data)
 	}
 }
 
@@ -540,7 +540,7 @@ func BenchmarkVaultDecrypt(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-_, _ = vault.Decrypt(ciphertext)
+		_, _ = vault.Decrypt(ciphertext)
 	}
 }
 
@@ -790,7 +790,7 @@ func TestSessionManagerConcurrency(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			sm.GetOrCreate("telegram", "concurrent_user")
-_ = sm.Validate("telegram", "concurrent_user")
+			_ = sm.Validate("telegram", "concurrent_user")
 		}(i)
 	}
 	wg.Wait()

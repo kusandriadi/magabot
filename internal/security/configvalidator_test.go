@@ -22,7 +22,7 @@ func TestConfigValidatorValidateAll(t *testing.T) {
 	v := NewConfigValidator()
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-_ = os.WriteFile(configPath, []byte("test: true"), 0644)
+	_ = os.WriteFile(configPath, []byte("test: true"), 0644)
 
 	cfg := &SecurityConfig{
 		EncryptionKey:     GenerateKey(),
@@ -49,7 +49,7 @@ func TestConfigValidatorFilePermissions(t *testing.T) {
 	t.Run("InsecureConfigPermissions", func(t *testing.T) {
 		v := NewConfigValidator()
 		configPath := filepath.Join(dir, "config.yaml")
-_ = os.WriteFile(configPath, []byte("test"), 0644) // world readable
+		_ = os.WriteFile(configPath, []byte("test"), 0644) // world readable
 
 		cfg := &SecurityConfig{EncryptionKey: GenerateKey()}
 		issues := v.ValidateAll(configPath, dir, cfg)
@@ -68,8 +68,8 @@ _ = os.WriteFile(configPath, []byte("test"), 0644) // world readable
 
 	t.Run("SecureConfigPermissions", func(t *testing.T) {
 		configPath := filepath.Join(dir, "secure_config.yaml")
-_ = os.WriteFile(configPath, []byte("test"), 0600)
-_ = os.Chmod(dir, 0700)
+		_ = os.WriteFile(configPath, []byte("test"), 0600)
+		_ = os.Chmod(dir, 0700)
 
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
@@ -97,8 +97,8 @@ _ = os.Chmod(dir, 0700)
 func TestConfigValidatorSecrets(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-_ = os.WriteFile(configPath, []byte("test"), 0600)
-_ = os.Chmod(dir, 0700)
+	_ = os.WriteFile(configPath, []byte("test"), 0600)
+	_ = os.Chmod(dir, 0700)
 
 	t.Run("NoEncryptionKey", func(t *testing.T) {
 		v2 := NewConfigValidator()
@@ -209,8 +209,8 @@ _ = os.Chmod(dir, 0700)
 func TestConfigValidatorAccessControl(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-_ = os.WriteFile(configPath, []byte("test"), 0600)
-_ = os.Chmod(dir, 0700)
+	_ = os.WriteFile(configPath, []byte("test"), 0600)
+	_ = os.Chmod(dir, 0700)
 
 	t.Run("OpenAccessMode", func(t *testing.T) {
 		v2 := NewConfigValidator()
@@ -312,8 +312,8 @@ _ = os.Chmod(dir, 0700)
 func TestConfigValidatorRateLimits(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-_ = os.WriteFile(configPath, []byte("test"), 0600)
-_ = os.Chmod(dir, 0700)
+	_ = os.WriteFile(configPath, []byte("test"), 0600)
+	_ = os.Chmod(dir, 0700)
 
 	t.Run("NoRateLimits", func(t *testing.T) {
 		v2 := NewConfigValidator()
@@ -451,8 +451,8 @@ func TestFixPermissions(t *testing.T) {
 	dbPath := filepath.Join(dir, "magabot.db")
 
 	// Create files with wrong permissions
-_ = os.WriteFile(configPath, []byte("test"), 0644)
-_ = os.WriteFile(dbPath, []byte("test"), 0644)
+	_ = os.WriteFile(configPath, []byte("test"), 0644)
+	_ = os.WriteFile(dbPath, []byte("test"), 0644)
 
 	err := FixPermissions(configPath, dir)
 	if err != nil {

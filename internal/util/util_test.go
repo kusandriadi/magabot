@@ -156,13 +156,13 @@ func TestRemove(t *testing.T) {
 
 func TestAddUnique(t *testing.T) {
 	slice := []string{"a", "b"}
-	
+
 	// Add new
 	result := AddUnique(slice, "c")
 	if len(result) != 3 {
 		t.Errorf("Expected 3 elements, got %d", len(result))
 	}
-	
+
 	// Add existing (no change)
 	result = AddUnique(result, "a")
 	if len(result) != 3 {
@@ -191,7 +191,7 @@ func TestMaskSecret(t *testing.T) {
 
 func TestIsValidID(t *testing.T) {
 	valid := []string{"user", "user_123", "_private", "User-Name"}
-	invalid := []string{"", "123start", "has space", "too@special", 
+	invalid := []string{"", "123start", "has space", "too@special",
 		"verylongidthatexceedsixtyfourcharacterslimitwhichisquitealotofchars"}
 
 	for _, id := range valid {

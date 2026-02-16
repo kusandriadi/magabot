@@ -198,7 +198,7 @@ func TestToolsManagerIntegration(t *testing.T) {
 		cancel() // Cancel immediately
 
 		_, err := mgr.Execute(ctx, "slow_tool", nil)
-		// Depending on timing, may or may not be cancelled
+		// Depending on timing, may or may not be canceled
 		if err != nil && err != context.Canceled {
 			t.Logf("Got error (may be expected): %v", err)
 		}

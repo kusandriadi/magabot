@@ -287,7 +287,7 @@ func cronDeleteCmd(dataDir string) *cobra.Command {
 				var confirm string
 _, _ = fmt.Scanln(&confirm)
 				if strings.ToLower(confirm) != "y" {
-					fmt.Println("Cancelled.")
+					fmt.Println("Canceled.")
 					return nil
 				}
 			}

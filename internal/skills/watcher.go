@@ -11,13 +11,13 @@ import (
 
 // Watcher monitors skills directory for changes and triggers reload
 type Watcher struct {
-	manager    *Manager
-	logger     *slog.Logger
-	stopCh     chan struct{}
-	wg         sync.WaitGroup
-	interval   time.Duration
-	lastMod    map[string]time.Time
-	mu         sync.Mutex
+	manager  *Manager
+	logger   *slog.Logger
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
+	interval time.Duration
+	lastMod  map[string]time.Time
+	mu       sync.Mutex
 }
 
 // NewWatcher creates a new skills watcher

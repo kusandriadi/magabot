@@ -78,10 +78,10 @@ type APIAction struct {
 
 // Manager manages all loaded skills
 type Manager struct {
-	skills      map[string]*Skill
-	skillsDir   string
-	mu          sync.RWMutex
-	compiledRe  map[string]*regexp.Regexp
+	skills     map[string]*Skill
+	skillsDir  string
+	mu         sync.RWMutex
+	compiledRe map[string]*regexp.Regexp
 }
 
 // NewManager creates a new skill manager
