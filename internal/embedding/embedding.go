@@ -43,10 +43,10 @@ func validateTableName(name string) error {
 type Provider string
 
 const (
-	ProviderOpenAI   Provider = "openai"
-	ProviderVoyage   Provider = "voyage"
-	ProviderLocal    Provider = "local"    // Local embedding server (e.g., sentence-transformers)
-	ProviderCohere   Provider = "cohere"
+	ProviderOpenAI Provider = "openai"
+	ProviderVoyage Provider = "voyage"
+	ProviderLocal  Provider = "local" // Local embedding server (e.g., sentence-transformers)
+	ProviderCohere Provider = "cohere"
 
 	// maxResponseSize limits embedding API response reads to prevent OOM (10 MB).
 	maxResponseSize = 10 * 1024 * 1024
@@ -54,27 +54,27 @@ const (
 
 // defaultDimensions holds the default embedding dimensions for each model.
 var defaultDimensions = map[string]int{
-	"text-embedding-3-small":      1536,
-	"text-embedding-3-large":      3072,
-	"text-embedding-ada-002":      1536,
-	"voyage-3":                    1024,
-	"voyage-3-lite":               512,
-	"voyage-code-3":               1024,
-	"voyage-finance-2":            1024,
-	"embed-english-v3.0":          1024,
-	"embed-multilingual-v3.0":     1024,
+	"text-embedding-3-small":  1536,
+	"text-embedding-3-large":  3072,
+	"text-embedding-ada-002":  1536,
+	"voyage-3":                1024,
+	"voyage-3-lite":           512,
+	"voyage-code-3":           1024,
+	"voyage-finance-2":        1024,
+	"embed-english-v3.0":      1024,
+	"embed-multilingual-v3.0": 1024,
 }
 
 // Config holds embedding service configuration.
 type Config struct {
-	Provider    Provider
-	APIKey      string // #nosec G117 -- config field, not serialized to untrusted output
-	Model       string
-	BaseURL     string // Custom base URL for API
-	Dimensions  int    // Output dimensions (for models that support it)
-	Timeout     time.Duration
-	MaxBatchSize int   // Max texts per batch request
-	Logger      *slog.Logger
+	Provider     Provider
+	APIKey       string // #nosec G117 -- config field, not serialized to untrusted output
+	Model        string
+	BaseURL      string // Custom base URL for API
+	Dimensions   int    // Output dimensions (for models that support it)
+	Timeout      time.Duration
+	MaxBatchSize int // Max texts per batch request
+	Logger       *slog.Logger
 }
 
 // Client generates embeddings using an API provider.
@@ -212,10 +212,10 @@ func ValidateConfig(cfg Config) error {
 
 // Embedding represents a single embedding result.
 type Embedding struct {
-	Text      string    `json:"text"`
-	Vector    []float32 `json:"vector"`
-	Model     string    `json:"model,omitempty"`
-	TokenCount int      `json:"token_count,omitempty"`
+	Text       string    `json:"text"`
+	Vector     []float32 `json:"vector"`
+	Model      string    `json:"model,omitempty"`
+	TokenCount int       `json:"token_count,omitempty"`
 }
 
 // Embed generates embeddings for a list of texts.
@@ -867,7 +867,7 @@ func (s *VectorStore) SearchByVector(queryVector []float32, limit int) ([]Search
 		}
 
 		if metaData != "" {
-_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
+			_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
 		similarity := CosineSimilarity(queryVector, entry.Embedding)
@@ -955,7 +955,7 @@ func (s *VectorStore) List(offset, limit int) ([]*Entry, error) {
 		}
 
 		if metaData != "" {
-_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
+			_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
 		entries = append(entries, &entry)

@@ -21,9 +21,9 @@ var (
 
 // SignedMessage represents a message with HMAC signature
 type SignedMessage struct {
-	Content   string `json:"c"`           // Base64 encoded content
-	Timestamp int64  `json:"t"`           // Unix timestamp
-	Signature string `json:"s"`           // HMAC-SHA256 signature
+	Content   string `json:"c"` // Base64 encoded content
+	Timestamp int64  `json:"t"` // Unix timestamp
+	Signature string `json:"s"` // HMAC-SHA256 signature
 }
 
 // Signer provides HMAC signing and verification
@@ -38,11 +38,11 @@ func NewSigner(keyBase64 string, ttl time.Duration) (*Signer, error) {
 	if err != nil {
 		return nil, ErrInvalidKey
 	}
-	
+
 	if len(key) < 32 {
 		return nil, errors.New("key must be at least 256 bits")
 	}
-	
+
 	return &Signer{
 		key: key,
 		ttl: ttl,
@@ -55,17 +55,17 @@ func (s *Signer) Sign(content []byte) (string, error) {
 		Content:   base64.StdEncoding.EncodeToString(content),
 		Timestamp: time.Now().Unix(),
 	}
-	
+
 	// Create signature over content + timestamp
 	sig := s.computeSignature(msg.Content, msg.Timestamp)
 	msg.Signature = base64.StdEncoding.EncodeToString(sig)
-	
+
 	// Encode entire message as JSON then base64
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {
 		return "", err
 	}
-	
+
 	return base64.StdEncoding.EncodeToString(jsonBytes), nil
 }
 
@@ -76,13 +76,13 @@ func (s *Signer) Verify(signedMessage string) ([]byte, error) {
 	if err != nil {
 		return nil, ErrInvalidFormat
 	}
-	
+
 	// Parse JSON
 	var msg SignedMessage
 	if err := json.Unmarshal(jsonBytes, &msg); err != nil {
 		return nil, ErrInvalidFormat
 	}
-	
+
 	// Check expiry if TTL is set
 	if s.ttl > 0 {
 		msgTime := time.Unix(msg.Timestamp, 0)
@@ -90,24 +90,24 @@ func (s *Signer) Verify(signedMessage string) ([]byte, error) {
 			return nil, ErrExpiredMessage
 		}
 	}
-	
+
 	// Verify signature
 	expectedSig := s.computeSignature(msg.Content, msg.Timestamp)
 	actualSig, err := base64.StdEncoding.DecodeString(msg.Signature)
 	if err != nil {
 		return nil, ErrInvalidSignature
 	}
-	
+
 	if !hmac.Equal(expectedSig, actualSig) {
 		return nil, ErrInvalidSignature
 	}
-	
+
 	// Decode content
 	content, err := base64.StdEncoding.DecodeString(msg.Content)
 	if err != nil {
 		return nil, ErrInvalidFormat
 	}
-	
+
 	return content, nil
 }
 
@@ -131,12 +131,12 @@ func NewIntegrityVault(encKeyBase64, signKeyBase64 string) (*IntegrityVault, err
 	if err != nil {
 		return nil, fmt.Errorf("create vault: %w", err)
 	}
-	
+
 	signer, err := NewSigner(signKeyBase64, 0) // No TTL for stored data
 	if err != nil {
 		return nil, fmt.Errorf("create signer: %w", err)
 	}
-	
+
 	return &IntegrityVault{
 		vault:  vault,
 		signer: signer,
@@ -150,13 +150,13 @@ func (iv *IntegrityVault) EncryptAndSign(plaintext []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("encrypt: %w", err)
 	}
-	
+
 	// Then sign the ciphertext
 	signed, err := iv.signer.Sign([]byte(ciphertext))
 	if err != nil {
 		return "", fmt.Errorf("sign: %w", err)
 	}
-	
+
 	return signed, nil
 }
 
@@ -167,13 +167,13 @@ func (iv *IntegrityVault) VerifyAndDecrypt(signedCiphertext string) ([]byte, err
 	if err != nil {
 		return nil, fmt.Errorf("verify: %w", err)
 	}
-	
+
 	// Then decrypt
 	plaintext, err := iv.vault.Decrypt(string(ciphertext))
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}
-	
+
 	return plaintext, nil
 }
 

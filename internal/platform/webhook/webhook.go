@@ -60,7 +60,7 @@ func (rl *rateLimiter) allow(key string) bool {
 
 	now := time.Now()
 	w, exists := rl.requests[key]
-	
+
 	if !exists || now.Sub(w.windowStart) >= rl.window {
 		rl.requests[key] = &rateWindow{count: 1, windowStart: now}
 		return true
@@ -104,8 +104,8 @@ type failureTracker struct {
 }
 
 type failureRecord struct {
-	count      int
-	lastFail   time.Time
+	count       int
+	lastFail    time.Time
 	lockedUntil time.Time
 }
 
@@ -120,7 +120,7 @@ func newFailureTracker(maxFails int, lockout time.Duration) *failureTracker {
 func (ft *failureTracker) isLocked(key string) bool {
 	ft.mu.RLock()
 	defer ft.mu.RUnlock()
-	
+
 	if r, exists := ft.failures[key]; exists {
 		if time.Now().Before(r.lockedUntil) {
 			return true
@@ -132,21 +132,21 @@ func (ft *failureTracker) isLocked(key string) bool {
 func (ft *failureTracker) recordFailure(key string) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
-	
+
 	r, exists := ft.failures[key]
 	if !exists {
 		r = &failureRecord{}
 		ft.failures[key] = r
 	}
-	
+
 	// Reset if last failure was long ago
 	if time.Since(r.lastFail) > ft.lockout {
 		r.count = 0
 	}
-	
+
 	r.count++
 	r.lastFail = time.Now()
-	
+
 	if r.count >= ft.maxFails {
 		r.lockedUntil = time.Now().Add(ft.lockout)
 	}
@@ -197,10 +197,10 @@ type Config struct {
 	RateLimitWindow  time.Duration // window duration (default: 1 minute)
 
 	// Security
-	MaxAuthFailures int           // lockout after N failures (default: 5)
-	AuthLockoutTime time.Duration // lockout duration (default: 15 minutes)
-	RequireTimestamp bool         // require X-Timestamp header within 5 minutes
-	RequireNonce     bool         // require X-Nonce header (replay prevention)
+	MaxAuthFailures  int           // lockout after N failures (default: 5)
+	AuthLockoutTime  time.Duration // lockout duration (default: 15 minutes)
+	RequireTimestamp bool          // require X-Timestamp header within 5 minutes
+	RequireNonce     bool          // require X-Nonce header (replay prevention)
 }
 
 // New creates a new webhook server
@@ -512,7 +512,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.logger.Warn("handler error", "error", err, "request_id", requestID)
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"ok":         true,
@@ -541,12 +541,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":      "ok",
-			"goroutines":  runtime.NumGoroutine(),
-			"heap_alloc":  m.HeapAlloc,
-			"heap_sys":    m.HeapSys,
-			"gc_cycles":   m.NumGC,
-			"go_version":  runtime.Version(),
+			"status":     "ok",
+			"goroutines": runtime.NumGoroutine(),
+			"heap_alloc": m.HeapAlloc,
+			"heap_sys":   m.HeapSys,
+			"gc_cycles":  m.NumGC,
+			"go_version": runtime.Version(),
 		})
 		return
 	}
@@ -563,14 +563,14 @@ func (s *Server) authenticate(r *http.Request) (string, bool) {
 	switch s.config.AuthMethod {
 	case "none", "":
 		return "", true
-		
+
 	case "bearer":
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
 			return "", false
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		
+
 		// Check token-to-user mapping (secure: token IS the identity)
 		if len(s.config.BearerTokens) > 0 {
 			for t, userID := range s.config.BearerTokens {
@@ -580,13 +580,13 @@ func (s *Server) authenticate(r *http.Request) (string, bool) {
 			}
 			return "", false
 		}
-		
+
 		// Legacy: single token (user_id from payload)
 		if subtle.ConstantTimeCompare([]byte(token), []byte(s.config.BearerToken)) == 1 {
 			return "", true
 		}
 		return "", false
-		
+
 	case "basic":
 		user, pass, ok := r.BasicAuth()
 		if !ok {
@@ -597,7 +597,7 @@ func (s *Server) authenticate(r *http.Request) (string, bool) {
 			return user, true // username is the user_id
 		}
 		return "", false
-			
+
 	case "hmac":
 		// Check X-Hub-Signature-256 (GitHub style)
 		sig := r.Header.Get("X-Hub-Signature-256")
@@ -640,7 +640,7 @@ func (s *Server) authenticate(r *http.Request) (string, bool) {
 		}
 		return "", false
 	}
-	
+
 	return "", false
 }
 
@@ -716,7 +716,7 @@ func (s *Server) parsePayload(body []byte, r *http.Request) (text string, userID
 		if text != "" {
 			return text, userID
 		}
-		
+
 		// GitHub webhook
 		if commits, ok := data["commits"].([]interface{}); ok && len(commits) > 0 {
 			if commit, ok := commits[0].(map[string]interface{}); ok {
@@ -732,7 +732,7 @@ func (s *Server) parsePayload(body []byte, r *http.Request) (text string, userID
 			}
 			return text, userID
 		}
-		
+
 		// Grafana alert
 		if title, ok := data["title"].(string); ok {
 			if state, ok := data["state"].(string); ok {

@@ -93,11 +93,11 @@ type BotConfig struct {
 
 // PlatformsConfig holds all platform configurations
 type PlatformsConfig struct {
-	Telegram  *TelegramConfig  `yaml:"telegram,omitempty"`
-	Discord   *DiscordConfig   `yaml:"discord,omitempty"`
-	Slack     *SlackConfig     `yaml:"slack,omitempty"`
-	WhatsApp  *WhatsAppConfig  `yaml:"whatsapp,omitempty"`
-	Webhook   *WebhookConfig   `yaml:"webhook,omitempty"`
+	Telegram *TelegramConfig `yaml:"telegram,omitempty"`
+	Discord  *DiscordConfig  `yaml:"discord,omitempty"`
+	Slack    *SlackConfig    `yaml:"slack,omitempty"`
+	WhatsApp *WhatsAppConfig `yaml:"whatsapp,omitempty"`
+	Webhook  *WebhookConfig  `yaml:"webhook,omitempty"`
 }
 
 // TelegramConfig for Telegram platform
@@ -166,7 +166,7 @@ type WebhookConfig struct {
 	Path         string            `yaml:"path"`
 	Bind         string            `yaml:"bind"`
 	Secret       string            `yaml:"secret,omitempty"`
-	AuthMethod   string            `yaml:"auth_method"` // bearer, hmac, none
+	AuthMethod   string            `yaml:"auth_method"`             // bearer, hmac, none
 	BearerToken  string            `yaml:"bearer_token,omitempty"`  // Legacy single token
 	BearerTokens map[string]string `yaml:"bearer_tokens,omitempty"` // token -> user_id (secure)
 	HMACSecret   string            `yaml:"hmac_secret,omitempty"`   // Legacy single secret
@@ -178,13 +178,13 @@ type WebhookConfig struct {
 
 // LLMConfig holds LLM provider settings
 type LLMConfig struct {
-	Main         string          `yaml:"main"`          // Main/primary provider
-	MainProvider string          `yaml:"main_provider"` // Alias for main
-	Providers       ProvidersConfig `yaml:"providers"`        // Alternative structure
-	SystemPrompt    string          `yaml:"system_prompt"`
-	MaxInputLength  int             `yaml:"max_input_length"`
-	Timeout         int             `yaml:"timeout"` // seconds
-	RateLimit       int             `yaml:"rate_limit"`
+	Main           string          `yaml:"main"`          // Main/primary provider
+	MainProvider   string          `yaml:"main_provider"` // Alias for main
+	Providers      ProvidersConfig `yaml:"providers"`     // Alternative structure
+	SystemPrompt   string          `yaml:"system_prompt"`
+	MaxInputLength int             `yaml:"max_input_length"`
+	Timeout        int             `yaml:"timeout"` // seconds
+	RateLimit      int             `yaml:"rate_limit"`
 
 	// Direct provider configs (preferred structure)
 	Anthropic LLMProviderConfig `yaml:"anthropic"`
@@ -242,9 +242,9 @@ type MemoryConfig struct {
 
 // SessionConfig holds session settings
 type SessionConfig struct {
-	MaxHistory   int           `yaml:"max_history"`   // Max messages per session
-	TaskTimeout  time.Duration `yaml:"task_timeout"`  // Timeout for background tasks
-	CleanupAge   time.Duration `yaml:"cleanup_age"`   // When to cleanup old sessions
+	MaxHistory  int           `yaml:"max_history"`  // Max messages per session
+	TaskTimeout time.Duration `yaml:"task_timeout"` // Timeout for background tasks
+	CleanupAge  time.Duration `yaml:"cleanup_age"`  // When to cleanup old sessions
 }
 
 // CronJob defines a scheduled job
@@ -324,11 +324,11 @@ type BackupConfig struct {
 // HookConfig defines an event-driven shell command hook.
 type HookConfig struct {
 	Name      string   `yaml:"name"`
-	Event     string   `yaml:"event"`                // pre_message, post_response, on_command, on_start, on_stop, on_error
+	Event     string   `yaml:"event"` // pre_message, post_response, on_command, on_start, on_stop, on_error
 	Command   string   `yaml:"command"`
-	Timeout   int      `yaml:"timeout,omitempty"`     // seconds, default 10
-	Platforms []string `yaml:"platforms,omitempty"`    // empty = all platforms
-	Async     bool     `yaml:"async,omitempty"`        // fire-and-forget
+	Timeout   int      `yaml:"timeout,omitempty"`   // seconds, default 10
+	Platforms []string `yaml:"platforms,omitempty"` // empty = all platforms
+	Async     bool     `yaml:"async,omitempty"`     // fire-and-forget
 }
 
 // AgentConfig holds coding agent session settings
@@ -362,38 +362,38 @@ type VaultSecretsConfig struct {
 
 // SubAgentConfig holds sub-agent system settings
 type SubAgentConfig struct {
-	Enabled    bool          `yaml:"enabled"`               // Enable sub-agent system
-	MaxAgents  int           `yaml:"max_agents"`            // Max concurrent agents (default: 50)
-	MaxDepth   int           `yaml:"max_depth"`             // Max nesting depth (default: 5)
-	MaxHistory int           `yaml:"max_history"`           // Max messages per agent (default: 100)
-	Timeout    time.Duration `yaml:"timeout"`               // Default task timeout (default: 5m)
-	Persist    bool          `yaml:"persist"`               // Persist agent state across restarts
+	Enabled    bool          `yaml:"enabled"`     // Enable sub-agent system
+	MaxAgents  int           `yaml:"max_agents"`  // Max concurrent agents (default: 50)
+	MaxDepth   int           `yaml:"max_depth"`   // Max nesting depth (default: 5)
+	MaxHistory int           `yaml:"max_history"` // Max messages per agent (default: 100)
+	Timeout    time.Duration `yaml:"timeout"`     // Default task timeout (default: 5m)
+	Persist    bool          `yaml:"persist"`     // Persist agent state across restarts
 }
 
 // PluginConfig holds plugin system settings
 type PluginConfig struct {
-	Enabled    bool     `yaml:"enabled"`               // Enable plugin system
-	Dirs       []string `yaml:"dirs"`                  // Plugin directories to scan
-	AutoLoad   bool     `yaml:"auto_load"`             // Auto-load plugins on startup
-	AutoStart  bool     `yaml:"auto_start"`            // Auto-start plugins after loading
-	HotReload  bool     `yaml:"hot_reload"`            // Watch for plugin changes
-	Allowlist  []string `yaml:"allowlist,omitempty"`   // Only load these plugins (empty = all)
-	Denylist   []string `yaml:"denylist,omitempty"`    // Never load these plugins
+	Enabled   bool     `yaml:"enabled"`             // Enable plugin system
+	Dirs      []string `yaml:"dirs"`                // Plugin directories to scan
+	AutoLoad  bool     `yaml:"auto_load"`           // Auto-load plugins on startup
+	AutoStart bool     `yaml:"auto_start"`          // Auto-start plugins after loading
+	HotReload bool     `yaml:"hot_reload"`          // Watch for plugin changes
+	Allowlist []string `yaml:"allowlist,omitempty"` // Only load these plugins (empty = all)
+	Denylist  []string `yaml:"denylist,omitempty"`  // Never load these plugins
 }
 
 // EmbeddingConfig holds embedding/vector settings
 type EmbeddingConfig struct {
-	Enabled      bool   `yaml:"enabled"`               // Enable embedding generation
-	Provider     string `yaml:"provider"`              // openai, voyage, cohere, local
-	APIKey       string `yaml:"api_key"`               // API key for provider // #nosec G117
-	Model        string `yaml:"model"`                 // Embedding model name
-	BaseURL      string `yaml:"base_url,omitempty"`    // Custom API base URL
-	Dimensions   int    `yaml:"dimensions,omitempty"`  // Output dimensions
-	MaxBatchSize int    `yaml:"max_batch_size"`        // Max texts per batch (default: 100)
-	Timeout      int    `yaml:"timeout"`               // API timeout in seconds (default: 30)
+	Enabled      bool   `yaml:"enabled"`              // Enable embedding generation
+	Provider     string `yaml:"provider"`             // openai, voyage, cohere, local
+	APIKey       string `yaml:"api_key"`              // API key for provider // #nosec G117
+	Model        string `yaml:"model"`                // Embedding model name
+	BaseURL      string `yaml:"base_url,omitempty"`   // Custom API base URL
+	Dimensions   int    `yaml:"dimensions,omitempty"` // Output dimensions
+	MaxBatchSize int    `yaml:"max_batch_size"`       // Max texts per batch (default: 100)
+	Timeout      int    `yaml:"timeout"`              // API timeout in seconds (default: 30)
 	// Memory integration
-	AutoEmbed    bool   `yaml:"auto_embed"`            // Auto-generate embeddings for memories
-	SearchLimit  int    `yaml:"search_limit"`          // Default search result limit (default: 10)
+	AutoEmbed   bool `yaml:"auto_embed"`   // Auto-generate embeddings for memories
+	SearchLimit int  `yaml:"search_limit"` // Default search result limit (default: 10)
 }
 
 // LocalSecretsConfig holds local file-based secrets settings
@@ -471,27 +471,27 @@ func (c *Config) setDefaults() {
 	}
 	// Expand ~ in paths
 	c.Paths.DataDir = expandPath(c.Paths.DataDir)
-	
+
 	if c.Paths.LogsDir == "" {
 		c.Paths.LogsDir = filepath.Join(c.Paths.DataDir, "logs")
 	}
 	c.Paths.LogsDir = expandPath(c.Paths.LogsDir)
-	
+
 	if c.Paths.MemoryDir == "" {
 		c.Paths.MemoryDir = filepath.Join(c.Paths.DataDir, "memory")
 	}
 	c.Paths.MemoryDir = expandPath(c.Paths.MemoryDir)
-	
+
 	if c.Paths.CacheDir == "" {
 		c.Paths.CacheDir = filepath.Join(c.Paths.DataDir, "cache")
 	}
 	c.Paths.CacheDir = expandPath(c.Paths.CacheDir)
-	
+
 	if c.Paths.ExportsDir == "" {
 		c.Paths.ExportsDir = filepath.Join(c.Paths.DataDir, "exports")
 	}
 	c.Paths.ExportsDir = expandPath(c.Paths.ExportsDir)
-	
+
 	if c.Paths.DownloadsDir == "" {
 		c.Paths.DownloadsDir = filepath.Join(c.Paths.DataDir, "downloads")
 	}

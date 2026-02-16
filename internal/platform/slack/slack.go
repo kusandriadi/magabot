@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kusa/magabot/internal/router"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
-	"github.com/kusa/magabot/internal/router"
 )
 
 // Bot represents a Slack bot

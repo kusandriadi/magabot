@@ -89,9 +89,9 @@ func (m *Manager) Create(dataDir string, platforms []string) (*BackupInfo, error
 
 	// Add manifest
 	manifest := map[string]interface{}{
-		"version":    "1.0",
-		"timestamp":  timestamp,
-		"platforms":  platforms,
+		"version":   "1.0",
+		"timestamp": timestamp,
+		"platforms": platforms,
 	}
 	manifestData, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -187,7 +187,7 @@ func copyFileToArchive(tw *tar.Writer, file string) error {
 // Restore restores from a backup
 func (m *Manager) Restore(filename, dataDir string) error {
 	backupFile := filepath.Join(m.backupPath, filename)
-	
+
 	f, err := os.Open(backupFile)
 	if err != nil {
 		return err

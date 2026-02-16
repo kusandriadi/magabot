@@ -26,10 +26,10 @@ func (h *SessionHandler) HandleCommand(userID, platform, chatID string, args []s
 	if len(args) == 0 {
 		return h.showHelp(), nil
 	}
-	
+
 	cmd := strings.ToLower(args[0])
 	subArgs := args[1:]
-	
+
 	switch cmd {
 	case "spawn", "run", "bg":
 		return h.spawnTask(userID, platform, chatID, subArgs)
@@ -53,18 +53,18 @@ func (h *SessionHandler) spawnTask(userID, platform, chatID string, args []strin
 	if len(args) == 0 {
 		return "Usage: /task spawn <task description>", nil
 	}
-	
+
 	task := strings.Join(args, " ")
-	
+
 	// Get or create main session
 	mainSession := h.manager.GetOrCreate(platform, chatID, userID)
-	
+
 	// Spawn sub-session
 	subSession, err := h.manager.Spawn(mainSession, task)
 	if err != nil {
 		return "", err
 	}
-	
+
 	return fmt.Sprintf("🚀 *Task Spawned*\n\n📋 %s\n🔑 ID: %s\n\nI'll notify you when it's done!",
 		util.Truncate(task, 100), subSession.ID[:16]), nil
 }
@@ -72,14 +72,14 @@ func (h *SessionHandler) spawnTask(userID, platform, chatID string, args []strin
 // listSessions lists active sessions
 func (h *SessionHandler) listSessions(userID string) (string, error) {
 	sessions := h.manager.List(userID, false)
-	
+
 	if len(sessions) == 0 {
 		return "📋 No active sessions.", nil
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("📋 *Active Sessions* (%d)\n\n", len(sessions)))
-	
+
 	for _, s := range sessions {
 		icon := "🔄"
 		switch s.Status {
@@ -92,13 +92,13 @@ func (h *SessionHandler) listSessions(userID string) (string, error) {
 		case session.StatusCanceled:
 			icon = "🚫"
 		}
-		
+
 		sb.WriteString(fmt.Sprintf("%s `%s` [%s]\n", icon, s.ID[:12], s.Type))
 		if s.Task != "" {
 			sb.WriteString(fmt.Sprintf("   📋 %s\n", util.Truncate(s.Task, 50)))
 		}
 	}
-	
+
 	return sb.String(), nil
 }
 
@@ -107,9 +107,9 @@ func (h *SessionHandler) sessionStatus(args []string) (string, error) {
 	if len(args) == 0 {
 		return "Usage: /task status <session_id>", nil
 	}
-	
+
 	sessionID := args[0]
-	
+
 	// Find session by partial ID
 	sessions := h.manager.List("", true)
 	for _, s := range sessions {
@@ -117,14 +117,14 @@ func (h *SessionHandler) sessionStatus(args []string) (string, error) {
 			return h.formatSessionStatus(s), nil
 		}
 	}
-	
+
 	return fmt.Sprintf("❌ Session not found: %s", sessionID), nil
 }
 
 // formatSessionStatus formats session details
 func (h *SessionHandler) formatSessionStatus(s *session.Session) string {
 	var sb strings.Builder
-	
+
 	icon := "🔄"
 	switch s.Status {
 	case session.StatusComplete:
@@ -136,29 +136,29 @@ func (h *SessionHandler) formatSessionStatus(s *session.Session) string {
 	case session.StatusCanceled:
 		icon = "🚫"
 	}
-	
+
 	sb.WriteString(fmt.Sprintf("%s *Session Status*\n\n", icon))
 	sb.WriteString(fmt.Sprintf("ID: `%s`\n", s.ID))
 	sb.WriteString(fmt.Sprintf("Type: %s\n", s.Type))
 	sb.WriteString(fmt.Sprintf("Status: %s\n", s.Status))
-	
+
 	if s.Task != "" {
 		sb.WriteString(fmt.Sprintf("\n📋 *Task:*\n%s\n", s.Task))
 	}
-	
+
 	if s.Result != "" {
 		sb.WriteString(fmt.Sprintf("\n✅ *Result:*\n%s\n", util.Truncate(s.Result, 500)))
 	}
-	
+
 	if s.Error != "" {
 		sb.WriteString(fmt.Sprintf("\n❌ *Error:*\n%s\n", s.Error))
 	}
-	
+
 	sb.WriteString(fmt.Sprintf("\n📅 Created: %s", s.CreatedAt.Format("15:04:05")))
 	if s.CompletedAt != nil {
 		sb.WriteString(fmt.Sprintf("\n⏱️ Completed: %s", s.CompletedAt.Format("15:04:05")))
 	}
-	
+
 	return sb.String()
 }
 
@@ -167,9 +167,9 @@ func (h *SessionHandler) cancelSession(args []string) (string, error) {
 	if len(args) == 0 {
 		return "Usage: /task cancel <session_id>", nil
 	}
-	
+
 	sessionID := args[0]
-	
+
 	// Find session by partial ID
 	sessions := h.manager.List("", false)
 	for _, s := range sessions {
@@ -180,7 +180,7 @@ func (h *SessionHandler) cancelSession(args []string) (string, error) {
 			return fmt.Sprintf("🚫 Canceled session: %s", s.ID[:12]), nil
 		}
 	}
-	
+
 	return fmt.Sprintf("❌ Session not found: %s", sessionID), nil
 }
 

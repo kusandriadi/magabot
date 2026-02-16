@@ -287,4 +287,3 @@ Note: Config changes via chat trigger auto-restart.
 
 File: ` + configFile)
 }
-

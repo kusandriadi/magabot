@@ -18,12 +18,12 @@ import (
 
 // SemanticStore provides semantic memory with embedding-based similarity search.
 type SemanticStore struct {
-	mu       sync.RWMutex
-	vectors  *embedding.VectorStore
-	client   *embedding.Client
-	userID   string
-	dataDir  string
-	logger   *slog.Logger
+	mu      sync.RWMutex
+	vectors *embedding.VectorStore
+	client  *embedding.Client
+	userID  string
+	dataDir string
+	logger  *slog.Logger
 }
 
 // SemanticConfig holds configuration for semantic memory.
@@ -39,11 +39,11 @@ type SemanticConfig struct {
 type SemanticMemory struct {
 	ID          string                 `json:"id"`
 	Content     string                 `json:"content"`
-	Type        string                 `json:"type"`        // fact, preference, event, note, context
-	Source      string                 `json:"source"`      // chat, manual, auto
+	Type        string                 `json:"type"`   // fact, preference, event, note, context
+	Source      string                 `json:"source"` // chat, manual, auto
 	Platform    string                 `json:"platform"`
 	Tags        []string               `json:"tags,omitempty"`
-	Importance  int                    `json:"importance"`  // 1-10
+	Importance  int                    `json:"importance"` // 1-10
 	AccessCount int                    `json:"access_count"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 	CreatedAt   time.Time              `json:"created_at"`

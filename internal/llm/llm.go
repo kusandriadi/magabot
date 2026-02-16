@@ -22,14 +22,14 @@ var (
 // ContentBlock represents a content part (text or image)
 type ContentBlock struct {
 	Type      string `json:"type"`                 // "text" or "image"
-	Text      string `json:"text,omitempty"`        // For text blocks
-	MimeType  string `json:"mime_type,omitempty"`   // For image blocks (e.g. "image/jpeg")
-	ImageData string `json:"image_data,omitempty"`  // Base64-encoded image data
+	Text      string `json:"text,omitempty"`       // For text blocks
+	MimeType  string `json:"mime_type,omitempty"`  // For image blocks (e.g. "image/jpeg")
+	ImageData string `json:"image_data,omitempty"` // Base64-encoded image data
 }
 
 // Message represents a chat message
 type Message struct {
-	Role    string         `json:"role"`    // "system", "user", "assistant"
+	Role    string         `json:"role"` // "system", "user", "assistant"
 	Content string         `json:"content"`
 	Blocks  []ContentBlock `json:"blocks,omitempty"` // Multi-modal content blocks
 }
@@ -117,18 +117,18 @@ func NewRouter(cfg *Config) *Router {
 func DetectProvider(model string) string {
 	model = strings.ToLower(model)
 	prefixes := map[string]string{
-		"claude":   "anthropic",
-		"gpt":     "openai",
-		"o1":      "openai",
-		"o3":      "openai",
-		"gemini":  "gemini",
-		"glm":    "glm",
-		"deepseek": "deepseek",
-		"llama":   "local",
-		"mistral": "local",
-		"mixtral": "local",
-		"phi":     "local",
-		"qwen":    "local",
+		"claude":    "anthropic",
+		"gpt":       "openai",
+		"o1":        "openai",
+		"o3":        "openai",
+		"gemini":    "gemini",
+		"glm":       "glm",
+		"deepseek":  "deepseek",
+		"llama":     "local",
+		"mistral":   "local",
+		"mixtral":   "local",
+		"phi":       "local",
+		"qwen":      "local",
 		"codellama": "local",
 	}
 	for prefix, provider := range prefixes {

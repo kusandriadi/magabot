@@ -16,17 +16,17 @@ import (
 
 // Memory represents a single memory entry
 type Memory struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`      // fact, preference, event, note
-	Content   string    `json:"content"`   // The actual memory content
-	Keywords  []string  `json:"keywords"`  // For search
-	Source    string    `json:"source"`    // Where this came from (chat, manual, etc)
-	UserID    string    `json:"user_id"`   // Owner of this memory
-	Platform  string    `json:"platform"`  // Platform where created
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	AccessCount int     `json:"access_count"` // How often retrieved
-	Importance  int     `json:"importance"`   // 1-10 scale
+	ID          string    `json:"id"`
+	Type        string    `json:"type"`     // fact, preference, event, note
+	Content     string    `json:"content"`  // The actual memory content
+	Keywords    []string  `json:"keywords"` // For search
+	Source      string    `json:"source"`   // Where this came from (chat, manual, etc)
+	UserID      string    `json:"user_id"`  // Owner of this memory
+	Platform    string    `json:"platform"` // Platform where created
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	AccessCount int       `json:"access_count"` // How often retrieved
+	Importance  int       `json:"importance"`   // 1-10 scale
 }
 
 // Store manages persistent memory storage
@@ -44,17 +44,17 @@ func NewStore(dataDir, userID string) (*Store, error) {
 		return nil, fmt.Errorf("invalid user ID")
 	}
 	filePath := filepath.Join(dataDir, "memory", fmt.Sprintf("%s.json", safeID))
-	
+
 	store := &Store{
 		memories: make(map[string]*Memory),
 		filePath: filePath,
 		userID:   userID,
 	}
-	
+
 	if err := store.load(); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	
+
 	return store, nil
 }
 
@@ -64,19 +64,19 @@ func (s *Store) load() error {
 	if err != nil {
 		return err
 	}
-	
+
 	var memories []*Memory
 	if err := json.Unmarshal(data, &memories); err != nil {
 		return err
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	for _, m := range memories {
 		s.memories[m.ID] = m
 	}
-	
+
 	return nil
 }
 
@@ -88,17 +88,17 @@ func (s *Store) save() error {
 		memories = append(memories, m)
 	}
 	s.mu.RUnlock()
-	
+
 	data, err := json.MarshalIndent(memories, "", "  ")
 	if err != nil {
 		return err
 	}
-	
+
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(s.filePath), 0700); err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(s.filePath, data, 0600)
 }
 
@@ -110,12 +110,12 @@ func (s *Store) Add(memType, content, source, platform string, keywords []string
 	if importance > 10 {
 		importance = 10
 	}
-	
+
 	// Auto-extract keywords if not provided
 	if len(keywords) == 0 {
 		keywords = extractKeywords(content)
 	}
-	
+
 	mem := &Memory{
 		ID:         util.RandomID(16),
 		Type:       memType,
@@ -128,11 +128,11 @@ func (s *Store) Add(memType, content, source, platform string, keywords []string
 		UpdatedAt:  time.Now(),
 		Importance: importance,
 	}
-	
+
 	s.mu.Lock()
 	s.memories[mem.ID] = mem
 	s.mu.Unlock()
-	
+
 	return mem, s.save()
 }
 
@@ -187,14 +187,14 @@ func (s *Store) Search(query string, limit int) []*Memory {
 // GetContext retrieves relevant context for a conversation
 func (s *Store) GetContext(query string, maxTokens int) string {
 	memories := s.Search(query, 10)
-	
+
 	if len(memories) == 0 {
 		return ""
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString("Relevant memories:\n")
-	
+
 	totalLen := 0
 	for _, mem := range memories {
 		line := fmt.Sprintf("- [%s] %s\n", mem.Type, mem.Content)
@@ -204,7 +204,7 @@ func (s *Store) GetContext(query string, maxTokens int) string {
 		sb.WriteString(line)
 		totalLen += len(line)
 	}
-	
+
 	return sb.String()
 }
 
@@ -212,19 +212,19 @@ func (s *Store) GetContext(query string, maxTokens int) string {
 func (s *Store) List(memType string) []*Memory {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	memories := make([]*Memory, 0, len(s.memories))
 	for _, m := range s.memories {
 		if memType == "" || m.Type == memType {
 			memories = append(memories, m)
 		}
 	}
-	
+
 	// Sort by created date (newest first)
 	sort.Slice(memories, func(i, j int) bool {
 		return memories[i].CreatedAt.After(memories[j].CreatedAt)
 	})
-	
+
 	return memories
 }
 
@@ -248,15 +248,15 @@ func (s *Store) Clear() error {
 func (s *Store) Stats() map[string]int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	stats := map[string]int{
 		"total": len(s.memories),
 	}
-	
+
 	for _, m := range s.memories {
 		stats[m.Type]++
 	}
-	
+
 	return stats
 }
 
@@ -266,7 +266,7 @@ func extractKeywords(content string) []string {
 	// Simple keyword extraction
 	words := strings.Fields(strings.ToLower(content))
 	keywords := make([]string, 0)
-	
+
 	stopWords := map[string]bool{
 		"the": true, "a": true, "an": true, "is": true, "are": true,
 		"was": true, "were": true, "be": true, "been": true, "being": true,
@@ -279,7 +279,7 @@ func extractKeywords(content string) []string {
 		"untuk": true, "dengan": true, "pada": true, "ini": true, "itu": true,
 		"saya": true, "kamu": true, "dia": true, "kami": true, "mereka": true,
 	}
-	
+
 	seen := make(map[string]bool)
 	for _, word := range words {
 		word = strings.Trim(word, ".,!?;:'\"")
@@ -288,13 +288,13 @@ func extractKeywords(content string) []string {
 			seen[word] = true
 		}
 	}
-	
+
 	return keywords
 }
 
 func detectMemoryType(content string) string {
 	lower := strings.ToLower(content)
-	
+
 	if strings.Contains(lower, "suka") || strings.Contains(lower, "prefer") ||
 		strings.Contains(lower, "favorite") || strings.Contains(lower, "favourit") {
 		return "preference"
@@ -307,14 +307,14 @@ func detectMemoryType(content string) string {
 		strings.Contains(lower, "tadi") || strings.Contains(lower, "barusan") {
 		return "event"
 	}
-	
+
 	return "note"
 }
 
 func calculateRelevance(mem *Memory, queryWords []string) float64 {
 	score := 0.0
 	contentLower := strings.ToLower(mem.Content)
-	
+
 	for _, word := range queryWords {
 		// Check content
 		if strings.Contains(contentLower, word) {
@@ -327,10 +327,10 @@ func calculateRelevance(mem *Memory, queryWords []string) float64 {
 			}
 		}
 	}
-	
+
 	// Boost by importance
 	score *= float64(mem.Importance) / 5.0
-	
+
 	// Boost recent memories slightly
 	age := time.Since(mem.CreatedAt).Hours()
 	if age < 24 {
@@ -338,6 +338,6 @@ func calculateRelevance(mem *Memory, queryWords []string) float64 {
 	} else if age < 168 { // 1 week
 		score *= 1.1
 	}
-	
+
 	return score
 }

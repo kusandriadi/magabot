@@ -24,17 +24,17 @@ const (
 // Schedule represents a parsed schedule configuration.
 type Schedule struct {
 	Type       ScheduleType `json:"type"`
-	Expression string       `json:"expression"`       // Original expression
-	Timezone   string       `json:"timezone"`         // IANA timezone (e.g., "Asia/Jakarta")
+	Expression string       `json:"expression"` // Original expression
+	Timezone   string       `json:"timezone"`   // IANA timezone (e.g., "Asia/Jakarta")
 	location   *time.Location
-	
+
 	// For cron schedules
 	Minute     Field `json:"minute,omitempty"`
 	Hour       Field `json:"hour,omitempty"`
 	DayOfMonth Field `json:"day_of_month,omitempty"`
 	Month      Field `json:"month,omitempty"`
 	DayOfWeek  Field `json:"day_of_week,omitempty"`
-	Second     Field `json:"second,omitempty"`      // Optional 6-field cron
+	Second     Field `json:"second,omitempty"` // Optional 6-field cron
 
 	// For "every" schedules
 	Interval time.Duration `json:"interval,omitempty"`
@@ -288,7 +288,7 @@ func parseCron(expr string, schedule *Schedule) (*Schedule, error) {
 // parseField parses a single cron field.
 func parseField(expr string, min, max int) (Field, error) {
 	field := Field{Expression: expr}
-	
+
 	// Handle names (e.g., JAN-DEC, SUN-SAT)
 	expr = replaceNames(expr)
 
@@ -298,7 +298,7 @@ func parseField(expr string, min, max int) (Field, error) {
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		
+
 		// Check for step (e.g., */5, 1-10/2)
 		stepParts := strings.SplitN(part, "/", 2)
 		rangePart := stepParts[0]
@@ -357,13 +357,13 @@ func parseField(expr string, min, max int) (Field, error) {
 // replaceNames replaces month/weekday names with numbers.
 func replaceNames(expr string) string {
 	expr = strings.ToUpper(expr)
-	
+
 	months := map[string]string{
 		"JAN": "1", "FEB": "2", "MAR": "3", "APR": "4",
 		"MAY": "5", "JUN": "6", "JUL": "7", "AUG": "8",
 		"SEP": "9", "OCT": "10", "NOV": "11", "DEC": "12",
 	}
-	
+
 	days := map[string]string{
 		"SUN": "0", "MON": "1", "TUE": "2", "WED": "3",
 		"THU": "4", "FRI": "5", "SAT": "6",

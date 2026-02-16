@@ -16,12 +16,12 @@ import (
 
 // NotifierConfig holds notification channel credentials
 type NotifierConfig struct {
-	TelegramToken   string `json:"telegram_token,omitempty"`
-	SlackToken      string `json:"slack_token,omitempty"`
-	DiscordToken    string `json:"discord_token,omitempty"`    // Bot token for Discord
-	DiscordWebhook  string `json:"discord_webhook,omitempty"`  // Webhook URL fallback
-	WhatsAppAPIURL  string `json:"whatsapp_api_url,omitempty"`
-	WhatsAppAPIKey  string `json:"whatsapp_api_key,omitempty"`
+	TelegramToken  string `json:"telegram_token,omitempty"`
+	SlackToken     string `json:"slack_token,omitempty"`
+	DiscordToken   string `json:"discord_token,omitempty"`   // Bot token for Discord
+	DiscordWebhook string `json:"discord_webhook,omitempty"` // Webhook URL fallback
+	WhatsAppAPIURL string `json:"whatsapp_api_url,omitempty"`
+	WhatsAppAPIKey string `json:"whatsapp_api_key,omitempty"`
 }
 
 // Notifier sends messages to various channels
@@ -33,7 +33,7 @@ type Notifier struct {
 // NewNotifier creates a new notifier
 func NewNotifier(config NotifierConfig) *Notifier {
 	return &Notifier{
-		config: config,
+		config:     config,
 		httpClient: util.NewHTTPClient(0),
 	}
 }
@@ -61,15 +61,15 @@ func (n *Notifier) sendTelegram(ctx context.Context, chatID, message string) err
 	if n.config.TelegramToken == "" {
 		return fmt.Errorf("telegram token not configured")
 	}
-	
+
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.config.TelegramToken)
-	
+
 	payload := map[string]interface{}{
 		"chat_id":    chatID,
 		"text":       message,
 		"parse_mode": "Markdown",
 	}
-	
+
 	return n.postJSON(ctx, apiURL, payload)
 }
 
@@ -78,12 +78,12 @@ func (n *Notifier) sendWhatsApp(ctx context.Context, phone, message string) erro
 	if n.config.WhatsAppAPIURL == "" {
 		return fmt.Errorf("whatsapp API URL not configured")
 	}
-	
+
 	// Clean phone number
 	phone = strings.TrimPrefix(phone, "+")
 	phone = strings.ReplaceAll(phone, " ", "")
 	phone = strings.ReplaceAll(phone, "-", "")
-	
+
 	payload := map[string]interface{}{
 		"phone":   phone,
 		"message": message,
@@ -124,9 +124,9 @@ func (n *Notifier) sendSlack(ctx context.Context, channel, message string) error
 	if n.config.SlackToken == "" {
 		return fmt.Errorf("slack token not configured")
 	}
-	
+
 	apiURL := "https://slack.com/api/chat.postMessage"
-	
+
 	payload := map[string]interface{}{
 		"channel": channel,
 		"text":    message,
@@ -144,26 +144,26 @@ func (n *Notifier) sendSlack(ctx context.Context, channel, message string) error
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+n.config.SlackToken)
-	
+
 	resp, err := n.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("slack request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	var result struct {
 		OK    bool   `json:"ok"`
 		Error string `json:"error"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("slack response parse error: %w", err)
 	}
-	
+
 	if !result.OK {
 		return fmt.Errorf("slack error: %s", result.Error)
 	}
-	
+
 	return nil
 }
 
@@ -203,7 +203,7 @@ func (n *Notifier) sendDiscordWebhook(ctx context.Context, webhookURL, message s
 // sendDiscordBot sends via Discord bot token
 func (n *Notifier) sendDiscordBot(ctx context.Context, channelID, message string) error {
 	apiURL := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages", channelID)
-	
+
 	payload := map[string]interface{}{
 		"content": message,
 	}
@@ -256,25 +256,25 @@ func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := n.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
-	
+
 	return nil
 }
 
@@ -282,7 +282,7 @@ func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}
 func (n *Notifier) TestChannel(ctx context.Context, ch NotifyChannel) error {
 	testMsg := fmt.Sprintf("🤖 Magabot test notification\nChannel: %s\nTarget: %s\nTime: %s",
 		ch.Type, ch.Name, time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return n.Send(ctx, ch, testMsg)
 }
 

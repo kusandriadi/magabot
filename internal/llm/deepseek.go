@@ -67,4 +67,3 @@ func (d *DeepSeek) Complete(ctx context.Context, req *Request) (*Response, error
 	)
 	return completeOpenAICompatible(ctx, client, "deepseek", d.config.Model, d.config.MaxTokens, d.config.Temperature, req)
 }
-

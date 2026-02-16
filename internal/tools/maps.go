@@ -102,11 +102,11 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 		Type        string `json:"type"`
 		Class       string `json:"class"`
 		Address     struct {
-			Road        string `json:"road"`
-			City        string `json:"city"`
-			State       string `json:"state"`
-			Country     string `json:"country"`
-			Postcode    string `json:"postcode"`
+			Road     string `json:"road"`
+			City     string `json:"city"`
+			State    string `json:"state"`
+			Country  string `json:"country"`
+			Postcode string `json:"postcode"`
 		} `json:"address"`
 		Extratags struct {
 			Phone   string `json:"phone"`
@@ -128,12 +128,12 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 
 	for i, r := range results {
 		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, truncate(r.DisplayName, 80)))
-		
+
 		// Type info
 		if r.Type != "" {
 			sb.WriteString(fmt.Sprintf("   📌 Type: %s\n", r.Type))
 		}
-		
+
 		// Contact info
 		if r.Extratags.Phone != "" {
 			sb.WriteString(fmt.Sprintf("   📞 %s\n", r.Extratags.Phone))
@@ -144,7 +144,7 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 		if r.Extratags.Opening != "" {
 			sb.WriteString(fmt.Sprintf("   🕐 %s\n", r.Extratags.Opening))
 		}
-		
+
 		sb.WriteString(fmt.Sprintf("   🗺️ %s, %s\n\n", r.Lat, r.Lon))
 	}
 

@@ -15,10 +15,10 @@ import (
 )
 
 var (
-	ErrInvalidKey     = errors.New("invalid encryption key")
-	ErrDecryptFailed  = errors.New("decryption failed")
-	ErrNotAuthorized  = errors.New("user not authorized")
-	ErrRateLimited    = errors.New("rate limit exceeded")
+	ErrInvalidKey    = errors.New("invalid encryption key")
+	ErrDecryptFailed = errors.New("decryption failed")
+	ErrNotAuthorized = errors.New("user not authorized")
+	ErrRateLimited   = errors.New("rate limit exceeded")
 )
 
 // Vault handles encryption/decryption of sensitive data
@@ -133,7 +133,7 @@ func (a *Authorizer) IsAuthorized(platform, userID string) bool {
 	if !ok {
 		return false
 	}
-	
+
 	// Empty whitelist = allow all (for initial setup)
 	if len(users) == 0 {
 		return true

@@ -195,7 +195,7 @@ func TestScheduleNextCronComplex(t *testing.T) {
 		},
 		{
 			name:     "weekday skip",
-			expr:     "0 9 * * 1", // Monday only
+			expr:     "0 9 * * 1",                                   // Monday only
 			now:      time.Date(2024, 2, 14, 10, 0, 0, 0, time.UTC), // Wednesday
 			expected: time.Date(2024, 2, 19, 9, 0, 0, 0, time.UTC),  // Next Monday
 		},

@@ -48,7 +48,7 @@ func TestRouterConfigDefaults(t *testing.T) {
 	t.Run("CustomConfig", func(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 		r := NewRouter(&Config{
-			Main:      "custom",
+			Main:         "custom",
 			SystemPrompt: "Be helpful",
 			MaxInput:     5000,
 			Timeout:      30 * time.Second,
@@ -102,7 +102,7 @@ func TestRouterRegisterUnavailable(t *testing.T) {
 
 func TestRouterCompleteWithSystemPrompt(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:      "mock",
+		Main:         "mock",
 		SystemPrompt: "You are a test assistant",
 		RateLimit:    100,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -141,7 +141,7 @@ func (c *requestCapture) Complete(ctx context.Context, req *Request) (*Response,
 
 func TestRouterChatRateLimit(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		RateLimit: 1,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -165,7 +165,7 @@ func TestRouterChatRateLimit(t *testing.T) {
 
 func TestRouterChatInputTooLong(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		MaxInput:  20,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -184,7 +184,7 @@ func TestRouterChatInputTooLong(t *testing.T) {
 
 func TestRouterChatInputTooLongWithBlocks(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		MaxInput:  50,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -210,7 +210,7 @@ func TestRouterChatInputTooLongWithBlocks(t *testing.T) {
 
 func TestRouterChatWithSystemPrompt(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:      "mock",
+		Main:         "mock",
 		SystemPrompt: "Be helpful",
 		RateLimit:    100,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -236,7 +236,7 @@ func TestRouterChatWithSystemPrompt(t *testing.T) {
 
 func TestRouterProviderFails(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "p1",
+		Main:      "p1",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -255,7 +255,7 @@ func TestRouterProviderFails(t *testing.T) {
 
 func TestRouterProviderNotRegistered(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "nonexistent",
+		Main:      "nonexistent",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -271,7 +271,7 @@ func TestRouterProviderNotRegistered(t *testing.T) {
 
 func TestRouterDefaultNotAvailable(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "unavailable",
+		Main:      "unavailable",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -487,7 +487,7 @@ func TestRouterProvidersList(t *testing.T) {
 
 func TestRouterConcurrentRequests(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		RateLimit: 1000,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -542,7 +542,7 @@ func TestRouterConcurrentRegister(t *testing.T) {
 
 func TestRouterCompleteTimeout(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "slow",
+		Main:      "slow",
 		Timeout:   50 * time.Millisecond,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -925,9 +925,9 @@ func TestLocalEnvConfig(t *testing.T) {
 
 // --- Additional Edge Cases ---
 
-func TestTryProvidersContextCancelled(t *testing.T) {
+func TestTryProvidersContextCanceled(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "slow",
+		Main:      "slow",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -950,9 +950,9 @@ func TestRateLimiterStaleCleanup(t *testing.T) {
 	// Add old entries
 	now := time.Now()
 	rl.mu.Lock()
-	rl.requests["olduser"] = []time.Time{now.Add(-5 * time.Minute)} // Stale
+	rl.requests["olduser"] = []time.Time{now.Add(-5 * time.Minute)}     // Stale
 	rl.requests["recentuser"] = []time.Time{now.Add(-30 * time.Second)} // Recent
-	rl.callCount = 99 // Next call will trigger cleanup
+	rl.callCount = 99                                                   // Next call will trigger cleanup
 	rl.mu.Unlock()
 
 	// Trigger cleanup
@@ -996,7 +996,7 @@ func TestRouterStatsWithNoAvailable(t *testing.T) {
 
 func TestRouterChatSuccess(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})

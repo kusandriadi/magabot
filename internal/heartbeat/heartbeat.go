@@ -19,10 +19,10 @@ type NotifyFunc func(platform, chatID, message string) error
 type Check struct {
 	Name        string        `json:"name"`
 	Description string        `json:"description"`
-	Interval    time.Duration `json:"interval"`     // How often to run
+	Interval    time.Duration `json:"interval"` // How often to run
 	Enabled     bool          `json:"enabled"`
 	LastRun     time.Time     `json:"last_run"`
-	LastResult  string        `json:"last_result"`  // ok, alert, error
+	LastResult  string        `json:"last_result"` // ok, alert, error
 	LastMessage string        `json:"last_message"`
 	RunCount    int64         `json:"run_count"`
 	AlertCount  int64         `json:"alert_count"`
@@ -37,15 +37,15 @@ type Target struct {
 
 // Service manages heartbeat checks
 type Service struct {
-	mu        sync.RWMutex
-	checks    map[string]*Check
-	targets   []Target
-	notify    NotifyFunc
-	interval  time.Duration // Base heartbeat interval
-	running   bool
-	stopCh    chan struct{}
-	ctx       context.Context
-	cancel    context.CancelFunc
+	mu       sync.RWMutex
+	checks   map[string]*Check
+	targets  []Target
+	notify   NotifyFunc
+	interval time.Duration // Base heartbeat interval
+	running  bool
+	stopCh   chan struct{}
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // Config holds heartbeat configuration
@@ -60,7 +60,7 @@ func NewService(interval time.Duration, notify NotifyFunc) *Service {
 	if interval < time.Minute {
 		interval = 30 * time.Minute
 	}
-	
+
 	return &Service{
 		checks:   make(map[string]*Check),
 		interval: interval,
@@ -73,11 +73,11 @@ func NewService(interval time.Duration, notify NotifyFunc) *Service {
 func (s *Service) AddCheck(name, description string, interval time.Duration, fn CheckFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if interval < time.Minute {
 		interval = s.interval
 	}
-	
+
 	s.checks[name] = &Check{
 		Name:        name,
 		Description: description,
@@ -136,9 +136,9 @@ func (s *Service) Start() {
 	s.running = true
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.mu.Unlock()
-	
+
 	log.Printf("[HEARTBEAT] Service started (interval: %v)", s.interval)
-	
+
 	go s.loop()
 }
 
@@ -152,7 +152,7 @@ func (s *Service) Stop() {
 	s.running = false
 	s.cancel()
 	s.mu.Unlock()
-	
+
 	log.Println("[HEARTBEAT] Service stopped")
 }
 
@@ -160,10 +160,10 @@ func (s *Service) Stop() {
 func (s *Service) loop() {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
-	
+
 	// Run immediately on start
 	s.runChecks()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -184,15 +184,15 @@ func (s *Service) runChecks() {
 		}
 	}
 	s.mu.RUnlock()
-	
+
 	if len(checks) == 0 {
 		return
 	}
-	
+
 	log.Printf("[HEARTBEAT] Running %d checks", len(checks))
-	
+
 	var alerts []string
-	
+
 	for _, check := range checks {
 		alert, err := s.runCheck(check)
 		if err != nil {
@@ -202,7 +202,7 @@ func (s *Service) runChecks() {
 			alerts = append(alerts, fmt.Sprintf("🔔 %s: %s", check.Name, alert))
 		}
 	}
-	
+
 	// Send consolidated alerts
 	if len(alerts) > 0 {
 		s.sendAlerts(alerts)
@@ -221,9 +221,9 @@ func (s *Service) isDue(check *Check) bool {
 func (s *Service) runCheck(check *Check) (string, error) {
 	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	defer cancel()
-	
+
 	alert, err := check.Func(ctx)
-	
+
 	s.mu.Lock()
 	check.LastRun = time.Now()
 	check.RunCount++
@@ -239,7 +239,7 @@ func (s *Service) runCheck(check *Check) (string, error) {
 		check.LastMessage = ""
 	}
 	s.mu.Unlock()
-	
+
 	return alert, err
 }
 
@@ -248,13 +248,13 @@ func (s *Service) sendAlerts(alerts []string) {
 	if s.notify == nil {
 		return
 	}
-	
+
 	message := "💓 *Heartbeat Alert*\n\n" + joinAlerts(alerts)
-	
+
 	s.mu.RLock()
 	targets := s.targets
 	s.mu.RUnlock()
-	
+
 	for _, target := range targets {
 		if err := s.notify(target.Platform, target.ChatID, message); err != nil {
 			log.Printf("[HEARTBEAT] Failed to notify %s/%s: %v", target.Platform, target.ChatID, err)
@@ -266,7 +266,7 @@ func (s *Service) sendAlerts(alerts []string) {
 func (s *Service) Status() map[string]*Check {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	result := make(map[string]*Check)
 	for name, check := range s.checks {
 		// Copy to avoid race
@@ -286,7 +286,7 @@ func (s *Service) RunNow() []string {
 		}
 	}
 	s.mu.RUnlock()
-	
+
 	var alerts []string
 	for _, check := range checks {
 		alert, err := s.runCheck(check)
@@ -298,7 +298,7 @@ func (s *Service) RunNow() []string {
 			alerts = append(alerts, fmt.Sprintf("✅ %s: OK", check.Name))
 		}
 	}
-	
+
 	return alerts
 }
 

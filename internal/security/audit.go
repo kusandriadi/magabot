@@ -34,15 +34,15 @@ const (
 
 // SecurityEvent represents a security-related event
 type SecurityEvent struct {
-	Timestamp   time.Time         `json:"timestamp"`
-	EventType   SecurityEventType `json:"event_type"`
-	Platform    string            `json:"platform,omitempty"`
-	UserID      string            `json:"user_id,omitempty"` // hashed for privacy
-	IP          string            `json:"ip,omitempty"`
-	Success     bool              `json:"success"`
-	Details     string            `json:"details,omitempty"`
-	Severity    string            `json:"severity"` // info, warning, critical
-	RequestID   string            `json:"request_id,omitempty"`
+	Timestamp time.Time         `json:"timestamp"`
+	EventType SecurityEventType `json:"event_type"`
+	Platform  string            `json:"platform,omitempty"`
+	UserID    string            `json:"user_id,omitempty"` // hashed for privacy
+	IP        string            `json:"ip,omitempty"`
+	Success   bool              `json:"success"`
+	Details   string            `json:"details,omitempty"`
+	Severity  string            `json:"severity"` // info, warning, critical
+	RequestID string            `json:"request_id,omitempty"`
 }
 
 // AuditLogger logs security events
@@ -58,13 +58,13 @@ func NewAuditLogger(logDir string) (*AuditLogger, error) {
 	if err := os.MkdirAll(logDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
-	
+
 	logPath := filepath.Join(logDir, "security.log")
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open security log: %w", err)
 	}
-	
+
 	return &AuditLogger{
 		writer:    file,
 		logPath:   logPath,
@@ -77,22 +77,22 @@ func (a *AuditLogger) Log(event SecurityEvent) error {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
-	
+
 	if event.Severity == "" {
 		event.Severity = a.inferSeverity(event.EventType)
 	}
-	
+
 	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
-	
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	
+
 	// Check for rotation
 	a.rotateIfNeeded()
-	
+
 	_, err = fmt.Fprintf(a.writer, "%s\n", data)
 	return err
 }
@@ -188,7 +188,7 @@ func (a *AuditLogger) LogAuthLockout(platform, userID string) {
 
 // LogRateLimited logs a rate limit event
 func (a *AuditLogger) LogRateLimited(platform, userID string) {
-_ = a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventRateLimited,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -198,7 +198,7 @@ _ = a.Log(SecurityEvent{
 
 // LogSSRFBlocked logs a blocked SSRF attempt
 func (a *AuditLogger) LogSSRFBlocked(platform, userID, url string) {
-_ = a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventSSRFBlocked,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -210,7 +210,7 @@ _ = a.Log(SecurityEvent{
 
 // LogAdminAction logs an admin action
 func (a *AuditLogger) LogAdminAction(platform, userID, action string) {
-_ = a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventAdminAction,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -221,7 +221,7 @@ _ = a.Log(SecurityEvent{
 
 // LogConfigChange logs a configuration change
 func (a *AuditLogger) LogConfigChange(platform, userID, change string) {
-_ = a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventConfigChange,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),
@@ -232,7 +232,7 @@ _ = a.Log(SecurityEvent{
 
 // LogAccessDenied logs an access denied event
 func (a *AuditLogger) LogAccessDenied(platform, userID, resource string) {
-_ = a.Log(SecurityEvent{
+	_ = a.Log(SecurityEvent{
 		EventType: EventAccessDenied,
 		Platform:  platform,
 		UserID:    HashUserID(platform, userID),

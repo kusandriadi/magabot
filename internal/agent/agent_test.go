@@ -183,10 +183,10 @@ func TestBuildArgs(t *testing.T) {
 		message string
 		wantLen int
 	}{
-		{AgentClaude, 0, "hello", 4},  // -p hello --output-format text
-		{AgentClaude, 1, "hello", 5},  // + --continue
-		{AgentCodex, 0, "hello", 3},   // exec -- hello
-		{AgentGemini, 0, "hello", 3},  // -p -- hello
+		{AgentClaude, 0, "hello", 4}, // -p hello --output-format text
+		{AgentClaude, 1, "hello", 5}, // + --continue
+		{AgentCodex, 0, "hello", 3},  // exec -- hello
+		{AgentGemini, 0, "hello", 3}, // -p -- hello
 	}
 
 	for _, tt := range tests {
@@ -218,7 +218,7 @@ func TestBuildArgsFlagInjection(t *testing.T) {
 	}
 }
 
-func TestExecuteCancelledContext(t *testing.T) {
+func TestExecuteCanceledContext(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	m := NewManager(Config{Timeout: 10, AllowedDirs: []string{home}}, nil)
 	dir := t.TempDir()

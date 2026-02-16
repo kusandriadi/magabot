@@ -97,7 +97,7 @@ func (b *Bot) Send(chatID, message string) error {
 
 	msg := tgbotapi.NewMessage(chatIDInt, message)
 	msg.ParseMode = "Markdown"
-	
+
 	_, err := b.api.Send(msg)
 	return err
 }

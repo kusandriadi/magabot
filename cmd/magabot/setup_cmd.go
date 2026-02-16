@@ -339,7 +339,7 @@ func setupWebhook() {
 	fmt.Println()
 
 	platforms := askString(reader, "Platforms (e.g., 1,2 or telegram,slack)", "1")
-	
+
 	var allowedUsers []string
 	bearerTokens := make(map[string]string) // token -> user_id
 	hasTelegram := strings.Contains(platforms, "1") || strings.Contains(strings.ToLower(platforms), "telegram")
@@ -352,7 +352,7 @@ func setupWebhook() {
 		fmt.Println()
 		fmt.Println("📱 Telegram Configuration")
 		fmt.Println("─────────────────────────")
-		
+
 		if cfg.Platforms.Telegram == nil {
 			cfg.Platforms.Telegram = &config.TelegramConfig{}
 		}
@@ -586,7 +586,6 @@ func setupLLM() {
 
 	askRestart(reader)
 }
-
 
 // Helper functions
 

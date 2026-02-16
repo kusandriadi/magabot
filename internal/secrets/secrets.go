@@ -99,23 +99,23 @@ func (m *Manager) Stop() {
 
 // Common secret keys
 const (
-	KeyEncryptionKey    = "magabot/encryption_key"
-	KeyTelegramToken    = "magabot/telegram/bot_token"
-	KeySlackBotToken    = "magabot/slack/bot_token"
-	KeySlackAppToken    = "magabot/slack/app_token"
-	KeyAnthropicAPIKey  = "magabot/llm/anthropic_api_key"
-	KeyOpenAIAPIKey     = "magabot/llm/openai_api_key"
-	KeyGeminiAPIKey     = "magabot/llm/gemini_api_key"
-	KeyGLMAPIKey        = "magabot/llm/glm_api_key"
-	KeyDeepSeekAPIKey   = "magabot/llm/deepseek_api_key"
-	KeyBraveAPIKey      = "magabot/tools/brave_api_key"
+	KeyEncryptionKey   = "magabot/encryption_key"
+	KeyTelegramToken   = "magabot/telegram/bot_token"
+	KeySlackBotToken   = "magabot/slack/bot_token"
+	KeySlackAppToken   = "magabot/slack/app_token"
+	KeyAnthropicAPIKey = "magabot/llm/anthropic_api_key"
+	KeyOpenAIAPIKey    = "magabot/llm/openai_api_key"
+	KeyGeminiAPIKey    = "magabot/llm/gemini_api_key"
+	KeyGLMAPIKey       = "magabot/llm/glm_api_key"
+	KeyDeepSeekAPIKey  = "magabot/llm/deepseek_api_key"
+	KeyBraveAPIKey     = "magabot/tools/brave_api_key"
 )
 
 // Config for secrets manager
 type Config struct {
-	Backend     string            `yaml:"backend"` // local, vault, consul
-	VaultConfig *VaultConfig      `yaml:"vault,omitempty"`
-	LocalConfig *LocalConfig      `yaml:"local,omitempty"`
+	Backend     string       `yaml:"backend"` // local, vault, consul
+	VaultConfig *VaultConfig `yaml:"vault,omitempty"`
+	LocalConfig *LocalConfig `yaml:"local,omitempty"`
 }
 
 // NewFromConfig creates a secrets manager from config

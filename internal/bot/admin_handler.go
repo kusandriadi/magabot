@@ -167,7 +167,7 @@ Note: New admin must be in allowlist first.`, false, nil
 	}
 
 	action := strings.ToLower(args[0])
-	
+
 	// Global admin management
 	if action == "global" && len(args) >= 3 {
 		globalAction := strings.ToLower(args[1])

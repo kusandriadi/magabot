@@ -18,16 +18,16 @@ import (
 type Platform interface {
 	// Name returns the platform name
 	Name() string
-	
+
 	// Start starts the platform handler
 	Start(ctx context.Context) error
-	
+
 	// Stop gracefully stops the platform
 	Stop() error
-	
+
 	// Send sends a message
 	Send(chatID, message string) error
-	
+
 	// SetHandler sets the message handler
 	SetHandler(handler MessageHandler)
 }
@@ -39,7 +39,7 @@ type Message struct {
 	UserID    string
 	Username  string
 	Text      string
-	Media     []string    // File paths for images/voice/documents
+	Media     []string // File paths for images/voice/documents
 	Timestamp time.Time
 	Raw       interface{} // Platform-specific raw message
 }
@@ -144,8 +144,8 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 
 	// Check account lockout (A07 fix)
 	if r.authAttempts.IsLocked(userKey) {
-		r.logger.Warn("account locked", 
-			"platform", msg.Platform, 
+		r.logger.Warn("account locked",
+			"platform", msg.Platform,
 			"user_hash", hashedUser,
 		)
 		if r.auditLogger != nil {
@@ -163,24 +163,24 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 		isAllowed = r.authorizer.IsAuthorized(msg.Platform, msg.UserID)
 	}
 	if !isAllowed {
-		r.logger.Warn("unauthorized user", 
-			"platform", msg.Platform, 
+		r.logger.Warn("unauthorized user",
+			"platform", msg.Platform,
 			"user_hash", hashedUser,
 		)
 		_ = r.store.AuditLog(msg.Platform, hashedUser, "unauthorized", "")
-		
+
 		// Track failed attempts (A07 fix)
 		r.authAttempts.RecordFailure(userKey)
 		if r.auditLogger != nil {
 			r.auditLogger.LogAuthFailure(msg.Platform, msg.UserID, "not in allowlist")
 		}
-		
+
 		return "", security.ErrNotAuthorized
 	}
 
 	// Clear any previous failures on successful auth
 	r.authAttempts.ClearFailures(userKey)
-	
+
 	// Update/create session (A07 fix)
 	r.sessionMgr.GetOrCreate(msg.Platform, msg.UserID)
 

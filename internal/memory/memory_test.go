@@ -93,7 +93,7 @@ func TestMemoryStats(t *testing.T) {
 	store, _ := NewStore(tmpDir, "test-user")
 
 	// Add some memories
-_, _ = store.Add("fact", "Fact 1", "test", "telegram", nil, 5)
+	_, _ = store.Add("fact", "Fact 1", "test", "telegram", nil, 5)
 	_, _ = store.Add("fact", "Fact 2", "test", "telegram", nil, 5)
 	_, _ = store.Add("preference", "Preference 1", "test", "telegram", nil, 5)
 
@@ -117,7 +117,7 @@ func TestMemoryClear(t *testing.T) {
 	store, _ := NewStore(tmpDir, "test-user")
 
 	// Add memories
-_, _ = store.Add("fact", "Fact 1", "test", "telegram", nil, 5)
+	_, _ = store.Add("fact", "Fact 1", "test", "telegram", nil, 5)
 	_, _ = store.Add("fact", "Fact 2", "test", "telegram", nil, 5)
 
 	// Clear
@@ -139,7 +139,7 @@ func TestMemoryContext(t *testing.T) {
 	store, _ := NewStore(tmpDir, "test-user")
 
 	// Add memories
-_, _ = store.Add("fact", "I work at Google", "test", "telegram", nil, 8)
+	_, _ = store.Add("fact", "I work at Google", "test", "telegram", nil, 8)
 	_, _ = store.Add("preference", "I prefer dark mode", "test", "telegram", nil, 5)
 
 	// Get context

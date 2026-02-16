@@ -47,17 +47,17 @@ type Session struct {
 // IsValid checks if the session is still valid
 func (s *Session) IsValid() bool {
 	now := time.Now()
-	
+
 	// Check absolute expiry
 	if now.After(s.ExpiresAt) {
 		return false
 	}
-	
+
 	// Check idle timeout
 	if now.Sub(s.LastSeen) > IdleTimeout {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -98,15 +98,15 @@ func (sm *SessionManager) sessionKey(platform, userID string) string {
 // GetOrCreate gets an existing session or creates a new one
 func (sm *SessionManager) GetOrCreate(platform, userID string) *Session {
 	key := sm.sessionKey(platform, userID)
-	
+
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	if sess, ok := sm.sessions[key]; ok && sess.IsValid() {
 		sess.Touch()
 		return sess
 	}
-	
+
 	// Create new session
 	now := time.Now()
 	sess := &Session{
@@ -117,7 +117,7 @@ func (sm *SessionManager) GetOrCreate(platform, userID string) *Session {
 		LastSeen:  now,
 	}
 	sm.sessions[key] = sess
-	
+
 	return sess
 }
 
@@ -153,7 +153,7 @@ func (sm *SessionManager) Validate(platform, userID string) error {
 // Invalidate removes a session
 func (sm *SessionManager) Invalidate(platform, userID string) {
 	key := sm.sessionKey(platform, userID)
-	
+
 	sm.mu.Lock()
 	delete(sm.sessions, key)
 	sm.mu.Unlock()
@@ -177,7 +177,7 @@ func (sm *SessionManager) cleanupLoop() {
 func (sm *SessionManager) cleanup() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	for key, sess := range sm.sessions {
 		if !sess.IsValid() {
 			delete(sm.sessions, key)
@@ -202,10 +202,10 @@ func NewAuthAttempts() *AuthAttempts {
 func (a *AuthAttempts) RecordFailure(key string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	
+
 	now := time.Now()
 	cutoff := now.Add(-LockoutDuration)
-	
+
 	// Clean old entries
 	var recent []time.Time
 	for _, t := range a.attempts[key] {
@@ -213,7 +213,7 @@ func (a *AuthAttempts) RecordFailure(key string) {
 			recent = append(recent, t)
 		}
 	}
-	
+
 	a.attempts[key] = append(recent, now)
 }
 
@@ -221,17 +221,17 @@ func (a *AuthAttempts) RecordFailure(key string) {
 func (a *AuthAttempts) IsLocked(key string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	
+
 	now := time.Now()
 	cutoff := now.Add(-LockoutDuration)
-	
+
 	var recentCount int
 	for _, t := range a.attempts[key] {
 		if t.After(cutoff) {
 			recentCount++
 		}
 	}
-	
+
 	return recentCount >= MaxFailedAttempts
 }
 
@@ -246,9 +246,9 @@ func (a *AuthAttempts) ClearFailures(key string) {
 func (a *AuthAttempts) Cleanup() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	
+
 	cutoff := time.Now().Add(-LockoutDuration * 2)
-	
+
 	for key, times := range a.attempts {
 		var recent []time.Time
 		for _, t := range times {

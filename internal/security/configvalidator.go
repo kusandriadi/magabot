@@ -45,7 +45,7 @@ func (v *ConfigValidator) ValidateAll(configPath, dataDir string, cfg *SecurityC
 // SecurityConfig represents security-related configuration
 type SecurityConfig struct {
 	EncryptionKey     string
-	AccessMode        string   // allowlist, denylist, open
+	AccessMode        string // allowlist, denylist, open
 	GlobalAdmins      []string
 	PlatformAdmins    map[string][]string
 	AllowedUsers      map[string][]string
@@ -134,7 +134,7 @@ func (v *ConfigValidator) validateSecrets(cfg *SecurityConfig) {
 	// Check for weak/common patterns in key (base64 of zeros, etc.)
 	if cfg.EncryptionKey != "" {
 		weakPatterns := []string{
-			"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // All zeros
+			"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",                     // All zeros
 			"////////////////////////////////////////////////////////////////", // All ones
 		}
 		for _, pattern := range weakPatterns {
@@ -290,11 +290,11 @@ func (v *ConfigValidator) FormatIssues() string {
 	}
 
 	var sb strings.Builder
-	
+
 	criticals := 0
 	warnings := 0
 	infos := 0
-	
+
 	for _, issue := range v.issues {
 		switch issue.Severity {
 		case "critical":

@@ -296,15 +296,15 @@ type mockProvider struct {
 	err       error
 }
 
-func (m *mockProvider) Name() string                                          { return m.name }
-func (m *mockProvider) Available() bool                                       { return m.available }
+func (m *mockProvider) Name() string    { return m.name }
+func (m *mockProvider) Available() bool { return m.available }
 func (m *mockProvider) Complete(ctx context.Context, req *Request) (*Response, error) {
 	return m.response, m.err
 }
 
 func newTestRouter() *Router {
 	return NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -330,7 +330,7 @@ func TestRouterRegisterAndComplete(t *testing.T) {
 
 func TestRouterRateLimit(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		RateLimit: 1,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
 	})
@@ -356,7 +356,7 @@ func TestRouterRateLimit(t *testing.T) {
 
 func TestRouterInputTooLong(t *testing.T) {
 	r := NewRouter(&Config{
-		Main:   "mock",
+		Main:      "mock",
 		MaxInput:  10,
 		RateLimit: 100,
 		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),

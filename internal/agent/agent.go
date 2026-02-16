@@ -29,8 +29,8 @@ const maxOutputBytes = 10 * 1024 * 1024
 
 // Config holds agent manager settings.
 type Config struct {
-	Main       string   // main/primary agent type
-	Timeout    int      // execution timeout in seconds
+	Main        string   // main/primary agent type
+	Timeout     int      // execution timeout in seconds
 	AllowedDirs []string // directories users may target (empty = user home only)
 }
 

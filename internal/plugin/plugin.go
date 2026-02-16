@@ -32,27 +32,27 @@ const (
 type Priority int
 
 const (
-	PriorityCore    Priority = 0   // Core plugins (loaded first)
-	PriorityHigh    Priority = 100
-	PriorityNormal  Priority = 500
-	PriorityLow     Priority = 900
-	PriorityLast    Priority = 999 // Loaded last
+	PriorityCore   Priority = 0 // Core plugins (loaded first)
+	PriorityHigh   Priority = 100
+	PriorityNormal Priority = 500
+	PriorityLow    Priority = 900
+	PriorityLast   Priority = 999 // Loaded last
 )
 
 // Metadata holds plugin metadata.
 type Metadata struct {
-	ID          string            `json:"id" yaml:"id"`                     // Unique identifier
-	Name        string            `json:"name" yaml:"name"`                 // Display name
-	Version     string            `json:"version" yaml:"version"`           // SemVer version
-	Description string            `json:"description" yaml:"description"`
-	Author      string            `json:"author" yaml:"author"`
-	Homepage    string            `json:"homepage,omitempty" yaml:"homepage,omitempty"`
-	License     string            `json:"license,omitempty" yaml:"license,omitempty"`
-	Priority    Priority          `json:"priority" yaml:"priority"`
-	Dependencies []string         `json:"dependencies,omitempty" yaml:"dependencies,omitempty"` // Other plugin IDs
-	Tags        []string          `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Capabilities []string         `json:"capabilities,omitempty" yaml:"capabilities,omitempty"` // What the plugin provides
-	ConfigSchema *ConfigSchema    `json:"config_schema,omitempty" yaml:"config_schema,omitempty"`
+	ID           string        `json:"id" yaml:"id"`           // Unique identifier
+	Name         string        `json:"name" yaml:"name"`       // Display name
+	Version      string        `json:"version" yaml:"version"` // SemVer version
+	Description  string        `json:"description" yaml:"description"`
+	Author       string        `json:"author" yaml:"author"`
+	Homepage     string        `json:"homepage,omitempty" yaml:"homepage,omitempty"`
+	License      string        `json:"license,omitempty" yaml:"license,omitempty"`
+	Priority     Priority      `json:"priority" yaml:"priority"`
+	Dependencies []string      `json:"dependencies,omitempty" yaml:"dependencies,omitempty"` // Other plugin IDs
+	Tags         []string      `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Capabilities []string      `json:"capabilities,omitempty" yaml:"capabilities,omitempty"` // What the plugin provides
+	ConfigSchema *ConfigSchema `json:"config_schema,omitempty" yaml:"config_schema,omitempty"`
 }
 
 // ConfigSchema defines the configuration structure for a plugin.
@@ -63,7 +63,7 @@ type ConfigSchema struct {
 // ConfigField defines a single configuration field.
 type ConfigField struct {
 	Name        string      `json:"name" yaml:"name"`
-	Type        string      `json:"type" yaml:"type"`               // string, int, bool, float, []string, map
+	Type        string      `json:"type" yaml:"type"` // string, int, bool, float, []string, map
 	Required    bool        `json:"required" yaml:"required"`
 	Default     interface{} `json:"default,omitempty" yaml:"default,omitempty"`
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`

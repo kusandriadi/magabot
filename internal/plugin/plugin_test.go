@@ -10,11 +10,11 @@ import (
 
 // testPlugin is a mock plugin for testing.
 type testPlugin struct {
-	meta      Metadata
-	initErr   error
-	startErr  error
-	stopErr   error
-	initCount int
+	meta       Metadata
+	initErr    error
+	startErr   error
+	stopErr    error
+	initCount  int
 	startCount int
 	stopCount  int
 }
@@ -143,7 +143,7 @@ func TestManagerStartAll(t *testing.T) {
 	}
 
 	for _, p := range plugins {
-_ = mgr.Register(p)
+		_ = mgr.Register(p)
 	}
 
 	// Start all
@@ -173,7 +173,7 @@ func TestManagerStopAll(t *testing.T) {
 	}
 
 	for _, p := range plugins {
-_ = mgr.Register(p)
+		_ = mgr.Register(p)
 	}
 
 	_ = mgr.StartAll()
@@ -207,8 +207,8 @@ func TestManagerDependencies(t *testing.T) {
 		},
 	}
 
-_ = mgr.Register(base)
-_ = mgr.Register(dependent)
+	_ = mgr.Register(base)
+	_ = mgr.Register(dependent)
 
 	// Try to init dependent before base
 	err := mgr.Init("dependent")
@@ -217,8 +217,8 @@ _ = mgr.Register(dependent)
 	}
 
 	// Init base first
-_ = mgr.Init("base")
-	
+	_ = mgr.Init("base")
+
 	// Now dependent should work
 	err = mgr.Init("dependent")
 	if err != nil {
@@ -239,7 +239,7 @@ func TestManagerCommands(t *testing.T) {
 	_ = mgr.Register(plugin)
 
 	// Init to get context
-_ = mgr.Init("cmd-plugin")
+	_ = mgr.Init("cmd-plugin")
 
 	// Get registration to access context
 	reg := mgr.Get("cmd-plugin")
@@ -285,7 +285,7 @@ func TestManagerHooks(t *testing.T) {
 	}
 
 	_ = mgr.Register(plugin)
-_ = mgr.Init("hook-plugin")
+	_ = mgr.Init("hook-plugin")
 
 	reg := mgr.Get("hook-plugin")
 	ctx := &pluginContext{
@@ -324,11 +324,11 @@ func TestManagerStats(t *testing.T) {
 		plugin := &testPlugin{
 			meta: Metadata{ID: string(rune('a' + i)), Name: "Plugin"},
 		}
-	_ = mgr.Register(plugin)
+		_ = mgr.Register(plugin)
 	}
 
 	// Init one
-_ = mgr.Init("a")
+	_ = mgr.Init("a")
 
 	// Start one
 	_ = mgr.Start("a")
@@ -437,7 +437,7 @@ func TestManagerList(t *testing.T) {
 		plugin := &testPlugin{
 			meta: Metadata{ID: string(rune('a' + i)), Name: "Plugin"},
 		}
-	_ = mgr.Register(plugin)
+		_ = mgr.Register(plugin)
 	}
 
 	list := mgr.List()

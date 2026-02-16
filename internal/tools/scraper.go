@@ -181,7 +181,7 @@ func (s *Scraper) scrapeLinks(ctx context.Context, targetURL, selector string) (
 	c.OnHTML(linkSelector, func(e *colly.HTMLElement) {
 		href := e.Attr("href")
 		text := strings.TrimSpace(e.Text)
-		
+
 		// Skip empty, anchor-only, and javascript links
 		if href == "" || href == "#" || strings.HasPrefix(href, "javascript:") {
 			return
@@ -392,7 +392,7 @@ func (s *Scraper) newCollector() *colly.Collector {
 	)
 
 	c.SetRequestTimeout(s.timeout)
-	
+
 	_ = c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: s.parallelism,

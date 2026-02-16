@@ -48,7 +48,7 @@ func (w *Weather) Execute(ctx context.Context, params map[string]string) (string
 	// %l = location, %c = condition icon, %C = condition text
 	// %t = temperature, %h = humidity, %w = wind
 	// %p = precipitation, %P = pressure
-	
+
 	format := params["format"]
 	if format == "" {
 		format = "detailed"

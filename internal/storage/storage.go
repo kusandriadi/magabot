@@ -21,16 +21,16 @@ type Message struct {
 	ChatID    string
 	UserID    string
 	Username  string
-	Content   string    // Encrypted
+	Content   string // Encrypted
 	Timestamp time.Time
-	Direction string    // "in" or "out"
+	Direction string // "in" or "out"
 }
 
 // Session represents a platform session
 type Session struct {
 	ID        int64
 	Platform  string
-	Data      string    // Encrypted session data
+	Data      string // Encrypted session data
 	UpdatedAt time.Time
 }
 
@@ -83,20 +83,20 @@ func (s *Store) migrate() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_platform_chat ON messages(platform, chat_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS sessions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			platform TEXT NOT NULL UNIQUE,
 			data TEXT NOT NULL,
 			updated_at DATETIME NOT NULL
 		)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS config (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS audit_log (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,

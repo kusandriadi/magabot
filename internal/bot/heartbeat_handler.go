@@ -26,10 +26,10 @@ func (h *HeartbeatHandler) HandleCommand(args []string) (string, error) {
 	if len(args) == 0 {
 		return h.showStatus(), nil
 	}
-	
+
 	cmd := strings.ToLower(args[0])
 	subArgs := args[1:]
-	
+
 	switch cmd {
 	case "status":
 		return h.showStatus(), nil
@@ -51,14 +51,14 @@ func (h *HeartbeatHandler) HandleCommand(args []string) (string, error) {
 // showStatus shows heartbeat status
 func (h *HeartbeatHandler) showStatus() string {
 	checks := h.service.Status()
-	
+
 	if len(checks) == 0 {
 		return "💓 *Heartbeat Status*\n\nNo checks configured."
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString("💓 *Heartbeat Status*\n\n")
-	
+
 	for name, check := range checks {
 		icon := "✅"
 		if !check.Enabled {
@@ -68,41 +68,41 @@ func (h *HeartbeatHandler) showStatus() string {
 		} else if check.LastResult == "error" {
 			icon = "⚠️"
 		}
-		
+
 		sb.WriteString(fmt.Sprintf("%s *%s*\n", icon, name))
 		sb.WriteString(fmt.Sprintf("   Interval: %v\n", check.Interval))
-		
+
 		if !check.LastRun.IsZero() {
-			sb.WriteString(fmt.Sprintf("   Last run: %s (%s)\n", 
-				check.LastRun.Format("15:04"), 
+			sb.WriteString(fmt.Sprintf("   Last run: %s (%s)\n",
+				check.LastRun.Format("15:04"),
 				check.LastResult))
 		}
-		
+
 		if check.LastMessage != "" {
 			sb.WriteString(fmt.Sprintf("   Message: %s\n", util.Truncate(check.LastMessage, 50)))
 		}
-		
+
 		sb.WriteString(fmt.Sprintf("   Runs: %d | Alerts: %d\n\n", check.RunCount, check.AlertCount))
 	}
-	
+
 	return sb.String()
 }
 
 // runNow triggers all checks immediately
 func (h *HeartbeatHandler) runNow() (string, error) {
 	results := h.service.RunNow()
-	
+
 	if len(results) == 0 {
 		return "💓 No checks to run.", nil
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString("💓 *Heartbeat Results*\n\n")
-	
+
 	for _, result := range results {
 		sb.WriteString(result + "\n")
 	}
-	
+
 	return sb.String(), nil
 }
 
@@ -111,10 +111,10 @@ func (h *HeartbeatHandler) enableCheck(args []string) (string, error) {
 	if len(args) == 0 {
 		return "Usage: /heartbeat enable <check_name>", nil
 	}
-	
+
 	name := args[0]
 	h.service.EnableCheck(name)
-	
+
 	return fmt.Sprintf("✅ Enabled check: %s", name), nil
 }
 
@@ -123,36 +123,36 @@ func (h *HeartbeatHandler) disableCheck(args []string) (string, error) {
 	if len(args) == 0 {
 		return "Usage: /heartbeat disable <check_name>", nil
 	}
-	
+
 	name := args[0]
 	h.service.DisableCheck(name)
-	
+
 	return fmt.Sprintf("❌ Disabled check: %s", name), nil
 }
 
 // listChecks lists all configured checks
 func (h *HeartbeatHandler) listChecks() string {
 	checks := h.service.Status()
-	
+
 	if len(checks) == 0 {
 		return "💓 No checks configured."
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString("💓 *Configured Checks*\n\n")
-	
+
 	for name, check := range checks {
 		icon := "✅"
 		if !check.Enabled {
 			icon = "❌"
 		}
-		
+
 		sb.WriteString(fmt.Sprintf("%s %s - %v\n", icon, name, check.Interval))
 		if check.Description != "" {
 			sb.WriteString(fmt.Sprintf("   %s\n", check.Description))
 		}
 	}
-	
+
 	return sb.String()
 }
 
@@ -179,6 +179,6 @@ func (h *HeartbeatHandler) RegisterDefaultChecks() {
 		time.Hour,
 		heartbeat.NewTimeCheck([]int{9}),
 	)
-	
+
 	// Add more default checks as needed
 }

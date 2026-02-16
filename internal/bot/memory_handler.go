@@ -56,14 +56,14 @@ func (h *MemoryHandler) HandleCommand(userID, platform string, args []string) (s
 	if err != nil {
 		return "", err
 	}
-	
+
 	if len(args) == 0 {
 		return h.showHelp(), nil
 	}
-	
+
 	cmd := strings.ToLower(args[0])
 	subArgs := args[1:]
-	
+
 	switch cmd {
 	case "add", "remember":
 		return h.addMemory(store, platform, subArgs)
@@ -91,14 +91,14 @@ func (h *MemoryHandler) addMemory(store *memory.Store, platform string, args []s
 	if len(args) == 0 {
 		return "Usage: /memory add <content to remember>", nil
 	}
-	
+
 	content := strings.Join(args, " ")
 	mem, err := store.Remember(content, platform)
 	if err != nil {
 		return "", err
 	}
-	
-	return fmt.Sprintf("🧠 Remembered!\n\n📝 %s\n🏷️ Type: %s\n🔑 ID: %s", 
+
+	return fmt.Sprintf("🧠 Remembered!\n\n📝 %s\n🏷️ Type: %s\n🔑 ID: %s",
 		mem.Content, mem.Type, mem.ID[:8]), nil
 }
 
@@ -108,7 +108,7 @@ func (h *MemoryHandler) rememberContent(store *memory.Store, platform, content s
 	if err != nil {
 		return "", err
 	}
-	
+
 	return fmt.Sprintf("🧠 Noted: %s", util.Truncate(mem.Content, 50)), nil
 }
 
@@ -117,23 +117,23 @@ func (h *MemoryHandler) searchMemory(store *memory.Store, args []string) (string
 	if len(args) == 0 {
 		return "Usage: /memory search <query>", nil
 	}
-	
+
 	query := strings.Join(args, " ")
 	memories := store.Search(query, 5)
-	
+
 	if len(memories) == 0 {
 		return fmt.Sprintf("🔍 No memories found for: %s", query), nil
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("🔍 *Memories for: %s*\n\n", query))
-	
+
 	for i, mem := range memories {
 		sb.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, mem.Type, util.Truncate(mem.Content, 80)))
-		sb.WriteString(fmt.Sprintf("   📅 %s | 🔑 %s\n\n", 
+		sb.WriteString(fmt.Sprintf("   📅 %s | 🔑 %s\n\n",
 			mem.CreatedAt.Format("Jan 2"), mem.ID[:8]))
 	}
-	
+
 	return sb.String(), nil
 }
 
@@ -143,31 +143,31 @@ func (h *MemoryHandler) listMemory(store *memory.Store, args []string) (string, 
 	if len(args) > 0 {
 		memType = args[0]
 	}
-	
+
 	memories := store.List(memType)
-	
+
 	if len(memories) == 0 {
 		return "📋 No memories stored yet.", nil
 	}
-	
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("📋 *Memories* (%d total)\n\n", len(memories)))
-	
+
 	// Show max 10
 	limit := 10
 	if len(memories) < limit {
 		limit = len(memories)
 	}
-	
+
 	for i := 0; i < limit; i++ {
 		mem := memories[i]
 		sb.WriteString(fmt.Sprintf("• [%s] %s\n", mem.Type, util.Truncate(mem.Content, 60)))
 	}
-	
+
 	if len(memories) > limit {
 		sb.WriteString(fmt.Sprintf("\n... and %d more", len(memories)-limit))
 	}
-	
+
 	return sb.String(), nil
 }
 
@@ -176,11 +176,11 @@ func (h *MemoryHandler) deleteMemory(store *memory.Store, args []string) (string
 	if len(args) == 0 {
 		return "Usage: /memory delete <id>", nil
 	}
-	
+
 	// Find memory by partial ID
 	id := args[0]
 	memories := store.List("")
-	
+
 	for _, mem := range memories {
 		if strings.HasPrefix(mem.ID, id) {
 			if err := store.Delete(mem.ID); err != nil {
@@ -189,7 +189,7 @@ func (h *MemoryHandler) deleteMemory(store *memory.Store, args []string) (string
 			return fmt.Sprintf("🗑️ Deleted: %s", util.Truncate(mem.Content, 50)), nil
 		}
 	}
-	
+
 	return fmt.Sprintf("❌ Memory not found: %s", id), nil
 }
 
@@ -197,32 +197,32 @@ func (h *MemoryHandler) deleteMemory(store *memory.Store, args []string) (string
 func (h *MemoryHandler) clearMemory(store *memory.Store) (string, error) {
 	stats := store.Stats()
 	count := stats["total"]
-	
+
 	if count == 0 {
 		return "📋 No memories to clear.", nil
 	}
-	
+
 	if err := store.Clear(); err != nil {
 		return "", err
 	}
-	
+
 	return fmt.Sprintf("🗑️ Cleared %d memories.", count), nil
 }
 
 // showStats shows memory statistics
 func (h *MemoryHandler) showStats(store *memory.Store) string {
 	stats := store.Stats()
-	
+
 	var sb strings.Builder
 	sb.WriteString("📊 *Memory Stats*\n\n")
 	sb.WriteString(fmt.Sprintf("Total: %d\n", stats["total"]))
-	
+
 	for k, v := range stats {
 		if k != "total" && v > 0 {
 			sb.WriteString(fmt.Sprintf("• %s: %d\n", k, v))
 		}
 	}
-	
+
 	return sb.String()
 }
 
@@ -253,6 +253,6 @@ func (h *MemoryHandler) GetContext(userID, query string, maxTokens int) string {
 	if err != nil {
 		return ""
 	}
-	
+
 	return store.GetContext(query, maxTokens)
 }

@@ -29,9 +29,9 @@ const (
 // LocalConfig holds configuration for a local/self-hosted LLM provider.
 type LocalConfig struct {
 	Enabled     bool    `yaml:"enabled"`
-	BaseURL     string  `yaml:"base_url"`     // Server URL (default: http://localhost:11434/v1)
-	Model       string  `yaml:"model"`        // Model name (default: llama3)
-	APIKey      string  `yaml:"api_key"`      // Optional API key (some servers require it)
+	BaseURL     string  `yaml:"base_url"` // Server URL (default: http://localhost:11434/v1)
+	Model       string  `yaml:"model"`    // Model name (default: llama3)
+	APIKey      string  `yaml:"api_key"`  // Optional API key (some servers require it)
 	MaxTokens   int     `yaml:"max_tokens"`
 	Temperature float64 `yaml:"temperature"`
 }
