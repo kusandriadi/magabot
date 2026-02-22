@@ -91,11 +91,12 @@ func SanitizeInput(s string) string {
 	}, s)
 }
 
+// reSanitizeFilename is pre-compiled regex for filename sanitization
+var reSanitizeFilename = regexp.MustCompile(`[/\\:\x00]`)
+
 // SanitizeFilename removes unsafe characters from filename
 func SanitizeFilename(s string) string {
-	// Remove path separators and null bytes
-	unsafe := regexp.MustCompile(`[/\\:\x00]`)
-	return unsafe.ReplaceAllString(s, "_")
+	return reSanitizeFilename.ReplaceAllString(s, "_")
 }
 
 // Contains checks if slice contains item
@@ -127,7 +128,8 @@ func AddUnique(slice []string, item string) []string {
 	return slice
 }
 
-// MaskSecret masks a secret string for display
+// MaskSecret masks a secret string for display.
+// Only reveals prefix/suffix for sufficiently long secrets (16+ chars).
 func MaskSecret(s string) string {
 	if len(s) <= 8 {
 		return "****"
@@ -149,4 +151,53 @@ func IsValidID(s string) bool {
 		}
 	}
 	return true
+}
+
+// ExtractAPIMessage safely extracts a human-readable message from API error strings
+// This sanitizes the error to prevent leaking sensitive information
+func ExtractAPIMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := err.Error()
+
+	// Look for "message":"..." in JSON error responses
+	if idx := strings.Index(s, "\"message\":\""); idx != -1 {
+		start := idx + len("\"message\":\"")
+		end := strings.Index(s[start:], "\"")
+		if end != -1 && end < 200 { // Limit message length
+			msg := s[start : start+end]
+			// Sanitize the message - remove potential API keys or tokens
+			msg = SanitizeErrorMessage(msg)
+			return msg
+		}
+	}
+
+	// Look for "error":"..." format
+	if idx := strings.Index(s, "\"error\":\""); idx != -1 {
+		start := idx + len("\"error\":\"")
+		end := strings.Index(s[start:], "\"")
+		if end != -1 && end < 200 {
+			msg := s[start : start+end]
+			msg = SanitizeErrorMessage(msg)
+			return msg
+		}
+	}
+
+	return ""
+}
+
+// Pre-compiled regexes for error sanitization (compiled once, not per call)
+var (
+	reAPIKey      = regexp.MustCompile(`\b[A-Za-z0-9_-]{32,}\b`)
+	reBearerToken = regexp.MustCompile(`Bearer\s+[A-Za-z0-9_.-]+`)
+	reSecretField = regexp.MustCompile(`(?i)(api_key|token|key|secret|password)\s*[:=]\s*[^\s]+`)
+)
+
+// SanitizeErrorMessage removes potential API keys, tokens, and sensitive data from error messages
+func SanitizeErrorMessage(msg string) string {
+	msg = reAPIKey.ReplaceAllString(msg, "[REDACTED]")
+	msg = reBearerToken.ReplaceAllString(msg, "Bearer [REDACTED]")
+	msg = reSecretField.ReplaceAllString(msg, "${1}: [REDACTED]")
+	return msg
 }

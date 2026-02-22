@@ -2,27 +2,29 @@ package llm
 
 import (
 	"context"
-	"log/slog"
-	"os"
+	"errors"
+	"strings"
 	"testing"
 	"time"
-)
 
-// --- Unit tests (no API keys needed) ---
+	"github.com/kusandriadi/allm-go"
+	"github.com/kusandriadi/allm-go/allmtest"
+)
 
 func TestDetectProvider(t *testing.T) {
 	tests := []struct {
 		model    string
 		expected string
 	}{
-		{"claude-sonnet-4-20250514", "anthropic"},
-		{"Claude-3-Opus", "anthropic"},
-		{"gpt-4o", "openai"},
+		{"claude-3-opus", "anthropic"},
+		{"gpt-4", "openai"},
+		{"gpt-3.5-turbo", "openai"},
 		{"o1-preview", "openai"},
-		{"o3-mini", "openai"},
-		{"gemini-2.0-flash", "gemini"},
-		{"glm-4.7", "glm"},
+		{"gemini-pro", "gemini"},
+		{"glm-4", "glm"},
 		{"deepseek-chat", "deepseek"},
+		{"llama3", "local"},
+		{"mistral", "local"},
 		{"unknown-model", ""},
 	}
 
@@ -36,27 +38,6 @@ func TestDetectProvider(t *testing.T) {
 	}
 }
 
-func TestRateLimiter(t *testing.T) {
-	rl := newRateLimiter(3)
-
-	// First 3 should be allowed
-	for i := 0; i < 3; i++ {
-		if !rl.allow("user1") {
-			t.Errorf("request %d should be allowed", i+1)
-		}
-	}
-
-	// 4th should be rejected
-	if rl.allow("user1") {
-		t.Error("4th request should be rate limited")
-	}
-
-	// Different user should still be allowed
-	if !rl.allow("user2") {
-		t.Error("different user should not be rate limited")
-	}
-}
-
 func TestFormatError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -67,661 +48,527 @@ func TestFormatError(t *testing.T) {
 		{"input too long", ErrInputTooLong, "too long"},
 		{"timeout", ErrTimeout, "timed out"},
 		{"no provider", ErrNoProvider, "No AI provider"},
+		{"generic error", errors.New("something"), "error occurred"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := FormatError(tt.err)
-			if result == "" {
-				t.Error("FormatError should return non-empty string")
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("FormatError(%v) = %q, want to contain %q", tt.err, result, tt.contains)
 			}
 		})
 	}
 }
 
-func TestMessageHasBlocks(t *testing.T) {
-	plain := Message{Role: "user", Content: "hello"}
-	if plain.HasBlocks() {
-		t.Error("plain message should not have blocks")
-	}
+func TestImageFromBytes(t *testing.T) {
+	data := []byte("test image data")
+	img := ImageFromBytes("image/jpeg", data)
 
-	multi := Message{
-		Role: "user",
-		Blocks: []ContentBlock{
-			{Type: "text", Text: "hello"},
-			{Type: "image", MimeType: "image/png", ImageData: "base64data"},
-		},
+	if img.MimeType != "image/jpeg" {
+		t.Errorf("MimeType = %q, want %q", img.MimeType, "image/jpeg")
 	}
-	if !multi.HasBlocks() {
-		t.Error("multi-modal message should have blocks")
+	if string(img.Data) != string(data) {
+		t.Errorf("Data mismatch")
 	}
 }
 
-func TestResolveParams(t *testing.T) {
-	// Provider defaults only
-	req := &Request{}
-	p := resolveParams(4096, 0.7, req)
-	if p.maxTokens != 4096 {
-		t.Errorf("expected maxTokens=4096, got %d", p.maxTokens)
-	}
-	if p.temperature != 0.7 {
-		t.Errorf("expected temperature=0.7, got %f", p.temperature)
-	}
+func TestRouter_Complete(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{
+			Content:  "Hello!",
+			Provider: "test",
+			Model:    "test-model",
+		}),
+	)
 
-	// Request overrides
-	req = &Request{MaxTokens: 2048, Temperature: 0.3}
-	p = resolveParams(4096, 0.7, req)
-	if p.maxTokens != 2048 {
-		t.Errorf("expected maxTokens=2048, got %d", p.maxTokens)
-	}
-	if p.temperature != 0.3 {
-		t.Errorf("expected temperature=0.3, got %f", p.temperature)
-	}
-}
-
-// --- Provider constructor tests ---
-
-func TestNewAnthropicDefaults(t *testing.T) {
-	// Clear env to test defaults
-	orig := os.Getenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	defer func() {
-		if orig != "" {
-			os.Setenv("ANTHROPIC_API_KEY", orig)
-		}
-	}()
-
-	p := NewAnthropic(&AnthropicConfig{APIKey: "sk-ant-api-test"})
-	if p.Name() != "anthropic" {
-		t.Errorf("expected name 'anthropic', got %q", p.Name())
-	}
-	if !p.Available() {
-		t.Error("should be available with API key")
-	}
-	if p.model != "claude-sonnet-4-20250514" {
-		t.Errorf("unexpected default model: %s", p.model)
-	}
-	if p.maxTokens != 4096 {
-		t.Errorf("unexpected default maxTokens: %d", p.maxTokens)
-	}
-}
-
-func TestNewAnthropicAPIKeyOnly(t *testing.T) {
-	orig := os.Getenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	defer func() {
-		if orig != "" {
-			os.Setenv("ANTHROPIC_API_KEY", orig)
-		}
-	}()
-
-	// Any key is stored as-is (no OAuth auto-detection)
-	p := NewAnthropic(&AnthropicConfig{APIKey: "sk-ant-api03-test"})
-	if p.apiKey != "sk-ant-api03-test" {
-		t.Errorf("expected API key to be stored, got %q", p.apiKey)
-	}
-	if !p.Available() {
-		t.Error("should be available with API key set")
-	}
-
-	// Without key, not available
-	p2 := NewAnthropic(&AnthropicConfig{})
-	if p2.Available() {
-		t.Error("should not be available without API key")
-	}
-}
-
-func TestNewOpenAIDefaults(t *testing.T) {
-	orig := os.Getenv("OPENAI_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	defer func() {
-		if orig != "" {
-			os.Setenv("OPENAI_API_KEY", orig)
-		}
-	}()
-
-	p := NewOpenAI(&OpenAIConfig{APIKey: "sk-test"})
-	if p.Name() != "openai" {
-		t.Errorf("expected name 'openai', got %q", p.Name())
-	}
-	if !p.Available() {
-		t.Error("should be available with API key")
-	}
-	if p.model != "gpt-4o" {
-		t.Errorf("unexpected default model: %s", p.model)
-	}
-}
-
-func TestNewOpenAIUnavailable(t *testing.T) {
-	orig := os.Getenv("OPENAI_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	defer func() {
-		if orig != "" {
-			os.Setenv("OPENAI_API_KEY", orig)
-		}
-	}()
-
-	p := NewOpenAI(&OpenAIConfig{})
-	if p.Available() {
-		t.Error("should not be available without API key")
-	}
-}
-
-func TestNewDeepSeekDefaults(t *testing.T) {
-	orig := os.Getenv("DEEPSEEK_API_KEY")
-	os.Unsetenv("DEEPSEEK_API_KEY")
-	defer func() {
-		if orig != "" {
-			os.Setenv("DEEPSEEK_API_KEY", orig)
-		}
-	}()
-
-	p := NewDeepSeek(&DeepSeekConfig{APIKey: "sk-test"})
-	if p.Name() != "deepseek" {
-		t.Errorf("expected name 'deepseek', got %q", p.Name())
-	}
-	if p.config.Model != "deepseek-chat" {
-		t.Errorf("unexpected default model: %s", p.config.Model)
-	}
-	if p.config.Temperature != 0 {
-		t.Errorf("expected default temperature=0 (let API decide), got %f", p.config.Temperature)
-	}
-	if !p.Available() {
-		t.Error("expected DeepSeek to be available with test key")
-	}
-}
-
-func TestNewGeminiDefaults(t *testing.T) {
-	origGemini := os.Getenv("GEMINI_API_KEY")
-	origGoogle := os.Getenv("GOOGLE_API_KEY")
-	os.Unsetenv("GEMINI_API_KEY")
-	os.Unsetenv("GOOGLE_API_KEY")
-	defer func() {
-		if origGemini != "" {
-			os.Setenv("GEMINI_API_KEY", origGemini)
-		}
-		if origGoogle != "" {
-			os.Setenv("GOOGLE_API_KEY", origGoogle)
-		}
-	}()
-
-	p := NewGemini(&GeminiConfig{APIKey: "test-key"})
-	if p.Name() != "gemini" {
-		t.Errorf("expected name 'gemini', got %q", p.Name())
-	}
-	if p.model != "gemini-2.0-flash" {
-		t.Errorf("unexpected default model: %s", p.model)
-	}
-}
-
-func TestNewGLMDefaults(t *testing.T) {
-	origZAI := os.Getenv("ZAI_API_KEY")
-	origGLM := os.Getenv("GLM_API_KEY")
-	os.Unsetenv("ZAI_API_KEY")
-	os.Unsetenv("GLM_API_KEY")
-	defer func() {
-		if origZAI != "" {
-			os.Setenv("ZAI_API_KEY", origZAI)
-		}
-		if origGLM != "" {
-			os.Setenv("GLM_API_KEY", origGLM)
-		}
-	}()
-
-	p := NewGLM(&GLMConfig{APIKey: "test-key"})
-	if p.Name() != "glm" {
-		t.Errorf("expected name 'glm', got %q", p.Name())
-	}
-	if p.model != "glm-4.7" {
-		t.Errorf("unexpected default model: %s", p.model)
-	}
-	if p.baseURL != "https://api.z.ai/api/paas/v4" {
-		t.Errorf("unexpected default base URL: %s", p.baseURL)
-	}
-}
-
-func TestNewGLMCustomBaseURL(t *testing.T) {
-	p := NewGLM(&GLMConfig{APIKey: "test-key", BaseURL: "https://custom.endpoint/v4"})
-	if p.baseURL != "https://custom.endpoint/v4" {
-		t.Errorf("custom base URL not respected: %s", p.baseURL)
-	}
-}
-
-// --- Router tests ---
-
-type mockProvider struct {
-	name      string
-	available bool
-	response  *Response
-	err       error
-}
-
-func (m *mockProvider) Name() string    { return m.name }
-func (m *mockProvider) Available() bool { return m.available }
-func (m *mockProvider) Complete(ctx context.Context, req *Request) (*Response, error) {
-	return m.response, m.err
-}
-
-func newTestRouter() *Router {
-	return NewRouter(&Config{
-		Main:      "mock",
-		RateLimit: 100,
-		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
+	router := NewRouter(&Config{
+		Main:     "test",
+		MaxInput: 1000,
 	})
-}
+	router.Register("test", allm.New(mock))
 
-func TestRouterRegisterAndComplete(t *testing.T) {
-	r := newTestRouter()
-	mock := &mockProvider{
-		name:      "mock",
-		available: true,
-		response:  &Response{Content: "hello", Provider: "mock", Model: "mock-1"},
-	}
-	r.Register(mock)
-
-	resp, err := r.Complete(context.Background(), "user1", "hi")
+	ctx := context.Background()
+	resp, err := router.Complete(ctx, "user1", "Hi there")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("Complete failed: %v", err)
 	}
-	if resp.Content != "hello" {
-		t.Errorf("expected 'hello', got %q", resp.Content)
+
+	if resp.Content != "Hello!" {
+		t.Errorf("Content = %q, want %q", resp.Content, "Hello!")
+	}
+
+	// Verify request was captured
+	if mock.CallCount() != 1 {
+		t.Errorf("CallCount = %d, want 1", mock.CallCount())
 	}
 }
 
-func TestRouterRateLimit(t *testing.T) {
-	r := NewRouter(&Config{
-		Main:      "mock",
-		RateLimit: 1,
-		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-	})
-	mock := &mockProvider{
-		name:      "mock",
-		available: true,
-		response:  &Response{Content: "ok"},
-	}
-	r.Register(mock)
+func TestRouter_Chat(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "Response"}),
+	)
 
-	// First should succeed
-	_, err := r.Complete(context.Background(), "user1", "hi")
-	if err != nil {
-		t.Fatalf("first request should succeed: %v", err)
-	}
-
-	// Second should be rate limited
-	_, err = r.Complete(context.Background(), "user1", "hi again")
-	if err != ErrRateLimited {
-		t.Errorf("expected ErrRateLimited, got %v", err)
-	}
-}
-
-func TestRouterInputTooLong(t *testing.T) {
-	r := NewRouter(&Config{
-		Main:      "mock",
-		MaxInput:  10,
-		RateLimit: 100,
-		Logger:    slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
-	})
-	mock := &mockProvider{
-		name:      "mock",
-		available: true,
-		response:  &Response{Content: "ok"},
-	}
-	r.Register(mock)
-
-	_, err := r.Complete(context.Background(), "user1", "this message is way too long for the limit")
-	if err != ErrInputTooLong {
-		t.Errorf("expected ErrInputTooLong, got %v", err)
-	}
-}
-
-func TestRouterSystemPrompt(t *testing.T) {
-	r := newTestRouter()
-
-	var capturedReq *Request
-	mock := &mockProvider{
-		name:      "mock",
-		available: true,
-		response:  &Response{Content: "ok"},
-	}
-	// Use a wrapper to capture the request
-	wrapper := &captureProvider{Provider: mock, captured: &capturedReq}
-	r.Register(wrapper)
-
-	r.SetSystemPrompt("You are helpful.")
-	_, _ = r.Complete(context.Background(), "user1", "hi")
-
-	if capturedReq == nil {
-		t.Fatal("request was not captured")
-	}
-	if len(capturedReq.Messages) < 2 {
-		t.Fatalf("expected at least 2 messages (system + user), got %d", len(capturedReq.Messages))
-	}
-	if capturedReq.Messages[0].Role != "system" {
-		t.Errorf("first message should be system, got %q", capturedReq.Messages[0].Role)
-	}
-	if capturedReq.Messages[0].Content != "You are helpful." {
-		t.Errorf("system prompt mismatch: %q", capturedReq.Messages[0].Content)
-	}
-}
-
-type captureProvider struct {
-	Provider
-	captured **Request
-}
-
-func (c *captureProvider) Name() string    { return "mock" }
-func (c *captureProvider) Available() bool { return true }
-func (c *captureProvider) Complete(ctx context.Context, req *Request) (*Response, error) {
-	*c.captured = req
-	return &Response{Content: "ok"}, nil
-}
-
-func TestRouterChat(t *testing.T) {
-	r := newTestRouter()
-	mock := &mockProvider{
-		name:      "mock",
-		available: true,
-		response:  &Response{Content: "response"},
-	}
-	r.Register(mock)
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
 
 	messages := []Message{
-		{Role: "user", Content: "hello"},
-		{Role: "assistant", Content: "hi"},
-		{Role: "user", Content: "how are you"},
+		{Role: "user", Content: "First message"},
+		{Role: "assistant", Content: "First response"},
+		{Role: "user", Content: "Second message"},
 	}
 
-	resp, err := r.Chat(context.Background(), "user1", messages)
+	ctx := context.Background()
+	resp, err := router.Chat(ctx, "user1", messages)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("Chat failed: %v", err)
 	}
-	if resp.Content != "response" {
-		t.Errorf("expected 'response', got %q", resp.Content)
-	}
-}
 
-func TestRouterNoProvider(t *testing.T) {
-	r := newTestRouter()
-	_, err := r.Complete(context.Background(), "user1", "hi")
-	if err == nil {
-		t.Fatal("expected error with no providers")
+	if resp.Content != "Response" {
+		t.Errorf("Content = %q, want %q", resp.Content, "Response")
 	}
 }
 
-func TestRouterProviders(t *testing.T) {
-	r := newTestRouter()
-	mock1 := &mockProvider{name: "a", available: true, response: &Response{}}
-	mock2 := &mockProvider{name: "b", available: false, response: &Response{}}
-	r.Register(mock1)
-	r.Register(mock2)
+func TestRouter_RateLimit(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
 
-	providers := r.Providers()
-	if len(providers) != 2 {
-		t.Errorf("expected 2 providers, got %d", len(providers))
-	}
+	router := NewRouter(&Config{
+		Main:      "test",
+		RateLimit: 2, // 2 requests per minute
+	})
+	router.Register("test", allm.New(mock))
 
-	stats := r.Stats()
-	available := stats["available"].([]string)
-	if len(available) != 1 {
-		t.Errorf("expected 1 available, got %d", len(available))
-	}
-}
+	ctx := context.Background()
+	userID := "user1"
 
-// --- Model listing tests ---
-
-func TestFetchModelsInvalidKey(t *testing.T) {
-	// All providers should return errors with invalid keys (no hardcoded fallback)
-	providers := []string{"anthropic", "openai", "gemini", "deepseek", "glm"}
-	for _, p := range providers {
-		_, err := FetchModels(p, "invalid-key", "")
-		if err == nil {
-			t.Errorf("FetchModels(%s) with invalid key should return error", p)
+	// First 2 requests should succeed
+	for i := 0; i < 2; i++ {
+		_, err := router.Complete(ctx, userID, "test")
+		if err != nil {
+			t.Fatalf("Request %d failed: %v", i+1, err)
 		}
 	}
+
+	// Third request should be rate limited
+	_, err := router.Complete(ctx, userID, "test")
+	if !errors.Is(err, ErrRateLimited) {
+		t.Errorf("Expected ErrRateLimited, got %v", err)
+	}
 }
 
-func TestFetchModelsUnsupportedProvider(t *testing.T) {
-	_, err := FetchModels("unknown", "key", "")
-	if err == nil {
-		t.Error("FetchModels with unknown provider should return error")
+func TestRouter_InputTooLong(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{
+		Main:     "test",
+		MaxInput: 10,
+	})
+	router.Register("test", allm.New(mock))
+
+	ctx := context.Background()
+	_, err := router.Complete(ctx, "user1", "This is a very long message that exceeds the limit")
+	if !errors.Is(err, ErrInputTooLong) {
+		t.Errorf("Expected ErrInputTooLong, got %v", err)
+	}
+}
+
+func TestRouter_SystemPrompt(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{
+		Main:         "test",
+		SystemPrompt: "You are a helpful assistant.",
+	})
+	router.Register("test", allm.New(mock))
+
+	ctx := context.Background()
+	_, err := router.Complete(ctx, "user1", "Hello")
+	if err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+
+	// Verify system prompt was added
+	req := mock.LastRequest()
+	if req == nil {
+		t.Fatal("No request captured")
+	}
+
+	if len(req.Messages) != 2 {
+		t.Fatalf("Expected 2 messages (system + user), got %d", len(req.Messages))
+	}
+
+	if req.Messages[0].Role != "system" {
+		t.Errorf("First message role = %q, want %q", req.Messages[0].Role, "system")
+	}
+	if req.Messages[0].Content != "You are a helpful assistant." {
+		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, "You are a helpful assistant.")
+	}
+}
+
+func TestRouter_NoProvider(t *testing.T) {
+	router := NewRouter(&Config{Main: "missing"})
+
+	ctx := context.Background()
+	_, err := router.Complete(ctx, "user1", "Hello")
+	if !errors.Is(err, ErrNoProvider) {
+		t.Errorf("Expected ErrNoProvider, got %v", err)
+	}
+}
+
+func TestRouter_ProviderFails(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithError(errors.New("API error")),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	ctx := context.Background()
+	_, err := router.Complete(ctx, "user1", "Hello")
+	if !errors.Is(err, ErrProviderFailed) {
+		t.Errorf("Expected ErrProviderFailed, got %v", err)
+	}
+}
+
+func TestRouter_Stats(t *testing.T) {
+	mock1 := allmtest.NewMockProvider("provider1",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+	mock2 := allmtest.NewMockProvider("provider2",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "provider1"})
+	router.Register("provider1", allm.New(mock1))
+	router.Register("provider2", allm.New(mock2))
+
+	stats := router.Stats()
+
+	if stats["main"] != "provider1" {
+		t.Errorf("main = %v, want %q", stats["main"], "provider1")
+	}
+	if stats["providers"] != 2 {
+		t.Errorf("providers = %v, want 2", stats["providers"])
+	}
+
+	providers := router.Providers()
+	if len(providers) != 2 {
+		t.Errorf("Providers count = %d, want 2", len(providers))
+	}
+}
+
+func TestRouter_ChatWithImages(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "I see the image"}),
+	)
+
+	router := NewRouter(&Config{Main: "test", MaxInput: 10000})
+	router.Register("test", allm.New(mock))
+
+	messages := []Message{
+		{
+			Role:    "user",
+			Content: "What's in this image?",
+			Images: []Image{
+				{MimeType: "image/jpeg", Data: []byte("fake image data")},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	resp, err := router.Chat(ctx, "user1", messages)
+	if err != nil {
+		t.Fatalf("Chat failed: %v", err)
+	}
+
+	if resp.Content != "I see the image" {
+		t.Errorf("Content = %q, want %q", resp.Content, "I see the image")
+	}
+
+	// Verify images were passed through
+	req := mock.LastRequest()
+	if req == nil {
+		t.Fatal("No request captured")
+	}
+
+	// Should have system prompt + user message = 2 messages (if system prompt empty, just 1)
+	// Since we didn't set system prompt, should be 1 message
+	if len(req.Messages) == 0 {
+		t.Fatal("No messages in request")
+	}
+
+	lastMsg := req.Messages[len(req.Messages)-1]
+	if len(lastMsg.Images) != 1 {
+		t.Errorf("Images count = %d, want 1", len(lastMsg.Images))
+	}
+}
+
+func TestRateLimiter_Cleanup(t *testing.T) {
+	rl := newRateLimiter(5)
+
+	// Add old requests for multiple users (simulate by adding past timestamps)
+	rl.mu.Lock()
+	for i := 0; i < 10; i++ {
+		userID := string(rune('A' + i))
+		// Add timestamps from 2 minutes ago (outside the 1-minute window)
+		oldTime := time.Now().Add(-2 * time.Minute)
+		rl.requests[userID] = []time.Time{oldTime, oldTime, oldTime}
+	}
+	rl.mu.Unlock()
+
+	stats := rl.Stats()
+	if stats["tracked_users"].(int) != 10 {
+		t.Errorf("Expected 10 users tracked, got %d", stats["tracked_users"])
+	}
+
+	// Trigger cleanup by making requests
+	for i := 0; i < 200; i++ {
+		rl.allow("cleanup-trigger")
+	}
+
+	// Old users should be cleaned up
+	stats = rl.Stats()
+	tracked := stats["tracked_users"].(int)
+	if tracked > 2 { // Only cleanup-trigger and maybe one other should remain
+		t.Errorf("After cleanup: %d users tracked (expected <= 2)", tracked)
+	}
+}
+
+func TestRateLimiter_DifferentUsers(t *testing.T) {
+	rl := newRateLimiter(2)
+
+	// User1 uses their quota
+	if !rl.allow("user1") {
+		t.Fatal("First request for user1 should be allowed")
+	}
+	if !rl.allow("user1") {
+		t.Fatal("Second request for user1 should be allowed")
+	}
+	if rl.allow("user1") {
+		t.Fatal("Third request for user1 should be blocked")
+	}
+
+	// User2 should have independent quota
+	if !rl.allow("user2") {
+		t.Fatal("First request for user2 should be allowed")
+	}
+	if !rl.allow("user2") {
+		t.Fatal("Second request for user2 should be allowed")
+	}
+	if rl.allow("user2") {
+		t.Fatal("Third request for user2 should be blocked")
+	}
+}
+
+func TestRouter_Concurrent(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test", RateLimit: 100})
+	router.Register("test", allm.New(mock))
+
+	ctx := context.Background()
+	done := make(chan error, 10)
+
+	// Run 10 concurrent requests
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			userID := string(rune('A' + id))
+			_, err := router.Complete(ctx, userID, "test")
+			done <- err
+		}(i)
+	}
+
+	// Wait for all to complete
+	for i := 0; i < 10; i++ {
+		if err := <-done; err != nil {
+			t.Errorf("Concurrent request %d failed: %v", i, err)
+		}
 	}
 }
 
 func TestFormatModelList(t *testing.T) {
-	models := map[string][]ModelInfo{
-		"test": {
-			{ID: "model-1", Name: "Model 1", Provider: "test", Description: "A test model"},
+	tests := []struct {
+		name   string
+		models map[string][]ModelInfo
+		want   []string // Strings that should appear in output
+	}{
+		{
+			name:   "empty",
+			models: map[string][]ModelInfo{},
+			want:   []string{},
+		},
+		{
+			name: "single provider few models",
+			models: map[string][]ModelInfo{
+				"anthropic": {
+					{ID: "claude-3-opus", Provider: "anthropic"},
+					{ID: "claude-3-sonnet", Provider: "anthropic"},
+				},
+			},
+			want: []string{"ANTHROPIC", "claude-3-opus", "claude-3-sonnet", "2 models"},
+		},
+		{
+			name: "multiple providers",
+			models: map[string][]ModelInfo{
+				"anthropic": {{ID: "claude-3-opus", Provider: "anthropic"}},
+				"openai":    {{ID: "gpt-4", Provider: "openai"}},
+			},
+			want: []string{"ANTHROPIC", "OPENAI", "claude-3-opus", "gpt-4"},
 		},
 	}
-	result := FormatModelList(models)
-	if result == "" {
-		t.Error("FormatModelList should return non-empty string")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatModelList(tt.models)
+			for _, want := range tt.want {
+				if !strings.Contains(result, want) {
+					t.Errorf("FormatModelList() result should contain %q\nGot: %s", want, result)
+				}
+			}
+		})
 	}
 }
 
-// --- Integration tests (skipped when API keys not set) ---
+func TestImageFromBase64(t *testing.T) {
+	tests := []struct {
+		name      string
+		mimeType  string
+		base64    string
+		wantError bool
+	}{
+		{
+			name:      "valid jpeg",
+			mimeType:  "image/jpeg",
+			base64:    "SGVsbG8gV29ybGQ=", // "Hello World" in base64
+			wantError: false,
+		},
+		{
+			name:      "invalid base64",
+			mimeType:  "image/png",
+			base64:    "not-valid-base64!!!",
+			wantError: true,
+		},
+		{
+			name:      "empty data",
+			mimeType:  "image/jpeg",
+			base64:    "",
+			wantError: false,
+		},
+		{
+			name:      "unsupported mime type",
+			mimeType:  "text/html",
+			base64:    "SGVsbG8=",
+			wantError: true,
+		},
+	}
 
-func skipIfNoKey(t *testing.T, envVars ...string) {
-	t.Helper()
-	for _, env := range envVars {
-		if os.Getenv(env) != "" {
-			return
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			img, err := ImageFromBase64(tt.mimeType, tt.base64)
+			if tt.wantError {
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if img.MimeType != tt.mimeType {
+				t.Errorf("MimeType = %q, want %q", img.MimeType, tt.mimeType)
+			}
+		})
+	}
+}
+
+func TestRouter_SetSystemPrompt(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	// Set system prompt
+	router.SetSystemPrompt("You are a helpful bot.")
+
+	ctx := context.Background()
+	_, err := router.Complete(ctx, "user1", "Hello")
+	if err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+
+	req := mock.LastRequest()
+	if req == nil {
+		t.Fatal("No request captured")
+	}
+
+	// Should have system + user message
+	if len(req.Messages) != 2 {
+		t.Fatalf("Expected 2 messages, got %d", len(req.Messages))
+	}
+
+	if req.Messages[0].Role != "system" {
+		t.Errorf("First message role = %q, want system", req.Messages[0].Role)
+	}
+	if req.Messages[0].Content != "You are a helpful bot." {
+		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, "You are a helpful bot.")
+	}
+}
+
+func TestRouter_ImageTooLarge(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test", MaxInput: 10000})
+	router.Register("test", allm.New(mock))
+
+	// Create a very large image (> 10MB)
+	largeData := make([]byte, 11*1024*1024)
+
+	messages := []Message{
+		{
+			Role:    "user",
+			Content: "test",
+			Images: []Image{
+				{MimeType: "image/jpeg", Data: largeData},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := router.Chat(ctx, "user1", messages)
+	if err == nil {
+		t.Fatal("Expected error for too-large image")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Errorf("Error should mention 'too large', got: %v", err)
+	}
+}
+
+func TestRateLimiter_MaxUsers(t *testing.T) {
+	rl := newRateLimiter(10)
+	rl.maxUsers = 5 // Set low limit for testing
+
+	// Fill up to max
+	for i := 0; i < 5; i++ {
+		userID := string(rune('A' + i))
+		if !rl.allow(userID) {
+			t.Fatalf("Request for user %s should be allowed (slot %d)", userID, i)
 		}
 	}
-	t.Skipf("skipping: none of %v set", envVars)
-}
 
-func TestIntegrationAnthropic(t *testing.T) {
-	skipIfNoKey(t, "ANTHROPIC_API_KEY")
-
-	p := NewAnthropic(&AnthropicConfig{})
-	if !p.Available() {
-		t.Fatal("Anthropic should be available")
+	// Next new user should be rejected due to capacity
+	if rl.allow("new-user") {
+		t.Fatal("Expected rate limit for new user when at capacity")
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{{Role: "user", Content: "Reply with exactly: PONG"}},
-	})
-	if err != nil {
-		t.Fatalf("Anthropic Complete failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	if resp.Provider != "anthropic" {
-		t.Errorf("expected provider 'anthropic', got %q", resp.Provider)
-	}
-	if resp.InputTokens == 0 {
-		t.Error("expected non-zero input tokens")
-	}
-	if resp.Latency == 0 {
-		t.Error("expected non-zero latency")
-	}
-	t.Logf("Anthropic response: %q (in=%d out=%d latency=%s)", resp.Content, resp.InputTokens, resp.OutputTokens, resp.Latency)
-}
-
-func TestIntegrationAnthropicSystemPrompt(t *testing.T) {
-	skipIfNoKey(t, "ANTHROPIC_API_KEY")
-
-	p := NewAnthropic(&AnthropicConfig{})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{
-			{Role: "system", Content: "You always reply with exactly one word: PONG"},
-			{Role: "user", Content: "ping"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("Anthropic system prompt test failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	t.Logf("Anthropic system prompt response: %q", resp.Content)
-}
-
-func TestIntegrationOpenAI(t *testing.T) {
-	skipIfNoKey(t, "OPENAI_API_KEY")
-
-	p := NewOpenAI(&OpenAIConfig{})
-	if !p.Available() {
-		t.Fatal("OpenAI should be available")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{{Role: "user", Content: "Reply with exactly: PONG"}},
-	})
-	if err != nil {
-		t.Fatalf("OpenAI Complete failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	if resp.Provider != "openai" {
-		t.Errorf("expected provider 'openai', got %q", resp.Provider)
-	}
-	t.Logf("OpenAI response: %q (in=%d out=%d latency=%s)", resp.Content, resp.InputTokens, resp.OutputTokens, resp.Latency)
-}
-
-func TestIntegrationDeepSeek(t *testing.T) {
-	skipIfNoKey(t, "DEEPSEEK_API_KEY")
-
-	p := NewDeepSeek(&DeepSeekConfig{})
-	if !p.Available() {
-		t.Fatal("DeepSeek should be available")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{{Role: "user", Content: "Reply with exactly: PONG"}},
-	})
-	if err != nil {
-		t.Fatalf("DeepSeek Complete failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	if resp.Provider != "deepseek" {
-		t.Errorf("expected provider 'deepseek', got %q", resp.Provider)
-	}
-	t.Logf("DeepSeek response: %q (in=%d out=%d latency=%s)", resp.Content, resp.InputTokens, resp.OutputTokens, resp.Latency)
-}
-
-func TestIntegrationGemini(t *testing.T) {
-	skipIfNoKey(t, "GEMINI_API_KEY", "GOOGLE_API_KEY")
-
-	p := NewGemini(&GeminiConfig{})
-	if !p.Available() {
-		t.Fatal("Gemini should be available")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{{Role: "user", Content: "Reply with exactly: PONG"}},
-	})
-	if err != nil {
-		t.Fatalf("Gemini Complete failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	if resp.Provider != "gemini" {
-		t.Errorf("expected provider 'gemini', got %q", resp.Provider)
-	}
-	t.Logf("Gemini response: %q (in=%d out=%d latency=%s)", resp.Content, resp.InputTokens, resp.OutputTokens, resp.Latency)
-}
-
-func TestIntegrationGLM(t *testing.T) {
-	skipIfNoKey(t, "ZAI_API_KEY", "GLM_API_KEY")
-
-	p := NewGLM(&GLMConfig{})
-	if !p.Available() {
-		t.Fatal("GLM should be available")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{{Role: "user", Content: "Reply with exactly: PONG"}},
-	})
-	if err != nil {
-		t.Fatalf("GLM Complete failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	if resp.Provider != "glm" {
-		t.Errorf("expected provider 'glm', got %q", resp.Provider)
-	}
-	t.Logf("GLM response: %q (in=%d out=%d latency=%s)", resp.Content, resp.InputTokens, resp.OutputTokens, resp.Latency)
-}
-
-func TestIntegrationMultiTurn(t *testing.T) {
-	skipIfNoKey(t, "ANTHROPIC_API_KEY")
-
-	p := NewAnthropic(&AnthropicConfig{})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := p.Complete(ctx, &Request{
-		Messages: []Message{
-			{Role: "user", Content: "My name is TestBot."},
-			{Role: "assistant", Content: "Hello TestBot!"},
-			{Role: "user", Content: "What is my name? Reply with just the name."},
-		},
-	})
-	if err != nil {
-		t.Fatalf("multi-turn test failed: %v", err)
-	}
-	if resp.Content == "" {
-		t.Error("expected non-empty response")
-	}
-	t.Logf("Multi-turn response: %q", resp.Content)
-}
-
-func TestIntegrationOpenAIModelList(t *testing.T) {
-	skipIfNoKey(t, "OPENAI_API_KEY")
-
-	p := NewOpenAI(&OpenAIConfig{})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	models, err := listOpenAIModels(ctx, p)
-	if err != nil {
-		t.Fatalf("listOpenAIModels failed: %v", err)
-	}
-	if len(models) == 0 {
-		t.Error("expected at least one OpenAI model")
-	}
-	t.Logf("Found %d OpenAI chat models", len(models))
-}
-
-func TestIntegrationGeminiModelList(t *testing.T) {
-	skipIfNoKey(t, "GEMINI_API_KEY", "GOOGLE_API_KEY")
-
-	p := NewGemini(&GeminiConfig{})
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	models, err := listGeminiModels(ctx, p)
-	if err != nil {
-		t.Fatalf("listGeminiModels failed: %v", err)
-	}
-	if len(models) == 0 {
-		t.Error("expected at least one Gemini model")
-	}
-	t.Logf("Found %d Gemini models", len(models))
 }

@@ -99,16 +99,17 @@ func (m *Manager) Stop() {
 
 // Common secret keys
 const (
-	KeyEncryptionKey   = "magabot/encryption_key"
-	KeyTelegramToken   = "magabot/telegram/bot_token"
-	KeySlackBotToken   = "magabot/slack/bot_token"
-	KeySlackAppToken   = "magabot/slack/app_token"
-	KeyAnthropicAPIKey = "magabot/llm/anthropic_api_key"
-	KeyOpenAIAPIKey    = "magabot/llm/openai_api_key"
-	KeyGeminiAPIKey    = "magabot/llm/gemini_api_key"
-	KeyGLMAPIKey       = "magabot/llm/glm_api_key"
-	KeyDeepSeekAPIKey  = "magabot/llm/deepseek_api_key"
-	KeyBraveAPIKey     = "magabot/tools/brave_api_key"
+	KeyEncryptionKey      = "magabot/encryption_key"
+	KeyTelegramToken      = "magabot/telegram/bot_token"
+	KeySlackBotToken      = "magabot/slack/bot_token"
+	KeySlackAppToken      = "magabot/slack/app_token"
+	KeyAnthropicAPIKey    = "magabot/llm/anthropic_api_key"
+	KeyAnthropicAuthToken = "magabot/llm/anthropic_auth_token"
+	KeyOpenAIAPIKey       = "magabot/llm/openai_api_key"
+	KeyGeminiAPIKey       = "magabot/llm/gemini_api_key"
+	KeyGLMAPIKey          = "magabot/llm/glm_api_key"
+	KeyDeepSeekAPIKey     = "magabot/llm/deepseek_api_key"
+	KeyBraveAPIKey        = "magabot/tools/brave_api_key"
 )
 
 // Config for secrets manager

@@ -1,14 +1,25 @@
-// Package llm provides unified interface for multiple LLM providers
+// Package llm provides unified interface for multiple LLM providers using allm-go
 package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kusa/magabot/internal/util"
+	"github.com/kusandriadi/allm-go"
+)
+
+// Re-export allm types for convenience
+type (
+	Message  = allm.Message
+	Response = allm.Response
+	Image    = allm.Image
 )
 
 var (
@@ -19,53 +30,9 @@ var (
 	ErrTimeout        = errors.New("request timeout")
 )
 
-// ContentBlock represents a content part (text or image)
-type ContentBlock struct {
-	Type      string `json:"type"`                 // "text" or "image"
-	Text      string `json:"text,omitempty"`       // For text blocks
-	MimeType  string `json:"mime_type,omitempty"`  // For image blocks (e.g. "image/jpeg")
-	ImageData string `json:"image_data,omitempty"` // Base64-encoded image data
-}
-
-// Message represents a chat message
-type Message struct {
-	Role    string         `json:"role"` // "system", "user", "assistant"
-	Content string         `json:"content"`
-	Blocks  []ContentBlock `json:"blocks,omitempty"` // Multi-modal content blocks
-}
-
-// HasBlocks returns true if the message has multi-modal content blocks
-func (m *Message) HasBlocks() bool {
-	return len(m.Blocks) > 0
-}
-
-// Request represents an LLM request
-type Request struct {
-	Messages    []Message
-	MaxTokens   int
-	Temperature float64
-}
-
-// Response represents an LLM response
-type Response struct {
-	Content      string
-	Provider     string
-	Model        string
-	InputTokens  int
-	OutputTokens int
-	Latency      time.Duration
-}
-
-// Provider interface for LLM providers
-type Provider interface {
-	Name() string
-	Complete(ctx context.Context, req *Request) (*Response, error)
-	Available() bool
-}
-
-// Router manages LLM provider
+// Router manages LLM clients
 type Router struct {
-	providers    map[string]Provider
+	clients      map[string]*allm.Client
 	mainName     string
 	systemPrompt string
 	maxInput     int
@@ -103,7 +70,7 @@ func NewRouter(cfg *Config) *Router {
 	}
 
 	return &Router{
-		providers:    make(map[string]Provider),
+		clients:      make(map[string]*allm.Client),
 		mainName:     cfg.Main,
 		systemPrompt: cfg.SystemPrompt,
 		maxInput:     cfg.MaxInput,
@@ -113,25 +80,27 @@ func NewRouter(cfg *Config) *Router {
 	}
 }
 
+// providerPrefixes maps model name substrings to provider names (allocated once)
+var providerPrefixes = map[string]string{
+	"claude":    "anthropic",
+	"gpt":       "openai",
+	"o1":        "openai",
+	"o3":        "openai",
+	"gemini":    "gemini",
+	"glm":       "glm",
+	"deepseek":  "deepseek",
+	"llama":     "local",
+	"mistral":   "local",
+	"mixtral":   "local",
+	"phi":       "local",
+	"qwen":      "local",
+	"codellama": "local",
+}
+
 // DetectProvider detects the provider name from a model name
 func DetectProvider(model string) string {
 	model = strings.ToLower(model)
-	prefixes := map[string]string{
-		"claude":    "anthropic",
-		"gpt":       "openai",
-		"o1":        "openai",
-		"o3":        "openai",
-		"gemini":    "gemini",
-		"glm":       "glm",
-		"deepseek":  "deepseek",
-		"llama":     "local",
-		"mistral":   "local",
-		"mixtral":   "local",
-		"phi":       "local",
-		"qwen":      "local",
-		"codellama": "local",
-	}
-	for prefix, provider := range prefixes {
+	for prefix, provider := range providerPrefixes {
 		if strings.Contains(model, prefix) {
 			return provider
 		}
@@ -139,100 +108,115 @@ func DetectProvider(model string) string {
 	return ""
 }
 
-// Register registers a provider
-func (r *Router) Register(p Provider) {
+// Register registers a provider with a name
+func (r *Router) Register(name string, client *allm.Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.providers[p.Name()] = p
-	r.logger.Info("registered LLM provider", "name", p.Name())
+	r.clients[name] = client
+	r.logger.Info("registered LLM provider", "name", name)
 
 	// Auto-detect main provider if not explicitly set
-	if r.mainName == "" && p.Available() {
-		r.mainName = p.Name()
-		r.logger.Info("auto-selected main provider", "name", p.Name())
+	if r.mainName == "" && client.Provider().Available() {
+		r.mainName = name
+		r.logger.Info("auto-selected main provider", "name", name)
 	}
 }
 
-// Complete sends a request to the LLM
+// Complete sends a simple text request to the LLM
 func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, error) {
 	// Rate limit check
 	if !r.rateLimiter.allow(userID) {
+		r.logger.Warn("rate limit exceeded", "user", util.MaskSecret(userID))
 		return nil, ErrRateLimited
 	}
 
+	// Sanitize input to remove control characters (injection protection)
+	text = util.SanitizeInput(text)
+
 	// Input length check
 	if len(text) > r.maxInput {
+		r.logger.Warn("input too long", "user", util.MaskSecret(userID), "length", len(text), "max", r.maxInput)
 		return nil, ErrInputTooLong
 	}
 
-	// Build request
-	req := &Request{
-		Messages: []Message{
-			{Role: "user", Content: text},
-		},
+	// Build messages
+	messages := []allm.Message{
+		{Role: "user", Content: text},
 	}
 
 	// Add system prompt if set
 	if r.systemPrompt != "" {
-		req.Messages = append([]Message{{Role: "system", Content: r.systemPrompt}}, req.Messages...)
+		messages = append([]allm.Message{{Role: "system", Content: r.systemPrompt}}, messages...)
 	}
 
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	resp, err := r.tryProviders(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return r.chat(ctx, messages)
 }
 
 // Chat sends a multi-turn conversation
 func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*Response, error) {
 	if !r.rateLimiter.allow(userID) {
+		r.logger.Warn("rate limit exceeded", "user", util.MaskSecret(userID))
 		return nil, ErrRateLimited
 	}
 
-	// Calculate total input length (including multi-modal block data)
+	// Copy messages to avoid mutating caller's slice during sanitization
+	sanitized := make([]allm.Message, len(messages))
+	copy(sanitized, messages)
+	for i := range sanitized {
+		sanitized[i].Content = util.SanitizeInput(sanitized[i].Content)
+	}
+	messages = sanitized
+
+	// Calculate total input length (with size limit for images)
 	totalLen := 0
 	for _, m := range messages {
 		totalLen += len(m.Content)
-		for _, b := range m.Blocks {
-			totalLen += len(b.Text) + len(b.ImageData)
+		for _, img := range m.Images {
+			// Limit image size contribution to prevent bypass via huge images
+			imgSize := len(img.Data)
+			if imgSize > 10*1024*1024 { // 10MB max per image
+				r.logger.Warn("image too large", "user", util.MaskSecret(userID), "size", imgSize)
+				return nil, fmt.Errorf("image too large: %d bytes (max 10MB)", imgSize)
+			}
+			totalLen += imgSize
 		}
 	}
-	if totalLen > r.maxInput {
+	if totalLen > r.maxInput*10 { // Allow 10x for images
+		r.logger.Warn("total input too large", "user", util.MaskSecret(userID), "length", totalLen)
 		return nil, ErrInputTooLong
 	}
 
-	req := &Request{Messages: messages}
-
+	// Add system prompt if set
 	if r.systemPrompt != "" {
-		req.Messages = append([]Message{{Role: "system", Content: r.systemPrompt}}, req.Messages...)
+		messages = append([]allm.Message{{Role: "system", Content: r.systemPrompt}}, messages...)
 	}
 
+	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	return r.tryProviders(ctx, req)
+	return r.chat(ctx, messages)
 }
 
-// tryProviders attempts the main provider only
-func (r *Router) tryProviders(ctx context.Context, req *Request) (*Response, error) {
+// chat is the internal method that calls the main client
+func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, error) {
 	r.mu.RLock()
-	mainProvider, ok := r.providers[r.mainName]
+	client, ok := r.clients[r.mainName]
 	r.mu.RUnlock()
 
 	if !ok {
 		return nil, fmt.Errorf("%w: provider %q not registered", ErrNoProvider, r.mainName)
 	}
 
-	if !mainProvider.Available() {
+	if !client.Provider().Available() {
 		return nil, fmt.Errorf("%w: provider %q not available", ErrNoProvider, r.mainName)
 	}
 
-	resp, err := mainProvider.Complete(ctx, req)
+	resp, err := client.Chat(ctx, messages)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", ErrProviderFailed, r.mainName, err)
 	}
@@ -252,8 +236,8 @@ func (r *Router) Providers() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	names := make([]string, 0, len(r.providers))
-	for name := range r.providers {
+	names := make([]string, 0, len(r.clients))
+	for name := range r.clients {
 		names = append(names, name)
 	}
 	return names
@@ -266,12 +250,12 @@ func (r *Router) Stats() map[string]interface{} {
 
 	stats := map[string]interface{}{
 		"main":      r.mainName,
-		"providers": len(r.providers),
+		"providers": len(r.clients),
 	}
 
 	available := []string{}
-	for name, p := range r.providers {
-		if p.Available() {
+	for name, c := range r.clients {
+		if c.Provider().Available() {
 			available = append(available, name)
 		}
 	}
@@ -280,20 +264,28 @@ func (r *Router) Stats() map[string]interface{} {
 	return stats
 }
 
-// Simple rate limiter
+// Simple rate limiter with bounded memory
 type rateLimiter struct {
 	requests  map[string][]time.Time
 	limit     int
 	window    time.Duration
 	mu        sync.Mutex
 	callCount int // tracks calls for periodic cleanup
+	maxUsers  int // maximum number of users to track
 }
+
+const (
+	defaultMaxUsers    = 10000 // Maximum users to track in rate limiter
+	cleanupInterval    = 100   // Cleanup every N calls
+	maxEntriesPerClean = 1000  // Max entries to clean in one pass
+)
 
 func newRateLimiter(limit int) *rateLimiter {
 	return &rateLimiter{
 		requests: make(map[string][]time.Time),
 		limit:    limit,
 		window:   time.Minute,
+		maxUsers: defaultMaxUsers,
 	}
 }
 
@@ -305,22 +297,17 @@ func (r *rateLimiter) allow(userID string) bool {
 	cutoff := now.Add(-r.window)
 
 	// Periodic cleanup: every 100 calls, purge stale entries
-	r.callCount++
-	if r.callCount%100 == 0 {
-		for uid, times := range r.requests {
-			if uid == userID {
-				continue
-			}
-			hasRecent := false
-			for _, t := range times {
-				if t.After(cutoff) {
-					hasRecent = true
-					break
-				}
-			}
-			if !hasRecent {
-				delete(r.requests, uid)
-			}
+	r.callCount = (r.callCount + 1) % cleanupInterval
+	if r.callCount == 0 {
+		r.cleanup(cutoff, userID)
+	}
+
+	// If we have too many users, reject new users (DoS protection)
+	if _, exists := r.requests[userID]; !exists && len(r.requests) >= r.maxUsers {
+		// Try aggressive cleanup first
+		r.cleanup(cutoff, userID)
+		if len(r.requests) >= r.maxUsers {
+			return false // Still at capacity, reject
 		}
 	}
 
@@ -342,21 +329,44 @@ func (r *rateLimiter) allow(userID string) bool {
 	return true
 }
 
-// extractAPIMessage extracts a human-readable message from API error strings
-func extractAPIMessage(err error) string {
-	s := err.Error()
-	// Look for "message":"..." in JSON error responses
-	if idx := strings.Index(s, "\"message\":\""); idx != -1 {
-		start := idx + len("\"message\":\"")
-		end := strings.Index(s[start:], "\"")
-		if end != -1 {
-			return s[start : start+end]
+// cleanup removes stale entries from the rate limiter map
+// Must be called with lock held
+func (r *rateLimiter) cleanup(cutoff time.Time, currentUserID string) {
+	cleaned := 0
+	for uid, times := range r.requests {
+		if cleaned >= maxEntriesPerClean {
+			break // Limit cleanup to prevent long lock holds
+		}
+		if uid == currentUserID {
+			continue // Don't clean current user
+		}
+		hasRecent := false
+		for _, t := range times {
+			if t.After(cutoff) {
+				hasRecent = true
+				break
+			}
+		}
+		if !hasRecent {
+			delete(r.requests, uid)
+			cleaned++
 		}
 	}
-	return ""
 }
 
-// Helper to format error for user
+// Stats returns rate limiter statistics
+func (r *rateLimiter) Stats() map[string]interface{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return map[string]interface{}{
+		"tracked_users": len(r.requests),
+		"limit":         r.limit,
+		"window":        r.window.String(),
+		"max_users":     r.maxUsers,
+	}
+}
+
+// FormatError formats error for user display with sanitization
 func FormatError(err error) string {
 	switch {
 	case errors.Is(err, ErrRateLimited):
@@ -366,11 +376,50 @@ func FormatError(err error) string {
 	case errors.Is(err, ErrTimeout):
 		return "⏱️ Request timed out. Please try again."
 	case errors.Is(err, ErrNoProvider):
-		if msg := extractAPIMessage(err); msg != "" {
+		if msg := util.ExtractAPIMessage(err); msg != "" {
 			return fmt.Sprintf("🔌 Provider error: %s", msg)
 		}
 		return "🔌 No AI provider available."
+	case errors.Is(err, ErrProviderFailed):
+		// Extract sanitized message from provider error
+		if msg := util.ExtractAPIMessage(err); msg != "" {
+			return fmt.Sprintf("❌ Provider error: %s", msg)
+		}
+		return "❌ AI provider failed. Please try again."
 	default:
-		return fmt.Sprintf("❌ Error: %v", err)
+		// Generic error - don't leak internal details
+		return "❌ An error occurred. Please try again."
+	}
+}
+
+// allowedImageMIME is the set of accepted image MIME types
+var allowedImageMIME = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/gif":  true,
+	"image/webp": true,
+}
+
+// ImageFromBase64 creates an Image from base64-encoded data and mime type.
+// Only image/jpeg, image/png, image/gif, image/webp MIME types are accepted.
+func ImageFromBase64(mimeType, base64Data string) (Image, error) {
+	if !allowedImageMIME[mimeType] {
+		return Image{}, fmt.Errorf("unsupported image MIME type: %s", mimeType)
+	}
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return Image{}, fmt.Errorf("decode base64: %w", err)
+	}
+	return Image{
+		MimeType: mimeType,
+		Data:     data,
+	}, nil
+}
+
+// ImageFromBytes creates an Image from raw bytes and mime type
+func ImageFromBytes(mimeType string, data []byte) Image {
+	return Image{
+		MimeType: mimeType,
+		Data:     data,
 	}
 }

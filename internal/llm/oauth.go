@@ -3,6 +3,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,6 +41,7 @@ type CodexCliCredentials struct {
 type OAuthManager struct {
 	credentials map[string]*OAuthCredentials
 	mu          sync.RWMutex
+	refreshMu   sync.Mutex // Serializes token refresh to prevent double-refresh
 	httpClient  *http.Client
 }
 
@@ -85,10 +87,13 @@ func (m *OAuthManager) LoadCodexCliCredentials() (*OAuthCredentials, error) {
 	credPath := filepath.Join(codexHome, "auth.json")
 
 	if err := checkFilePermissions(credPath); err != nil {
+		slog.Error("credential file security check failed",
+			"path", credPath,
+			"error", err)
 		return nil, fmt.Errorf("credential file security check failed: %w", err)
 	}
 
-	data, err := os.ReadFile(credPath)
+	data, err := os.ReadFile(credPath) // #nosec G304 -- path is from user home, validated with permission check above
 	if err != nil {
 		return nil, fmt.Errorf("read codex credentials: %w", err)
 	}
@@ -147,26 +152,32 @@ func (m *OAuthManager) GetAccessToken(provider string) (string, error) {
 		return token, nil
 	}
 
-	// Upgrade to write lock for refresh to prevent duplicate refreshes
-	m.mu.Lock()
-	// Re-check under write lock — another goroutine may have refreshed already
+	// Serialize refresh attempts to prevent double-refresh race condition
+	m.refreshMu.Lock()
+	defer m.refreshMu.Unlock()
+
+	// Re-check after acquiring refresh lock — another goroutine may have refreshed already
+	m.mu.RLock()
 	creds = m.credentials[provider]
 	if creds == nil {
-		m.mu.Unlock()
+		m.mu.RUnlock()
 		return "", fmt.Errorf("credentials removed for provider: %s", provider)
 	}
 	if time.Now().UnixMilli()+bufferMs < creds.ExpiresAt {
 		token = creds.AccessToken
-		m.mu.Unlock()
+		m.mu.RUnlock()
 		return token, nil
 	}
-	m.mu.Unlock()
+	m.mu.RUnlock()
 
-	// Refresh outside the lock (network call)
+	// Refresh (serialized by refreshMu — only one goroutine refreshes at a time)
+	slog.Info("refreshing oauth token", "provider", provider)
 	newCreds, err := m.refreshToken(provider, creds)
 	if err != nil {
+		slog.Error("token refresh failed", "provider", provider, "error", err)
 		return "", fmt.Errorf("refresh token: %w", err)
 	}
+	slog.Info("oauth token refreshed", "provider", provider, "expires_at", newCreds.ExpiresAt)
 	return newCreds.AccessToken, nil
 }
 
@@ -190,7 +201,10 @@ func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCreden
 	data.Set("refresh_token", creds.RefreshToken)
 	data.Set("client_id", "app_codex") // OpenAI Codex client ID
 
-	req, err := http.NewRequest("POST", refreshURL, bytes.NewBufferString(data.Encode()))
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", refreshURL, bytes.NewBufferString(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +222,9 @@ func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCreden
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, string(body))
+		// Sanitize response body to prevent leaking sensitive data in error messages
+		sanitizedBody := util.SanitizeErrorMessage(string(body))
+		return nil, fmt.Errorf("refresh failed: %s - %s", resp.Status, sanitizedBody)
 	}
 
 	var result struct {

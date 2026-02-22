@@ -58,6 +58,8 @@ func mapSecretToEnvVar(key string) string {
 	switch key {
 	case KeyAnthropicAPIKey:
 		return "ANTHROPIC_API_KEY"
+	case KeyAnthropicAuthToken:
+		return "ANTHROPIC_AUTH_TOKEN"
 	case KeyOpenAIAPIKey:
 		return "OPENAI_API_KEY"
 	case KeyGeminiAPIKey:

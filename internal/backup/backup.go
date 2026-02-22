@@ -15,7 +15,7 @@ import (
 )
 
 // maxTotalExtractSize limits the total bytes extracted from an archive (2 GB).
-const maxTotalExtractSize = 2 * 1024 * 1024 * 1024
+const maxTotalExtractSize int64 = 2 * 1024 * 1024 * 1024
 
 // maxFileExtractSize limits bytes extracted per file (500 MB).
 const maxFileExtractSize = 500 * 1024 * 1024

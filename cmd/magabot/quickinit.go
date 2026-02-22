@@ -34,8 +34,8 @@ func cmdInit() {
 		fmt.Println("  No LLM API keys found in environment.")
 		fmt.Println()
 		fmt.Println("  Set one of these env vars and re-run, or enter a key now:")
-		fmt.Println("    ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,")
-		fmt.Println("    DEEPSEEK_API_KEY, LOCAL_LLM_URL")
+		fmt.Println("    ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN (Claude Pro/Max),")
+		fmt.Println("    OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, LOCAL_LLM_URL")
 		fmt.Println()
 
 		reader := bufio.NewReader(os.Stdin)
@@ -92,7 +92,7 @@ func cmdInit() {
 	fmt.Println()
 
 	fmt.Println("  Detected:")
-	if detected.AnthropicKey != "" {
+	if detected.AnthropicKey != "" || detected.AnthropicAuthToken != "" {
 		fmt.Println("    LLM: anthropic (Claude)")
 	}
 	if detected.OpenAIKey != "" {
@@ -124,14 +124,15 @@ func cmdInit() {
 // envConfig holds auto-detected configuration from environment variables.
 type envConfig struct {
 	// LLM providers
-	AnthropicKey string
-	OpenAIKey    string
-	GeminiKey    string
-	DeepSeekKey  string
-	GLMKey       string
-	LocalEnabled bool
-	LocalURL     string
-	LocalModel   string
+	AnthropicKey       string
+	AnthropicAuthToken string
+	OpenAIKey          string
+	GeminiKey          string
+	DeepSeekKey        string
+	GLMKey             string
+	LocalEnabled       bool
+	LocalURL           string
+	LocalModel         string
 
 	// Platforms
 	TelegramToken string
@@ -143,13 +144,13 @@ type envConfig struct {
 }
 
 func (e *envConfig) hasLLM() bool {
-	return e.AnthropicKey != "" || e.OpenAIKey != "" || e.GeminiKey != "" ||
+	return e.AnthropicKey != "" || e.AnthropicAuthToken != "" || e.OpenAIKey != "" || e.GeminiKey != "" ||
 		e.DeepSeekKey != "" || e.GLMKey != "" || e.LocalEnabled
 }
 
 func (e *envConfig) defaultProvider() string {
 	switch {
-	case e.AnthropicKey != "":
+	case e.AnthropicKey != "" || e.AnthropicAuthToken != "":
 		return "anthropic"
 	case e.OpenAIKey != "":
 		return "openai"
@@ -169,14 +170,15 @@ func (e *envConfig) defaultProvider() string {
 // detectEnvConfig reads configuration from well-known environment variables.
 func detectEnvConfig() *envConfig {
 	cfg := &envConfig{
-		AnthropicKey:  os.Getenv("ANTHROPIC_API_KEY"),
-		OpenAIKey:     os.Getenv("OPENAI_API_KEY"),
-		GeminiKey:     firstEnv("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-		DeepSeekKey:   os.Getenv("DEEPSEEK_API_KEY"),
-		GLMKey:        os.Getenv("GLM_API_KEY"),
-		TelegramToken: firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
-		SlackBotToken: os.Getenv("SLACK_BOT_TOKEN"),
-		SlackAppToken: os.Getenv("SLACK_APP_TOKEN"),
+		AnthropicKey:       os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicAuthToken: os.Getenv("ANTHROPIC_AUTH_TOKEN"),
+		OpenAIKey:          os.Getenv("OPENAI_API_KEY"),
+		GeminiKey:          firstEnv("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+		DeepSeekKey:        os.Getenv("DEEPSEEK_API_KEY"),
+		GLMKey:             os.Getenv("GLM_API_KEY"),
+		TelegramToken:      firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
+		SlackBotToken:      os.Getenv("SLACK_BOT_TOKEN"),
+		SlackAppToken:      os.Getenv("SLACK_APP_TOKEN"),
 	}
 
 	// Detect local LLM from env
@@ -221,10 +223,14 @@ func buildInitConfig(cfg *envConfig) string {
 	b.WriteString("  timeout: 60\n")
 	b.WriteString("  rate_limit: 10\n\n")
 
-	if cfg.AnthropicKey != "" {
+	if cfg.AnthropicKey != "" || cfg.AnthropicAuthToken != "" {
 		b.WriteString("  anthropic:\n")
 		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
+		if cfg.AnthropicAuthToken != "" {
+			fmt.Fprintf(&b, "    auth_token: \"%s\"\n", cfg.AnthropicAuthToken)
+		} else {
+			fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
+		}
 		b.WriteString("    model: \"claude-sonnet-4-20250514\"\n")
 		b.WriteString("    max_tokens: 4096\n\n")
 	}

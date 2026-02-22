@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"mime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +24,10 @@ import (
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/session"
 	"github.com/kusa/magabot/internal/storage"
+	"github.com/kusa/magabot/internal/util"
 	"github.com/kusa/magabot/internal/version"
+	"github.com/kusandriadi/allm-go"
+	"github.com/kusandriadi/allm-go/provider"
 )
 
 // runDaemon runs the main bot daemon
@@ -118,65 +119,60 @@ func runDaemon() {
 		Logger:       logger.With("component", "llm"),
 	})
 
-	// Register LLM providers
+	// Register LLM providers using allm-go (with URL validation - A10 SSRF protection)
 	if cfg.LLM.Anthropic.Enabled {
-		llmRouter.Register(llm.NewAnthropic(&llm.AnthropicConfig{
-			APIKey:      cfg.LLM.Anthropic.APIKey,
-			Model:       cfg.LLM.Anthropic.Model,
-			MaxTokens:   cfg.LLM.Anthropic.MaxTokens,
-			Temperature: cfg.LLM.Anthropic.Temperature,
-			BaseURL:     cfg.LLM.Anthropic.BaseURL,
-		}))
+		if err := registerAnthropicProvider(llmRouter, cfg); err != nil {
+			logger.Error("register anthropic provider failed", "error", err)
+		}
 	}
 
 	if cfg.LLM.OpenAI.Enabled {
-		llmRouter.Register(llm.NewOpenAI(&llm.OpenAIConfig{
-			APIKey:      cfg.LLM.OpenAI.APIKey,
-			Model:       cfg.LLM.OpenAI.Model,
-			MaxTokens:   cfg.LLM.OpenAI.MaxTokens,
-			Temperature: cfg.LLM.OpenAI.Temperature,
-			BaseURL:     cfg.LLM.OpenAI.BaseURL,
-		}))
+		if err := registerOpenAIProvider(llmRouter, cfg); err != nil {
+			logger.Error("register openai provider failed", "error", err)
+		}
 	}
 
 	if cfg.LLM.Gemini.Enabled {
-		llmRouter.Register(llm.NewGemini(&llm.GeminiConfig{
-			APIKey:      cfg.LLM.Gemini.APIKey,
-			Model:       cfg.LLM.Gemini.Model,
-			MaxTokens:   cfg.LLM.Gemini.MaxTokens,
-			Temperature: cfg.LLM.Gemini.Temperature,
-		}))
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "gemini", apiKey: cfg.LLM.Gemini.APIKey,
+			model: cfg.LLM.Gemini.Model, maxTokens: cfg.LLM.Gemini.MaxTokens,
+			temperature: cfg.LLM.Gemini.Temperature,
+			constructor: provider.Gemini,
+		}); err != nil {
+			logger.Error("register gemini provider failed", "error", err)
+		}
 	}
 
 	if cfg.LLM.GLM.Enabled {
-		llmRouter.Register(llm.NewGLM(&llm.GLMConfig{
-			APIKey:      cfg.LLM.GLM.APIKey,
-			Model:       cfg.LLM.GLM.Model,
-			MaxTokens:   cfg.LLM.GLM.MaxTokens,
-			Temperature: cfg.LLM.GLM.Temperature,
-			BaseURL:     cfg.LLM.GLM.BaseURL,
-		}))
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "glm", apiKey: cfg.LLM.GLM.APIKey,
+			model: cfg.LLM.GLM.Model, maxTokens: cfg.LLM.GLM.MaxTokens,
+			temperature: cfg.LLM.GLM.Temperature, baseURL: cfg.LLM.GLM.BaseURL,
+			constructor: provider.GLM,
+		}); err != nil {
+			logger.Error("register glm provider failed", "error", err)
+		}
 	}
 
 	if cfg.LLM.DeepSeek.Enabled {
-		llmRouter.Register(llm.NewDeepSeek(&llm.DeepSeekConfig{
-			APIKey:      cfg.LLM.DeepSeek.APIKey,
-			Model:       cfg.LLM.DeepSeek.Model,
-			MaxTokens:   cfg.LLM.DeepSeek.MaxTokens,
-			Temperature: cfg.LLM.DeepSeek.Temperature,
-			BaseURL:     cfg.LLM.DeepSeek.BaseURL,
-		}))
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "deepseek", apiKey: cfg.LLM.DeepSeek.APIKey,
+			model: cfg.LLM.DeepSeek.Model, maxTokens: cfg.LLM.DeepSeek.MaxTokens,
+			temperature: cfg.LLM.DeepSeek.Temperature, baseURL: cfg.LLM.DeepSeek.BaseURL,
+			constructor: provider.DeepSeek,
+		}); err != nil {
+			logger.Error("register deepseek provider failed", "error", err)
+		}
 	}
 
 	if cfg.LLM.Local.Enabled {
-		llmRouter.Register(llm.NewLocal(&llm.LocalConfig{
-			Enabled:     true,
-			BaseURL:     cfg.LLM.Local.BaseURL,
-			Model:       cfg.LLM.Local.Model,
-			APIKey:      cfg.LLM.Local.APIKey,
-			MaxTokens:   cfg.LLM.Local.MaxTokens,
-			Temperature: cfg.LLM.Local.Temperature,
-		}))
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "local", model: cfg.LLM.Local.Model,
+			maxTokens: cfg.LLM.Local.MaxTokens, temperature: cfg.LLM.Local.Temperature,
+			baseURL: cfg.LLM.Local.BaseURL, isLocal: true,
+		}); err != nil {
+			logger.Error("register local provider failed", "error", err)
+		}
 	}
 
 	// Initialize bot handlers
@@ -258,7 +254,17 @@ func runDaemon() {
 			Content: msg.Text,
 		}
 		if len(msg.Media) > 0 {
-			userMsg.Blocks = buildContentBlocks(msg.Text, msg.Media, cfg.Paths.DownloadsDir, logger)
+			imageData, errs := util.BuildImagesFromPaths(msg.Media, cfg.Paths.DownloadsDir, logger)
+			if len(errs) > 0 {
+				logger.Warn("some media files failed to load", "count", len(errs))
+			}
+			// Convert util.ImageData to llm.Image
+			for _, img := range imageData {
+				userMsg.Images = append(userMsg.Images, llm.Image{
+					MimeType: img.MimeType,
+					Data:     img.Data,
+				})
+			}
 		}
 		messages = append(messages, userMsg)
 
@@ -447,7 +453,7 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 		}
 		llmStats := llmRouter.Stats()
 		return fmt.Sprintf("📊 *Status*\n\n• LLM: %s\n• Providers: %v\n• Messages: %v",
-			llmStats["default"],
+			llmStats["main"],
 			llmStats["available"],
 			stats["messages"],
 		), nil
@@ -462,7 +468,7 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 	case "/providers":
 		stats := llmRouter.Stats()
 		return fmt.Sprintf("🤖 *LLM Providers*\n\n• Main: %s\n• Available: %v",
-			stats["default"],
+			stats["main"],
 			stats["available"],
 		), nil
 
@@ -542,6 +548,7 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 	mappings := []secretMapping{
 		{secrets.KeyEncryptionKey, &cfg.Security.EncryptionKey, "encryption_key"},
 		{secrets.KeyAnthropicAPIKey, &cfg.LLM.Anthropic.APIKey, "anthropic_api_key"},
+		{secrets.KeyAnthropicAuthToken, &cfg.LLM.Anthropic.AuthToken, "anthropic_auth_token"},
 		{secrets.KeyOpenAIAPIKey, &cfg.LLM.OpenAI.APIKey, "openai_api_key"},
 		{secrets.KeyGeminiAPIKey, &cfg.LLM.Gemini.APIKey, "gemini_api_key"},
 		{secrets.KeyGLMAPIKey, &cfg.LLM.GLM.APIKey, "glm_api_key"},
@@ -580,52 +587,119 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 	return mgr
 }
 
-// buildContentBlocks creates multi-modal content blocks from text and media paths.
-// allowedDir restricts which directory files may be read from (path traversal protection).
-func buildContentBlocks(text string, mediaPaths []string, allowedDir string, logger *slog.Logger) []llm.ContentBlock {
-	var blocks []llm.ContentBlock
+// Provider registration helpers with URL validation (SSRF protection - A10)
 
-	// Add text block if present
-	if text != "" {
-		blocks = append(blocks, llm.ContentBlock{
-			Type: "text",
-			Text: text,
-		})
+// compatProviderConfig holds config for OpenAI-compatible providers (Gemini, GLM, DeepSeek, Local)
+type compatProviderConfig struct {
+	name        string
+	apiKey      string
+	model       string
+	maxTokens   int
+	temperature float64
+	baseURL     string
+	isLocal     bool // local providers allow localhost/private IPs
+	constructor func(apiKey string, opts ...provider.CompatOption) *provider.OpenAICompatibleProvider
+}
+
+// registerCompatProvider registers an OpenAI-compatible provider with shared validation logic.
+func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig) error {
+	if cfg.baseURL != "" {
+		var err error
+		if cfg.isLocal {
+			err = util.ValidateLocalBaseURL(cfg.baseURL)
+		} else {
+			err = util.ValidateBaseURL(cfg.baseURL)
+		}
+		if err != nil {
+			return fmt.Errorf("invalid base URL for %s: %w", cfg.name, err)
+		}
 	}
 
-	// Add image blocks
-	for _, path := range mediaPaths {
-		// Validate path is within allowed directory to prevent directory traversal
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			logger.Warn("invalid media path", "path", path, "error", err)
-			continue
-		}
-		absDir, err := filepath.Abs(allowedDir)
-		if err != nil || !strings.HasPrefix(absPath, absDir+string(filepath.Separator)) {
-			logger.Warn("media path outside allowed directory", "path", path, "allowed", allowedDir)
-			continue
-		}
-
-		data, err := os.ReadFile(absPath)
-		if err != nil {
-			logger.Warn("read media file failed", "path", absPath, "error", err)
-			continue
-		}
-
-		mimeType := mime.TypeByExtension(filepath.Ext(absPath))
-		if mimeType == "" {
-			mimeType = "image/jpeg"
-		}
-
-		blocks = append(blocks, llm.ContentBlock{
-			Type:      "image",
-			MimeType:  mimeType,
-			ImageData: base64.StdEncoding.EncodeToString(data),
-		})
+	opts := []provider.CompatOption{
+		provider.WithDefaultModel(cfg.model),
+	}
+	if cfg.maxTokens > 0 {
+		opts = append(opts, provider.WithMaxTokens(cfg.maxTokens))
+	}
+	if cfg.temperature > 0 {
+		opts = append(opts, provider.WithTemperature(cfg.temperature))
+	}
+	if cfg.baseURL != "" && !cfg.isLocal {
+		opts = append(opts, provider.WithBaseURL(cfg.baseURL))
 	}
 
-	return blocks
+	var p allm.Provider
+	if cfg.isLocal {
+		p = provider.Local(cfg.baseURL, opts...)
+	} else {
+		p = cfg.constructor(cfg.apiKey, opts...)
+	}
+
+	llmRouter.Register(cfg.name, allm.New(p))
+	return nil
+}
+
+func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error {
+	ac := cfg.LLM.Anthropic
+
+	// CLI mode: use claude command, no API key needed
+	if ac.Mode == "cli" {
+		var cliOpts []provider.CLIOption
+		if ac.Model != "" {
+			cliOpts = append(cliOpts, provider.WithCLIModel(ac.Model))
+		}
+		if ac.CLIPath != "" {
+			cliOpts = append(cliOpts, provider.WithCLIPath(ac.CLIPath))
+		}
+		llmRouter.Register("anthropic", allm.New(provider.ClaudeCLI(cliOpts...)))
+		return nil
+	}
+
+	// API mode (default)
+	if ac.BaseURL != "" {
+		if err := util.ValidateBaseURL(ac.BaseURL); err != nil {
+			return fmt.Errorf("invalid base URL: %w", err)
+		}
+	}
+
+	opts := []provider.AnthropicOption{
+		provider.WithAnthropicModel(ac.Model),
+		provider.WithAnthropicMaxTokens(ac.MaxTokens),
+	}
+	if ac.Temperature > 0 {
+		opts = append(opts, provider.WithAnthropicTemperature(ac.Temperature))
+	}
+	if ac.BaseURL != "" {
+		opts = append(opts, provider.WithAnthropicBaseURL(ac.BaseURL))
+	}
+	if ac.AuthToken != "" {
+		opts = append(opts, provider.WithAnthropicAuthToken(ac.AuthToken))
+	}
+
+	llmRouter.Register("anthropic", allm.New(provider.Anthropic(ac.APIKey, opts...)))
+	return nil
+}
+
+func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
+	if cfg.LLM.OpenAI.BaseURL != "" {
+		if err := util.ValidateBaseURL(cfg.LLM.OpenAI.BaseURL); err != nil {
+			return fmt.Errorf("invalid base URL: %w", err)
+		}
+	}
+
+	opts := []provider.OpenAIOption{
+		provider.WithOpenAIModel(cfg.LLM.OpenAI.Model),
+		provider.WithOpenAIMaxTokens(cfg.LLM.OpenAI.MaxTokens),
+	}
+	if cfg.LLM.OpenAI.Temperature > 0 {
+		opts = append(opts, provider.WithOpenAITemperature(cfg.LLM.OpenAI.Temperature))
+	}
+	if cfg.LLM.OpenAI.BaseURL != "" {
+		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))
+	}
+
+	llmRouter.Register("openai", allm.New(provider.OpenAI(cfg.LLM.OpenAI.APIKey, opts...)))
+	return nil
 }
 
 // handleAgentCommand processes colon-prefixed agent session commands.
