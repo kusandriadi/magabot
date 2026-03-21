@@ -14,12 +14,11 @@ linters:
     - govet
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
     - bodyclose
     - misspell
   disable:
-    - gosec # Run separately in CI security job
+    - gosec
   settings:
     errcheck:
       check-type-assertions: false
