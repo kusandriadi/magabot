@@ -9,6 +9,7 @@ formatters:
     - gofmt
 
 linters:
+  default: none
   enable:
     - govet
     - staticcheck
@@ -16,8 +17,6 @@ linters:
     - ineffassign
     - bodyclose
     - misspell
-  disable:
-    - gosec
   settings:
     govet:
       enable-all: false
