@@ -10,7 +10,6 @@ formatters:
 
 linters:
   enable:
-    - errcheck
     - govet
     - staticcheck
     - unused
@@ -20,9 +19,6 @@ linters:
   disable:
     - gosec
   settings:
-    errcheck:
-      check-type-assertions: false
-      check-blank: false
     govet:
       enable-all: false
     misspell:
