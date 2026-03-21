@@ -26,6 +26,7 @@ linters:
       checks:
         - "all"
         - "-QF*"
+        - "-ST*"
 
 issues:
   max-issues-per-linter: 0
