@@ -22,6 +22,10 @@ linters:
       enable-all: false
     misspell:
       locale: US
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"
 
 issues:
   max-issues-per-linter: 0
