@@ -132,6 +132,15 @@ func FetchModels(providerName, apiKey, baseURL string) ([]ModelInfo, error) {
 		}
 		p = provider.GLM(apiKey, opts...)
 
+	case "kimi":
+		p = provider.Kimi(apiKey)
+
+	case "qwen":
+		p = provider.Qwen(apiKey)
+
+	case "minimax":
+		p = provider.MiniMax(apiKey)
+
 	case "local":
 		if baseURL == "" {
 			baseURL = "http://localhost:11434/v1" // Ollama default

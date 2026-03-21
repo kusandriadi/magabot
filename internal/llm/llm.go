@@ -17,9 +17,16 @@ import (
 
 // Re-export allm types for convenience
 type (
-	Message  = allm.Message
-	Response = allm.Response
-	Image    = allm.Image
+	Message        = allm.Message
+	Response       = allm.Response
+	Image          = allm.Image
+	ResponseFormat = allm.ResponseFormat
+	ThinkingConfig = allm.ThinkingConfig
+)
+
+const (
+	ResponseFormatJSON       = allm.ResponseFormatJSON
+	ResponseFormatJSONSchema = allm.ResponseFormatJSONSchema
 )
 
 var (
@@ -89,11 +96,14 @@ var providerPrefixes = map[string]string{
 	"gemini":    "gemini",
 	"glm":       "glm",
 	"deepseek":  "deepseek",
+	"kimi":      "kimi",
+	"moonshot":  "kimi",
+	"qwen":      "qwen",
+	"minimax":   "minimax",
 	"llama":     "local",
 	"mistral":   "local",
 	"mixtral":   "local",
 	"phi":       "local",
-	"qwen":      "local",
 	"codellama": "local",
 }
 
@@ -421,5 +431,41 @@ func ImageFromBytes(mimeType string, data []byte) Image {
 	return Image{
 		MimeType: mimeType,
 		Data:     data,
+	}
+}
+
+// HealthCheck returns health status of all registered providers
+func (r *Router) HealthCheck(ctx context.Context) map[string]*allm.HealthStatus {
+	r.mu.RLock()
+	clients := make(map[string]*allm.Client)
+	for k, v := range r.clients {
+		clients[k] = v
+	}
+	r.mu.RUnlock()
+
+	results := make(map[string]*allm.HealthStatus)
+	for name, client := range clients {
+		results[name] = client.Ping(ctx)
+	}
+	return results
+}
+
+// SetResponseFormat sets the response format on the main client
+func (r *Router) SetResponseFormat(format *allm.ResponseFormat) {
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+	if ok {
+		client.SetResponseFormat(format)
+	}
+}
+
+// SetThinking sets the thinking configuration on the main client
+func (r *Router) SetThinking(thinking *allm.ThinkingConfig) {
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+	if ok {
+		client.SetThinking(thinking)
 	}
 }

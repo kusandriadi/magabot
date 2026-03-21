@@ -193,6 +193,9 @@ type LLMConfig struct {
 	GLM       LLMProviderConfig `yaml:"glm"`
 	DeepSeek  LLMProviderConfig `yaml:"deepseek"`
 	Local     LLMProviderConfig `yaml:"local"` // Self-hosted (Ollama, vLLM, llama.cpp, etc.)
+	Kimi      LLMProviderConfig `yaml:"kimi"`
+	Qwen      LLMProviderConfig `yaml:"qwen"`
+	MiniMax   LLMProviderConfig `yaml:"minimax"`
 }
 
 // LLMProviderConfig holds config for a single LLM provider
@@ -206,6 +209,7 @@ type LLMProviderConfig struct {
 	Temperature float64 `yaml:"temperature"`
 	BaseURL     string  `yaml:"base_url,omitempty"`
 	CLIPath     string  `yaml:"cli_path,omitempty"` // Path to claude binary (default: "claude")
+	MaxRetries  int     `yaml:"max_retries"`
 }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)
@@ -215,6 +219,9 @@ type ProvidersConfig struct {
 	Gemini    *LLMProviderConfig `yaml:"gemini,omitempty"`
 	GLM       *LLMProviderConfig `yaml:"glm,omitempty"`
 	DeepSeek  *LLMProviderConfig `yaml:"deepseek,omitempty"`
+	Kimi      *LLMProviderConfig `yaml:"kimi,omitempty"`
+	Qwen      *LLMProviderConfig `yaml:"qwen,omitempty"`
+	MiniMax   *LLMProviderConfig `yaml:"minimax,omitempty"`
 }
 
 // AccessConfig holds global access settings

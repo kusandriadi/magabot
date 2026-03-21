@@ -136,7 +136,7 @@ func runDaemon() {
 		if err := registerCompatProvider(llmRouter, compatProviderConfig{
 			name: "gemini", apiKey: cfg.LLM.Gemini.APIKey,
 			model: cfg.LLM.Gemini.Model, maxTokens: cfg.LLM.Gemini.MaxTokens,
-			temperature: cfg.LLM.Gemini.Temperature,
+			temperature: cfg.LLM.Gemini.Temperature, maxRetries: cfg.LLM.Gemini.MaxRetries,
 			constructor: provider.Gemini,
 		}); err != nil {
 			logger.Error("register gemini provider failed", "error", err)
@@ -148,6 +148,7 @@ func runDaemon() {
 			name: "glm", apiKey: cfg.LLM.GLM.APIKey,
 			model: cfg.LLM.GLM.Model, maxTokens: cfg.LLM.GLM.MaxTokens,
 			temperature: cfg.LLM.GLM.Temperature, baseURL: cfg.LLM.GLM.BaseURL,
+			maxRetries:  cfg.LLM.GLM.MaxRetries,
 			constructor: provider.GLM,
 		}); err != nil {
 			logger.Error("register glm provider failed", "error", err)
@@ -159,6 +160,7 @@ func runDaemon() {
 			name: "deepseek", apiKey: cfg.LLM.DeepSeek.APIKey,
 			model: cfg.LLM.DeepSeek.Model, maxTokens: cfg.LLM.DeepSeek.MaxTokens,
 			temperature: cfg.LLM.DeepSeek.Temperature, baseURL: cfg.LLM.DeepSeek.BaseURL,
+			maxRetries:  cfg.LLM.DeepSeek.MaxRetries,
 			constructor: provider.DeepSeek,
 		}); err != nil {
 			logger.Error("register deepseek provider failed", "error", err)
@@ -169,9 +171,42 @@ func runDaemon() {
 		if err := registerCompatProvider(llmRouter, compatProviderConfig{
 			name: "local", model: cfg.LLM.Local.Model,
 			maxTokens: cfg.LLM.Local.MaxTokens, temperature: cfg.LLM.Local.Temperature,
-			baseURL: cfg.LLM.Local.BaseURL, isLocal: true,
+			baseURL: cfg.LLM.Local.BaseURL, isLocal: true, maxRetries: cfg.LLM.Local.MaxRetries,
 		}); err != nil {
 			logger.Error("register local provider failed", "error", err)
+		}
+	}
+
+	if cfg.LLM.Kimi.Enabled {
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "kimi", apiKey: cfg.LLM.Kimi.APIKey,
+			model: cfg.LLM.Kimi.Model, maxTokens: cfg.LLM.Kimi.MaxTokens,
+			temperature: cfg.LLM.Kimi.Temperature, maxRetries: cfg.LLM.Kimi.MaxRetries,
+			constructor: provider.Kimi,
+		}); err != nil {
+			logger.Error("register kimi provider failed", "error", err)
+		}
+	}
+
+	if cfg.LLM.Qwen.Enabled {
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "qwen", apiKey: cfg.LLM.Qwen.APIKey,
+			model: cfg.LLM.Qwen.Model, maxTokens: cfg.LLM.Qwen.MaxTokens,
+			temperature: cfg.LLM.Qwen.Temperature, maxRetries: cfg.LLM.Qwen.MaxRetries,
+			constructor: provider.Qwen,
+		}); err != nil {
+			logger.Error("register qwen provider failed", "error", err)
+		}
+	}
+
+	if cfg.LLM.MiniMax.Enabled {
+		if err := registerCompatProvider(llmRouter, compatProviderConfig{
+			name: "minimax", apiKey: cfg.LLM.MiniMax.APIKey,
+			model: cfg.LLM.MiniMax.Model, maxTokens: cfg.LLM.MiniMax.MaxTokens,
+			temperature: cfg.LLM.MiniMax.Temperature, maxRetries: cfg.LLM.MiniMax.MaxRetries,
+			constructor: provider.MiniMax,
+		}); err != nil {
+			logger.Error("register minimax provider failed", "error", err)
 		}
 	}
 
@@ -598,6 +633,7 @@ type compatProviderConfig struct {
 	temperature float64
 	baseURL     string
 	isLocal     bool // local providers allow localhost/private IPs
+	maxRetries  int
 	constructor func(apiKey string, opts ...provider.CompatOption) *provider.OpenAICompatibleProvider
 }
 
@@ -635,12 +671,24 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig) err
 		p = cfg.constructor(cfg.apiKey, opts...)
 	}
 
-	llmRouter.Register(cfg.name, allm.New(p))
+	// Create client with retry options
+	clientOpts := []allm.Option{}
+	if cfg.maxRetries > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.maxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
+
+	llmRouter.Register(cfg.name, allm.New(p, clientOpts...))
 	return nil
 }
 
 func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error {
 	ac := cfg.LLM.Anthropic
+
+	// Create client with retry options
+	clientOpts := []allm.Option{}
+	if ac.MaxRetries > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxRetries(ac.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
 
 	// CLI mode: use claude command, no API key needed
 	if ac.Mode == "cli" {
@@ -651,7 +699,7 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 		if ac.CLIPath != "" {
 			cliOpts = append(cliOpts, provider.WithCLIPath(ac.CLIPath))
 		}
-		llmRouter.Register("anthropic", allm.New(provider.ClaudeCLI(cliOpts...)))
+		llmRouter.Register("anthropic", allm.New(provider.ClaudeCLI(cliOpts...), clientOpts...))
 		return nil
 	}
 
@@ -676,7 +724,7 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 		opts = append(opts, provider.WithAnthropicAuthToken(ac.AuthToken))
 	}
 
-	llmRouter.Register("anthropic", allm.New(provider.Anthropic(ac.APIKey, opts...)))
+	llmRouter.Register("anthropic", allm.New(provider.Anthropic(ac.APIKey, opts...), clientOpts...))
 	return nil
 }
 
@@ -698,7 +746,13 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))
 	}
 
-	llmRouter.Register("openai", allm.New(provider.OpenAI(cfg.LLM.OpenAI.APIKey, opts...)))
+	// Create client with retry options
+	clientOpts := []allm.Option{}
+	if cfg.LLM.OpenAI.MaxRetries > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.LLM.OpenAI.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
+
+	llmRouter.Register("openai", allm.New(provider.OpenAI(cfg.LLM.OpenAI.APIKey, opts...), clientOpts...))
 	return nil
 }
 

@@ -23,6 +23,10 @@ func TestDetectProvider(t *testing.T) {
 		{"gemini-pro", "gemini"},
 		{"glm-4", "glm"},
 		{"deepseek-chat", "deepseek"},
+		{"kimi-1.5", "kimi"},
+		{"moonshot-v1", "kimi"},
+		{"qwen-turbo", "qwen"},
+		{"minimax-abab", "minimax"},
 		{"llama3", "local"},
 		{"mistral", "local"},
 		{"unknown-model", ""},
@@ -571,4 +575,64 @@ func TestRateLimiter_MaxUsers(t *testing.T) {
 	if rl.allow("new-user") {
 		t.Fatal("Expected rate limit for new user when at capacity")
 	}
+}
+
+func TestRouter_HealthCheck(t *testing.T) {
+	mock1 := allmtest.NewMockProvider("provider1",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+	mock2 := allmtest.NewMockProvider("provider2",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "provider1"})
+	router.Register("provider1", allm.New(mock1))
+	router.Register("provider2", allm.New(mock2))
+
+	ctx := context.Background()
+	results := router.HealthCheck(ctx)
+
+	if len(results) != 2 {
+		t.Errorf("HealthCheck returned %d results, want 2", len(results))
+	}
+
+	for name, status := range results {
+		if status == nil {
+			t.Errorf("HealthCheck for %s returned nil status", name)
+		}
+	}
+}
+
+func TestRouter_SetResponseFormat(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	// Set response format
+	format := &allm.ResponseFormat{Type: allm.ResponseFormatJSON}
+	router.SetResponseFormat(format)
+
+	// The method should not panic
+	// We can't easily verify the format was set without introspection,
+	// but at least we confirm the method runs without error
+}
+
+func TestRouter_SetThinking(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	// Set thinking config
+	thinking := &allm.ThinkingConfig{}
+	router.SetThinking(thinking)
+
+	// The method should not panic
+	// We can't easily verify the thinking was set without introspection,
+	// but at least we confirm the method runs without error
 }
