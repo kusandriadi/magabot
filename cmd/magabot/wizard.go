@@ -50,9 +50,9 @@ type WizardState struct {
 
 	// LLM
 	LLMDefault          string
-	AnthropicEnabled    bool
-	AnthropicKey        string
-	ClaudeCodeAuthToken string
+	AnthropicEnabled bool
+	AnthropicKey     string
+	AnthropicMode    string // "api" or "cli"
 	OpenAIEnabled       bool
 	OpenAIKey           string
 	GeminiEnabled       bool
@@ -75,12 +75,15 @@ func testLLMConnection(state *WizardState) {
 
 	// Determine which provider to test
 	providerName := state.LLMDefault
-	var apiKey, authToken string
+	var apiKey string
 
 	switch providerName {
 	case "anthropic":
+		if state.AnthropicMode == "cli" {
+			fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
+			return
+		}
 		apiKey = state.AnthropicKey
-		authToken = state.ClaudeCodeAuthToken
 	case "openai":
 		apiKey = state.OpenAIKey
 	case "gemini":
@@ -97,13 +100,13 @@ func testLLMConnection(state *WizardState) {
 		apiKey = state.MiniMaxKey
 	}
 
-	if apiKey == "" && authToken == "" {
+	if apiKey == "" {
 		fmt.Println("⚠️  No API key provided, skipping connection test")
 		return
 	}
 
 	// Use FetchModels from internal/llm to test
-	models, err := llm.FetchModels(providerName, apiKey, "", authToken)
+	models, err := llm.FetchModels(providerName, apiKey, "")
 	if err != nil {
 		fmt.Printf("❌ Connection failed: %v\n", err)
 		fmt.Println("   Check your API key and try again with: magabot setup llm")
@@ -446,18 +449,10 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		authMethod := askString(reader, "Choose [1/2]", "1")
 
 		if authMethod == "2" {
-			token := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN")
-			if token == "" {
-				fmt.Println()
-				fmt.Println("  Get your token by running: claude setup-token")
-				fmt.Println()
-				token = askPassword(reader, "OAuth token")
-			}
-			if token != "" {
-				state.ClaudeCodeAuthToken = token
-				fmt.Println("  ✅ Claude Pro/Max token configured")
-			}
+			state.AnthropicMode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
 		} else {
+			state.AnthropicMode = "api"
 			fmt.Println("  Get API key: https://console.anthropic.com/")
 			fmt.Println()
 			state.AnthropicKey = askPassword(reader, "API key (sk-ant-...)")
@@ -714,8 +709,8 @@ llm:
   
   anthropic:
     enabled: %t
+    mode: "%s"
     api_key: "%s"
-    auth_token: "%s"
     model: "claude-sonnet-4-20250514"
     max_tokens: 4096
     temperature: 0.7
@@ -815,8 +810,8 @@ tools:
 		// LLM
 		state.LLMDefault,
 		state.AnthropicEnabled,
+		state.AnthropicMode,
 		state.AnthropicKey,
-		state.ClaudeCodeAuthToken,
 		state.OpenAIEnabled,
 		state.OpenAIKey,
 		state.GeminiEnabled,

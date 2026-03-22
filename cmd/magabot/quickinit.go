@@ -228,7 +228,7 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("  anthropic:\n")
 		b.WriteString("    enabled: true\n")
 		if cfg.ClaudeCodeAuthToken != "" {
-			fmt.Fprintf(&b, "    auth_token: \"%s\"\n", cfg.ClaudeCodeAuthToken)
+			b.WriteString("    mode: \"cli\"\n")
 		} else {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
 		}

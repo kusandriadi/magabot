@@ -757,7 +757,8 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 	}
 
 	// CLI mode: use claude command, no API key needed
-	if ac.Mode == "cli" {
+	// Auto-switch to CLI mode when auth_token is set (backward compat)
+	if ac.Mode == "cli" || (ac.AuthToken != "" && ac.APIKey == "") {
 		var cliOpts []provider.CLIOption
 		if ac.Model != "" {
 			cliOpts = append(cliOpts, provider.WithCLIModel(ac.Model))
@@ -785,9 +786,6 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 	}
 	if ac.BaseURL != "" {
 		opts = append(opts, provider.WithAnthropicBaseURL(ac.BaseURL))
-	}
-	if ac.AuthToken != "" {
-		opts = append(opts, provider.WithAnthropicAuthToken(ac.AuthToken))
 	}
 
 	llmRouter.Register("anthropic", allm.New(provider.Anthropic(ac.APIKey, opts...), clientOpts...))

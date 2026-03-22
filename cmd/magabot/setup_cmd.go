@@ -570,18 +570,9 @@ func setupLLM() {
 		authMethod := askString(reader, "Choose [1/2]", "1")
 
 		if authMethod == "2" {
-			token := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN")
-			if token == "" {
-				fmt.Println()
-				fmt.Println("  Get your token by running: claude setup-token")
-				fmt.Println()
-				token = askPassword(reader, "OAuth token")
-			}
-			if token != "" {
-				saveSecret("llm/claude_code_auth_token", token)
-				cfg.LLM.Anthropic.Enabled = true
-				fmt.Println("  ✅ Claude Pro/Max token configured")
-			}
+			cfg.LLM.Anthropic.Enabled = true
+			cfg.LLM.Anthropic.Mode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
 		} else {
 			key := askString(reader, "Anthropic API Key (sk-ant-...)", "")
 			if key != "" {
@@ -645,34 +636,37 @@ func setupLLM() {
 	fmt.Println()
 	fmt.Println("🔄 Testing connection to", cfg.LLM.Main, "...")
 
-	var apiKey, authToken string
-	switch cfg.LLM.Main {
-	case "anthropic":
-		apiKey = cfg.LLM.Anthropic.APIKey
-		authToken = cfg.LLM.Anthropic.AuthToken
-	case "openai":
-		apiKey = cfg.LLM.OpenAI.APIKey
-	case "gemini":
-		apiKey = cfg.LLM.Gemini.APIKey
-	case "deepseek":
-		apiKey = cfg.LLM.DeepSeek.APIKey
-	case "glm":
-		apiKey = cfg.LLM.GLM.APIKey
-	case "kimi":
-		apiKey = cfg.LLM.Kimi.APIKey
-	case "qwen":
-		apiKey = cfg.LLM.Qwen.APIKey
-	case "minimax":
-		apiKey = cfg.LLM.MiniMax.APIKey
-	}
+	if cfg.LLM.Main == "anthropic" && cfg.LLM.Anthropic.Mode == "cli" {
+		fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
+	} else {
+		var apiKey string
+		switch cfg.LLM.Main {
+		case "anthropic":
+			apiKey = cfg.LLM.Anthropic.APIKey
+		case "openai":
+			apiKey = cfg.LLM.OpenAI.APIKey
+		case "gemini":
+			apiKey = cfg.LLM.Gemini.APIKey
+		case "deepseek":
+			apiKey = cfg.LLM.DeepSeek.APIKey
+		case "glm":
+			apiKey = cfg.LLM.GLM.APIKey
+		case "kimi":
+			apiKey = cfg.LLM.Kimi.APIKey
+		case "qwen":
+			apiKey = cfg.LLM.Qwen.APIKey
+		case "minimax":
+			apiKey = cfg.LLM.MiniMax.APIKey
+		}
 
-	if apiKey != "" || authToken != "" {
-		models, err := llm.FetchModels(cfg.LLM.Main, apiKey, "", authToken)
-		if err != nil {
-			fmt.Printf("❌ Connection failed: %v\n", err)
-			fmt.Println("   Check your API key and try again with: magabot setup llm")
-		} else {
-			fmt.Printf("✅ Connected to %s! (%d models available)\n", cfg.LLM.Main, len(models))
+		if apiKey != "" {
+			models, err := llm.FetchModels(cfg.LLM.Main, apiKey, "")
+			if err != nil {
+				fmt.Printf("❌ Connection failed: %v\n", err)
+				fmt.Println("   Check your API key and try again with: magabot setup llm")
+			} else {
+				fmt.Printf("✅ Connected to %s! (%d models available)\n", cfg.LLM.Main, len(models))
+			}
 		}
 	}
 
