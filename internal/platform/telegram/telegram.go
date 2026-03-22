@@ -156,7 +156,14 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 
 	// Handle voice messages
 	if msg.Voice != nil {
-		if text == "" {
+		if path, err := b.downloadFile(msg.Voice.FileID, "voice"); err == nil {
+			media = append(media, path)
+		} else {
+			b.logger.Warn("download voice failed", "error", err)
+		}
+		if msg.Caption != "" {
+			text = msg.Caption
+		} else if text == "" {
 			text = "[Voice Message]"
 		}
 	}
@@ -170,6 +177,11 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 
 	// Handle document messages
 	if msg.Document != nil {
+		if path, err := b.downloadFile(msg.Document.FileID, "doc"); err == nil {
+			media = append(media, path)
+		} else {
+			b.logger.Warn("download document failed", "error", err)
+		}
 		if msg.Caption != "" {
 			text = msg.Caption
 		} else if text == "" {
@@ -228,7 +240,7 @@ var allowedMediaExts = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".bmp": true,
 	".mp4": true, ".webm": true, ".mov": true,
 	".ogg": true, ".oga": true, ".mp3": true, ".m4a": true, ".wav": true,
-	".pdf": true, ".txt": true,
+	".pdf": true, ".txt": true, ".md": true, ".csv": true, ".json": true,
 }
 
 // downloadFile downloads a file from Telegram and saves it locally

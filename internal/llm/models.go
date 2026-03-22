@@ -15,11 +15,14 @@ import (
 
 // ModelInfo represents a model
 type ModelInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Provider    string `json:"provider"`
-	Description string `json:"description,omitempty"`
-	MaxTokens   int    `json:"max_tokens,omitempty"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Provider      string   `json:"provider"`
+	Description   string   `json:"description,omitempty"`
+	MaxTokens     int      `json:"max_tokens,omitempty"`
+	ContextWindow int      `json:"context_window,omitempty"` // from allm.Model
+	MaxOutput     int      `json:"max_output,omitempty"`     // from allm.Model
+	Capabilities  []string `json:"capabilities,omitempty"`   // from allm.Model
 }
 
 // ListModels lists available models from a provider via API
@@ -45,9 +48,12 @@ func (r *Router) ListModels(ctx context.Context, providerName string) ([]ModelIn
 	result := make([]ModelInfo, len(models))
 	for i, m := range models {
 		result[i] = ModelInfo{
-			ID:       m.ID,
-			Name:     m.Name,
-			Provider: m.Provider,
+			ID:            m.ID,
+			Name:          m.Name,
+			Provider:      m.Provider,
+			ContextWindow: m.ContextWindow,
+			MaxOutput:     m.MaxOutput,
+			Capabilities:  m.Capabilities,
 		}
 	}
 
@@ -169,9 +175,12 @@ func FetchModels(providerName, apiKey, baseURL string) ([]ModelInfo, error) {
 	result := make([]ModelInfo, len(models))
 	for i, m := range models {
 		result[i] = ModelInfo{
-			ID:       m.ID,
-			Name:     m.Name,
-			Provider: m.Provider,
+			ID:            m.ID,
+			Name:          m.Name,
+			Provider:      m.Provider,
+			ContextWindow: m.ContextWindow,
+			MaxOutput:     m.MaxOutput,
+			Capabilities:  m.Capabilities,
 		}
 	}
 
@@ -207,13 +216,23 @@ func FormatModelList(models map[string][]ModelInfo) string {
 		for _, m := range modelList {
 			if len(modelList) > 10 {
 				// Compact for many models
-				sb.WriteString(fmt.Sprintf("• `%s`\n", m.ID))
-			} else {
-				if m.Description != "" {
-					sb.WriteString(fmt.Sprintf("• `%s` - %s\n", m.ID, m.Description))
-				} else {
-					sb.WriteString(fmt.Sprintf("• `%s`\n", m.ID))
+				sb.WriteString(fmt.Sprintf("• `%s`", m.ID))
+				if m.ContextWindow > 0 {
+					sb.WriteString(fmt.Sprintf(" (%dk ctx)", m.ContextWindow/1000))
 				}
+				sb.WriteString("\n")
+			} else {
+				sb.WriteString(fmt.Sprintf("• `%s`", m.ID))
+				if m.ContextWindow > 0 {
+					sb.WriteString(fmt.Sprintf(" - %dk context", m.ContextWindow/1000))
+				}
+				if len(m.Capabilities) > 0 {
+					sb.WriteString(fmt.Sprintf(" [%s]", strings.Join(m.Capabilities, ", ")))
+				}
+				if m.Description != "" {
+					sb.WriteString(fmt.Sprintf(" - %s", m.Description))
+				}
+				sb.WriteString("\n")
 			}
 		}
 	}

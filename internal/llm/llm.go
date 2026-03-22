@@ -17,16 +17,27 @@ import (
 
 // Re-export allm types for convenience
 type (
-	Message        = allm.Message
-	Response       = allm.Response
-	Image          = allm.Image
-	ResponseFormat = allm.ResponseFormat
-	ThinkingConfig = allm.ThinkingConfig
-	StreamChunk    = allm.StreamChunk
-	CacheControl   = allm.CacheControl
-	TokenCount     = allm.TokenCount
-	ImageResponse  = allm.ImageResponse
-	ImageOption    = allm.ImageOption
+	Message            = allm.Message
+	Response           = allm.Response
+	Image              = allm.Image
+	ResponseFormat     = allm.ResponseFormat
+	ThinkingConfig     = allm.ThinkingConfig
+	StreamChunk        = allm.StreamChunk
+	CacheControl       = allm.CacheControl
+	TokenCount         = allm.TokenCount
+	ImageResponse      = allm.ImageResponse
+	ImageOption        = allm.ImageOption
+	Document           = allm.Document
+	Citation           = allm.Citation
+	StreamUsage        = allm.StreamUsage
+	SpeechRequest      = allm.SpeechRequest
+	SpeechResponse     = allm.SpeechResponse
+	TranscribeRequest  = allm.TranscribeRequest
+	TranscribeResponse = allm.TranscribeResponse
+	LogProb            = allm.LogProb
+	TokenLogProb       = allm.TokenLogProb
+	SearchResult       = allm.SearchResult
+	HealthStatus       = allm.HealthStatus
 )
 
 var (
@@ -256,6 +267,10 @@ func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, 
 		return nil, fmt.Errorf("%w: %s: %w", ErrProviderFailed, r.mainName, err)
 	}
 
+	if resp.RequestID != "" {
+		r.logger.Debug("llm response", "provider", r.mainName, "request_id", resp.RequestID, "tokens_in", resp.InputTokens, "tokens_out", resp.OutputTokens)
+	}
+
 	return resp, nil
 }
 
@@ -376,6 +391,35 @@ func (r *Router) GenerateImage(ctx context.Context, userID, prompt string, opts 
 	}
 
 	return client.GenerateImage(ctx, prompt, opts...)
+}
+
+// Speak converts text to speech using the configured provider
+func (r *Router) Speak(ctx context.Context, req *SpeechRequest) (*SpeechResponse, error) {
+	r.mu.RLock()
+	// Prefer OpenAI for TTS (has the API)
+	client, ok := r.clients["openai"]
+	if !ok {
+		client, ok = r.clients[r.mainName]
+	}
+	r.mu.RUnlock()
+	if !ok {
+		return nil, ErrNoProvider
+	}
+	return client.Speak(ctx, req)
+}
+
+// Transcribe converts audio to text using the configured provider
+func (r *Router) Transcribe(ctx context.Context, req *TranscribeRequest) (*TranscribeResponse, error) {
+	r.mu.RLock()
+	client, ok := r.clients["openai"]
+	if !ok {
+		client, ok = r.clients[r.mainName]
+	}
+	r.mu.RUnlock()
+	if !ok {
+		return nil, ErrNoProvider
+	}
+	return client.Transcribe(ctx, req)
 }
 
 // SetSystemPrompt updates the system prompt
