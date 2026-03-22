@@ -171,7 +171,7 @@ func TestRouter_InputTooLong(t *testing.T) {
 		Main:     "test",
 		MaxInput: 10,
 	})
-	router.Register("test", allm.New(mock))
+	router.Register("test", allm.New(mock, allm.WithMaxInputLen(10)))
 
 	ctx := context.Background()
 	_, err := router.Complete(ctx, "user1", "This is a very long message that exceeds the limit")
@@ -534,10 +534,10 @@ func TestRouter_ImageTooLarge(t *testing.T) {
 	)
 
 	router := NewRouter(&Config{Main: "test", MaxInput: 10000})
-	router.Register("test", allm.New(mock))
+	router.Register("test", allm.New(mock, allm.WithMaxInputLen(50*1024*1024)))
 
-	// Create a very large image (> 10MB)
-	largeData := make([]byte, 11*1024*1024)
+	// Create a very large image (> 20MB, allm-go's MaxImageSize)
+	largeData := make([]byte, 21*1024*1024)
 
 	messages := []Message{
 		{
@@ -554,8 +554,8 @@ func TestRouter_ImageTooLarge(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for too-large image")
 	}
-	if !strings.Contains(err.Error(), "too large") {
-		t.Errorf("Error should mention 'too large', got: %v", err)
+	if !strings.Contains(err.Error(), "exceeds maximum size") {
+		t.Errorf("Error should mention 'exceeds maximum size', got: %v", err)
 	}
 }
 

@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusa/magabot/internal/storage"
+	"github.com/kusa/magabot/internal/version"
 	"gopkg.in/yaml.v3"
 )
 
@@ -91,9 +94,66 @@ func cmdStatus() {
 	fmt.Printf("   Config: %s\n", configFile)
 	fmt.Printf("   Logs:   %s\n", logFile)
 
-	// Show some stats
-	if info, err := os.Stat(filepath.Join(dataDir, "magabot.db")); err == nil {
+	// DB size
+	dbPath := filepath.Join(dataDir, "magabot.db")
+	if info, err := os.Stat(dbPath); err == nil {
 		fmt.Printf("   DB:     %.2f KB\n", float64(info.Size())/1024)
+	}
+
+	// Load config for detailed status
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		return
+	}
+
+	// System
+	fmt.Printf("\n   System:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("   Version:   v%s\n", version.Short())
+	fmt.Printf("   Go:        %s\n", runtime.Version())
+
+	// LLM
+	fmt.Println("\n   LLM:")
+	fmt.Printf("     Provider: %s\n", cfg.LLM.Main)
+	if cfg.LLM.Anthropic.Enabled {
+		fmt.Printf("     Model:    %s\n", cfg.LLM.Anthropic.Model)
+		if cfg.LLM.Anthropic.Mode == "cli" {
+			fmt.Printf("     Auth:     Claude CLI\n")
+		}
+	}
+	if cfg.LLM.OpenAI.Enabled {
+		fmt.Printf("     OpenAI:   %s\n", cfg.LLM.OpenAI.Model)
+	}
+	if cfg.LLM.Gemini.Enabled {
+		fmt.Printf("     Gemini:   %s\n", cfg.LLM.Gemini.Model)
+	}
+
+	// Platforms
+	fmt.Println("\n   Platforms:")
+	if cfg.Platforms.Telegram != nil && cfg.Platforms.Telegram.Enabled {
+		fmt.Printf("     telegram: enabled\n")
+	}
+	if cfg.Platforms.Discord != nil && cfg.Platforms.Discord.Enabled {
+		fmt.Printf("     discord:  enabled\n")
+	}
+	if cfg.Platforms.Slack != nil && cfg.Platforms.Slack.Enabled {
+		fmt.Printf("     slack:    enabled\n")
+	}
+	if cfg.Platforms.WhatsApp != nil && cfg.Platforms.WhatsApp.Enabled {
+		fmt.Printf("     whatsapp: enabled\n")
+	}
+
+	// User stats from DB
+	store, err := storage.New(cfg.GetDatabasePath())
+	if err == nil {
+		defer func() { _ = store.Close() }()
+		if stats, err := store.Stats(); err == nil {
+			if userCounts, ok := stats["users"].(map[string]int64); ok && len(userCounts) > 0 {
+				fmt.Println("\n   Users:")
+				for platform, count := range userCounts {
+					fmt.Printf("     %s: %d\n", platform, count)
+				}
+			}
+		}
 	}
 }
 

@@ -3,16 +3,14 @@ package llm
 
 import (
 	"context"
-	"encoding/base64"
-	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/kusa/magabot/internal/util"
 	"github.com/kusandriadi/allm-go"
+	"github.com/kusandriadi/allm-go/provider"
 )
 
 // Re-export allm types for convenience
@@ -53,38 +51,34 @@ const (
 )
 
 var (
-	ErrNoProvider     = errors.New("no LLM provider available")
-	ErrProviderFailed = errors.New("LLM provider failed")
-	ErrRateLimited    = errors.New("rate limit exceeded")
-	ErrInputTooLong   = errors.New("input too long")
-	ErrTimeout        = errors.New("request timeout")
+	ErrNoProvider     = allm.ErrNoProvider
+	ErrProviderFailed = allm.ErrProvider
+	ErrRateLimited    = allm.ErrRateLimited
+	ErrInputTooLong   = allm.ErrInputTooLong
+	ErrTimeout        = allm.ErrTimeout
 )
 
 // Router manages LLM clients
 type Router struct {
-	clients            map[string]*allm.Client
-	mainName           string
-	systemPrompt       string
-	maxInput           int
-	timeout            time.Duration
-	rateLimiter        *rateLimiter
-	logger             *slog.Logger
-	mu                 sync.RWMutex
-	maxContextTokens   int
-	truncationStrategy string
-	promptCaching      bool
+	clients       map[string]*allm.Client
+	mainName      string
+	systemPrompt  string
+	maxInput      int
+	timeout       time.Duration
+	rateLimiter   *rateLimiter
+	logger        *slog.Logger
+	mu            sync.RWMutex
+	promptCaching bool
 }
 
 // Config for LLM router
 type Config struct {
-	Main               string
-	SystemPrompt       string
-	MaxInput           int
-	Timeout            time.Duration
-	RateLimit          int // requests per minute per user
-	Logger             *slog.Logger
-	MaxContextTokens   int
-	TruncationStrategy string
+	Main         string
+	SystemPrompt string
+	MaxInput     int
+	Timeout      time.Duration
+	RateLimit    int // requests per minute per user
+	Logger       *slog.Logger
 }
 
 // NewRouter creates a new LLM router
@@ -104,53 +98,21 @@ func NewRouter(cfg *Config) *Router {
 		logger = slog.Default()
 	}
 
-	truncationStrategy := cfg.TruncationStrategy
-	if truncationStrategy == "" {
-		truncationStrategy = "tail"
-	}
-
 	return &Router{
-		clients:            make(map[string]*allm.Client),
-		mainName:           cfg.Main,
-		systemPrompt:       cfg.SystemPrompt,
-		maxInput:           cfg.MaxInput,
-		timeout:            cfg.Timeout,
-		rateLimiter:        newRateLimiter(cfg.RateLimit),
-		logger:             logger,
-		maxContextTokens:   cfg.MaxContextTokens,
-		truncationStrategy: truncationStrategy,
+		clients:     make(map[string]*allm.Client),
+		mainName:    cfg.Main,
+		systemPrompt: cfg.SystemPrompt,
+		maxInput:    cfg.MaxInput,
+		timeout:     cfg.Timeout,
+		rateLimiter: newRateLimiter(cfg.RateLimit),
+		logger:      logger,
 	}
 }
 
-// providerPrefixes maps model name substrings to provider names (allocated once)
-var providerPrefixes = map[string]string{
-	"claude":    "anthropic",
-	"gpt":       "openai",
-	"o1":        "openai",
-	"o3":        "openai",
-	"gemini":    "gemini",
-	"glm":       "glm",
-	"deepseek":  "deepseek",
-	"kimi":      "kimi",
-	"moonshot":  "kimi",
-	"qwen":      "qwen",
-	"minimax":   "minimax",
-	"llama":     "local",
-	"mistral":   "local",
-	"mixtral":   "local",
-	"phi":       "local",
-	"codellama": "local",
-}
-
-// DetectProvider detects the provider name from a model name
+// DetectProvider detects the provider name from a model name.
+// Delegates to allm.DetectProvider.
 func DetectProvider(model string) string {
-	model = strings.ToLower(model)
-	for prefix, provider := range providerPrefixes {
-		if strings.Contains(model, prefix) {
-			return provider
-		}
-	}
-	return ""
+	return string(allm.DetectProvider(model))
 }
 
 // Register registers a provider with a name
@@ -183,13 +145,7 @@ func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, 
 	}
 
 	// Sanitize input to remove control characters (injection protection)
-	text = util.SanitizeInput(text)
-
-	// Input length check
-	if len(text) > r.maxInput {
-		r.logger.Warn("input too long", "user", util.MaskSecret(userID), "length", len(text), "max", r.maxInput)
-		return nil, ErrInputTooLong
-	}
+	text = allm.SanitizeInput(text)
 
 	// Build messages
 	messages := []Message{
@@ -216,30 +172,10 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	sanitized := make([]Message, len(messages))
 	copy(sanitized, messages)
 	for i := range sanitized {
-		sanitized[i].Content = util.SanitizeInput(sanitized[i].Content)
-	}
-	messages = sanitized
-
-	// Calculate total input length (with size limit for images)
-	totalLen := 0
-	for _, m := range messages {
-		totalLen += len(m.Content)
-		for _, img := range m.Images {
-			// Limit image size contribution to prevent bypass via huge images
-			imgSize := len(img.Data)
-			if imgSize > 10*1024*1024 { // 10MB max per image
-				r.logger.Warn("image too large", "user", util.MaskSecret(userID), "size", imgSize)
-				return nil, fmt.Errorf("image too large: %d bytes (max 10MB)", imgSize)
-			}
-			totalLen += imgSize
-		}
-	}
-	if totalLen > r.maxInput*10 { // Allow 10x for images
-		r.logger.Warn("total input too large", "user", util.MaskSecret(userID), "length", totalLen)
-		return nil, ErrInputTooLong
+		sanitized[i].Content = allm.SanitizeInput(sanitized[i].Content)
 	}
 
-	allmMessages := r.buildMessages(messages)
+	allmMessages := r.buildMessages(sanitized)
 
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
@@ -310,27 +246,7 @@ func (r *Router) StreamChat(ctx context.Context, userID string, messages []Messa
 	sanitized := make([]Message, len(messages))
 	copy(sanitized, messages)
 	for i := range sanitized {
-		sanitized[i].Content = util.SanitizeInput(sanitized[i].Content)
-	}
-	messages = sanitized
-
-	// Calculate total input length (with size limit for images)
-	totalLen := 0
-	for _, m := range messages {
-		totalLen += len(m.Content)
-		for _, img := range m.Images {
-			// Limit image size contribution to prevent bypass via huge images
-			imgSize := len(img.Data)
-			if imgSize > 10*1024*1024 { // 10MB max per image
-				r.logger.Warn("image too large", "user", util.MaskSecret(userID), "size", imgSize)
-				return nil, fmt.Errorf("image too large: %d bytes (max 10MB)", imgSize)
-			}
-			totalLen += imgSize
-		}
-	}
-	if totalLen > r.maxInput*10 { // Allow 10x for images
-		r.logger.Warn("total input too large", "user", util.MaskSecret(userID), "length", totalLen)
-		return nil, ErrInputTooLong
+		sanitized[i].Content = allm.SanitizeInput(sanitized[i].Content)
 	}
 
 	// Get main client
@@ -343,7 +259,7 @@ func (r *Router) StreamChat(ctx context.Context, userID string, messages []Messa
 	}
 
 	// Build allm messages
-	allmMessages := r.buildMessages(messages)
+	allmMessages := r.buildMessages(sanitized)
 
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
@@ -564,62 +480,22 @@ func (r *rateLimiter) Stats() map[string]interface{} {
 	}
 }
 
-// FormatError formats error for user display with sanitization
+// FormatError formats error for user display with sanitization.
+// Delegates to allm.FormatError.
 func FormatError(err error) string {
-	switch {
-	case errors.Is(err, ErrRateLimited):
-		return "⏳ Too many requests. Please wait a moment."
-	case errors.Is(err, ErrInputTooLong):
-		return "📝 Message too long. Please shorten it."
-	case errors.Is(err, ErrTimeout):
-		return "⏱️ Request timed out. Please try again."
-	case errors.Is(err, ErrNoProvider):
-		if msg := util.ExtractAPIMessage(err); msg != "" {
-			return fmt.Sprintf("🔌 Provider error: %s", msg)
-		}
-		return "🔌 No AI provider available."
-	case errors.Is(err, ErrProviderFailed):
-		// Extract sanitized message from provider error
-		if msg := util.ExtractAPIMessage(err); msg != "" {
-			return fmt.Sprintf("❌ Provider error: %s", msg)
-		}
-		return "❌ AI provider failed. Please try again."
-	default:
-		// Generic error - don't leak internal details
-		return "❌ An error occurred. Please try again."
-	}
-}
-
-// allowedImageMIME is the set of accepted image MIME types
-var allowedImageMIME = map[string]bool{
-	"image/jpeg": true,
-	"image/png":  true,
-	"image/gif":  true,
-	"image/webp": true,
+	return allm.FormatError(err)
 }
 
 // ImageFromBase64 creates an Image from base64-encoded data and mime type.
-// Only image/jpeg, image/png, image/gif, image/webp MIME types are accepted.
+// Delegates to allm.ImageFromBase64.
 func ImageFromBase64(mimeType, base64Data string) (Image, error) {
-	if !allowedImageMIME[mimeType] {
-		return Image{}, fmt.Errorf("unsupported image MIME type: %s", mimeType)
-	}
-	data, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return Image{}, fmt.Errorf("decode base64: %w", err)
-	}
-	return Image{
-		MimeType: mimeType,
-		Data:     data,
-	}, nil
+	return allm.ImageFromBase64(mimeType, base64Data)
 }
 
-// ImageFromBytes creates an Image from raw bytes and mime type
+// ImageFromBytes creates an Image from raw bytes and mime type.
+// Delegates to allm.ImageFromBytes.
 func ImageFromBytes(mimeType string, data []byte) Image {
-	return Image{
-		MimeType: mimeType,
-		Data:     data,
-	}
+	return allm.ImageFromBytes(mimeType, data)
 }
 
 // HealthCheck returns health status of all registered providers
@@ -636,6 +512,55 @@ func (r *Router) HealthCheck(ctx context.Context) map[string]*allm.HealthStatus 
 		results[name] = client.Ping(ctx)
 	}
 	return results
+}
+
+// SetModel sets the model on the main client
+func (r *Router) SetModel(model string) {
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+	if ok {
+		client.SetModel(model)
+	}
+}
+
+// GetModel returns the active model ID from the main client.
+func (r *Router) GetModel() string {
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+	if ok {
+		if m := client.Model(); m != "" {
+			return m
+		}
+	}
+	return r.mainName
+}
+
+// Usage returns cumulative usage stats aggregated from all clients.
+func (r *Router) Usage() allm.UsageStats {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var total allm.UsageStats
+	for _, c := range r.clients {
+		u := c.Usage()
+		total.Requests += u.Requests
+		total.InputTokens += u.InputTokens
+		total.OutputTokens += u.OutputTokens
+	}
+	return total
+}
+
+// CLIProvider returns the underlying ClaudeCLIProvider if the main provider is CLI-based.
+func (r *Router) CLIProvider() *provider.ClaudeCLIProvider {
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	cli, _ := client.Provider().(*provider.ClaudeCLIProvider)
+	return cli
 }
 
 // SetResponseFormat sets the response format on the main client

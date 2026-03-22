@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -117,14 +118,12 @@ func runDaemon() {
 
 	// Initialize LLM router
 	llmCfg := &llm.Config{
-		Main:               cfg.LLM.Main,
-		SystemPrompt:       cfg.LLM.SystemPrompt,
-		MaxInput:           cfg.LLM.MaxInputLength,
-		Timeout:            time.Duration(cfg.LLM.Timeout) * time.Second,
-		RateLimit:          cfg.LLM.RateLimit,
-		Logger:             logger.With("component", "llm"),
-		MaxContextTokens:   cfg.LLM.MaxContextTokens,
-		TruncationStrategy: cfg.LLM.TruncationStrategy,
+		Main:         cfg.LLM.Main,
+		SystemPrompt: cfg.LLM.SystemPrompt,
+		MaxInput:     cfg.LLM.MaxInputLength,
+		Timeout:      time.Duration(cfg.LLM.Timeout) * time.Second,
+		RateLimit:    cfg.LLM.RateLimit,
+		Logger:       logger.With("component", "llm"),
 	}
 	llmRouter := llm.NewRouter(llmCfg)
 
@@ -285,7 +284,7 @@ func runDaemon() {
 		}
 
 		// Check if first-time user
-		isFirst, err := store.IsFirstMessage(msg.Platform, msg.UserID)
+		isFirst, err := store.IsFirstMessage(msg.Platform, security.HashUserID(msg.Platform, msg.UserID))
 		if err != nil {
 			// Log but don't block — non-critical
 			logger.Warn("first message check failed", "error", err)
@@ -353,7 +352,7 @@ func runDaemon() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if cfg.Platforms.Telegram.Enabled {
+	if cfg.Platforms.Telegram != nil && cfg.Platforms.Telegram.Enabled {
 		tg, err := telegram.New(&telegram.Config{
 			Token:        cfg.Platforms.Telegram.BotToken,
 			DownloadsDir: cfg.Paths.DownloadsDir,
@@ -366,7 +365,7 @@ func runDaemon() {
 		}
 	}
 
-	if cfg.Platforms.Slack.Enabled {
+	if cfg.Platforms.Slack != nil && cfg.Platforms.Slack.Enabled {
 		sl, err := slack.New(&slack.Config{
 			BotToken: cfg.Platforms.Slack.BotToken,
 			AppToken: cfg.Platforms.Slack.AppToken,
@@ -379,7 +378,7 @@ func runDaemon() {
 		}
 	}
 
-	if cfg.Platforms.WhatsApp.Enabled {
+	if cfg.Platforms.WhatsApp != nil && cfg.Platforms.WhatsApp.Enabled {
 		wa, err := whatsapp.New(&whatsapp.Config{
 			DBPath: cfg.Platforms.WhatsApp.DBPath,
 			Logger: logger.With("platform", "whatsapp"),
@@ -391,7 +390,7 @@ func runDaemon() {
 		}
 	}
 
-	if cfg.Platforms.Webhook.Enabled {
+	if cfg.Platforms.Webhook != nil && cfg.Platforms.Webhook.Enabled {
 		wh, err := webhook.New(&webhook.Config{
 			Port:         cfg.Platforms.Webhook.Port,
 			Path:         cfg.Platforms.Webhook.Path,
@@ -481,6 +480,10 @@ func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.St
 	}
 
 	cmd := strings.ToLower(parts[0])
+	// Strip @botname suffix from Telegram commands (e.g., /models@mybot → /models)
+	if i := strings.Index(cmd, "@"); i > 0 {
+		cmd = cmd[:i]
+	}
 	args := parts[1:]
 
 	switch cmd {
@@ -519,7 +522,11 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 *Commands:*
 • /start - Mulai
 • /status - Status bot
-• /models - Available models
+• /model - Model aktif & switch model
+• /effort - Set effort level (low/medium/high/max)
+• /prompt - Custom system prompt
+• /fallback - Set fallback model
+• /budget - Set budget limit per request
 • /providers - LLM providers
 • /config - Admin configuration
 • /memory - Memory management
@@ -538,18 +545,227 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 			return fmt.Sprintf("📊 *Status*\n\n⚠️ Error getting stats: %v", err), nil
 		}
 		llmStats := llmRouter.Stats()
-		return fmt.Sprintf("📊 *Status*\n\n• LLM: %s\n• Providers: %v\n• Messages: %v",
-			llmStats["main"],
-			llmStats["available"],
-			stats["messages"],
-		), nil
 
-	case "/models":
-		models := llmRouter.ListAllModels(context.Background())
-		if len(models) == 0 {
+		var sb strings.Builder
+		sb.WriteString("📊 *Magabot Status*\n\n")
+		sb.WriteString("*System:*\n")
+		sb.WriteString(fmt.Sprintf("• OS: %s/%s\n", runtime.GOOS, runtime.GOARCH))
+		sb.WriteString(fmt.Sprintf("• Magabot: v%s\n", version.Short()))
+		sb.WriteString(fmt.Sprintf("• Go: %s\n", runtime.Version()))
+
+		sb.WriteString("\n*LLM:*\n")
+		sb.WriteString(fmt.Sprintf("• Provider: %s\n", llmStats["main"]))
+		sb.WriteString(fmt.Sprintf("• Model: %s\n", llmRouter.GetModel()))
+
+		if cli := llmRouter.CLIProvider(); cli != nil {
+			effort := cli.Effort()
+			if effort == "" {
+				effort = "default"
+			}
+			sb.WriteString(fmt.Sprintf("• Effort: %s\n", effort))
+			if fb := cli.FallbackModel(); fb != "" {
+				sb.WriteString(fmt.Sprintf("• Fallback: %s\n", fb))
+			}
+			if budget := cli.MaxBudget(); budget > 0 {
+				sb.WriteString(fmt.Sprintf("• Budget: $%.2f/req\n", budget))
+			}
+			if prompt := cli.AppendPrompt(); prompt != "" {
+				if len(prompt) > 50 {
+					prompt = prompt[:50] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("• Custom prompt: %s\n", prompt))
+			}
+		}
+
+		sb.WriteString("\n*Platforms:*\n")
+		userCounts, _ := stats["users"].(map[string]int64)
+		if len(userCounts) > 0 {
+			for platform, users := range userCounts {
+				sb.WriteString(fmt.Sprintf("• %s — %d users\n", platform, users))
+			}
+		} else {
+			sb.WriteString("• _no activity yet_\n")
+		}
+
+		return sb.String(), nil
+
+	case "/model", "/models":
+		allModels := llmRouter.ListAllModels(context.Background())
+		if len(allModels) == 0 {
 			return "❌ No models available", nil
 		}
-		return "🤖 *Available Models*" + llm.FormatModelList(models), nil
+
+		// Flatten models into numbered list
+		type flatModel struct {
+			provider string
+			model    llm.ModelInfo
+		}
+		var flat []flatModel
+		for provider, models := range allModels {
+			for _, m := range models {
+				flat = append(flat, flatModel{provider, m})
+			}
+		}
+
+		// No args: show current model + numbered list
+		if len(args) == 0 {
+			stats := llmRouter.Stats()
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("🤖 *Current:* `%s`", stats["main"]))
+			if cli := llmRouter.CLIProvider(); cli != nil {
+				if e := cli.Effort(); e != "" {
+					sb.WriteString(fmt.Sprintf(" | effort: %s", e))
+				}
+				if fb := cli.FallbackModel(); fb != "" {
+					sb.WriteString(fmt.Sprintf(" | fallback: %s", fb))
+				}
+			}
+			sb.WriteString("\n\n*Available models:*\n")
+			for i, fm := range flat {
+				sb.WriteString(fmt.Sprintf("`%d.` `%s`", i+1, fm.model.ID))
+				if fm.model.Name != "" && fm.model.Name != fm.model.ID {
+					sb.WriteString(fmt.Sprintf(" — %s", fm.model.Name))
+				}
+				sb.WriteString("\n")
+			}
+			sb.WriteString("\n_Switch: /model <number> or /model <name>_")
+			return sb.String(), nil
+		}
+
+		// With args: switch model by number or name
+		selection := strings.Join(args, " ")
+
+		var selectedID string
+		// Try as number first
+		if n, err := fmt.Sscanf(selection, "%d", new(int)); n == 1 && err == nil {
+			idx := 0
+			fmt.Sscanf(selection, "%d", &idx)
+			if idx < 1 || idx > len(flat) {
+				return fmt.Sprintf("❌ Invalid number. Choose 1-%d", len(flat)), nil
+			}
+			selectedID = flat[idx-1].model.ID
+		} else {
+			// Try as model name/ID
+			for _, fm := range flat {
+				if strings.EqualFold(fm.model.ID, selection) || strings.EqualFold(fm.model.Name, selection) {
+					selectedID = fm.model.ID
+					break
+				}
+			}
+			if selectedID == "" {
+				return fmt.Sprintf("❌ Model '%s' not found. Use /model to see available models.", selection), nil
+			}
+		}
+
+		llmRouter.SetModel(selectedID)
+		return fmt.Sprintf("✅ Model switched to `%s`", selectedID), nil
+
+	case "/effort":
+		cli := llmRouter.CLIProvider()
+		if cli == nil {
+			return "❌ Effort only available for Claude CLI mode", nil
+		}
+		if len(args) == 0 {
+			current := cli.Effort()
+			if current == "" {
+				current = "default"
+			}
+			return fmt.Sprintf(`⚡ *Effort:* `+"`%s`"+`
+
+*Options:*
+`+"`1.`"+` *low* — cepat, jawaban singkat
+`+"`2.`"+` *medium* — seimbang (default)
+`+"`3.`"+` *high* — detail, lebih lambat
+`+"`4.`"+` *max* — maksimal (Opus only)
+
+_Set: /effort <level> atau /effort <number>_
+_Reset: /effort reset_`, current), nil
+		}
+		// Support number selection
+		switch args[0] {
+		case "1":
+			args[0] = "low"
+		case "2":
+			args[0] = "medium"
+		case "3":
+			args[0] = "high"
+		case "4":
+			args[0] = "max"
+		}
+		level := strings.ToLower(args[0])
+		switch level {
+		case "low", "medium", "high", "max":
+			cli.SetEffort(level)
+			return fmt.Sprintf("✅ Effort set to `%s`", level), nil
+		case "default", "off", "reset":
+			cli.SetEffort("")
+			return "✅ Effort reset to default", nil
+		default:
+			return "❌ Invalid effort. Options: `low` | `medium` | `high` | `max`", nil
+		}
+
+	case "/prompt":
+		cli := llmRouter.CLIProvider()
+		if cli == nil {
+			return "❌ Prompt customization only available for Claude CLI mode", nil
+		}
+		if len(args) == 0 {
+			current := cli.AppendPrompt()
+			if current == "" {
+				return "📝 *Custom prompt:* _none_\n\n_Set: /prompt <instructions>_\n_Clear: /prompt reset_", nil
+			}
+			return fmt.Sprintf("📝 *Custom prompt:*\n%s\n\n_Clear: /prompt reset_", current), nil
+		}
+		if args[0] == "reset" || args[0] == "off" || args[0] == "clear" {
+			cli.SetAppendPrompt("")
+			return "✅ Custom prompt cleared", nil
+		}
+		prompt := strings.Join(args, " ")
+		cli.SetAppendPrompt(prompt)
+		return fmt.Sprintf("✅ Custom prompt set:\n_%s_", prompt), nil
+
+	case "/fallback":
+		cli := llmRouter.CLIProvider()
+		if cli == nil {
+			return "❌ Fallback only available for Claude CLI mode", nil
+		}
+		if len(args) == 0 {
+			current := cli.FallbackModel()
+			if current == "" {
+				return "🔄 *Fallback model:* _none_\n\n_Set: /fallback <model>_\n_Example: /fallback claude-sonnet-4-6_", nil
+			}
+			return fmt.Sprintf("🔄 *Fallback model:* `%s`\n\n_Clear: /fallback off_", current), nil
+		}
+		if args[0] == "off" || args[0] == "reset" || args[0] == "none" {
+			cli.SetFallbackModel("")
+			return "✅ Fallback model disabled", nil
+		}
+		model := args[0]
+		cli.SetFallbackModel(model)
+		return fmt.Sprintf("✅ Fallback model set to `%s`", model), nil
+
+	case "/budget":
+		cli := llmRouter.CLIProvider()
+		if cli == nil {
+			return "❌ Budget only available for Claude CLI mode", nil
+		}
+		if len(args) == 0 {
+			current := cli.MaxBudget()
+			if current <= 0 {
+				return "💰 *Budget:* _unlimited_\n\n_Set: /budget <amount>_ (e.g. /budget 5.00)\n_Clear: /budget off_", nil
+			}
+			return fmt.Sprintf("💰 *Budget:* $%.2f per request\n\n_Clear: /budget off_", current), nil
+		}
+		if args[0] == "off" || args[0] == "reset" || args[0] == "unlimited" {
+			cli.SetMaxBudget(0)
+			return "✅ Budget limit removed", nil
+		}
+		var amount float64
+		if _, err := fmt.Sscanf(args[0], "%f", &amount); err != nil || amount <= 0 {
+			return "❌ Invalid amount. Example: `/budget 5.00`", nil
+		}
+		cli.SetMaxBudget(amount)
+		return fmt.Sprintf("✅ Budget set to $%.2f per request", amount), nil
 
 	case "/providers":
 		stats := llmRouter.Stats()
@@ -725,7 +941,7 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 		p = cfg.constructor(cfg.apiKey, opts...)
 	}
 
-	// Create client with retry and context window options
+	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
 	if cfg.maxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.maxRetries), allm.WithRetryBaseDelay(1*time.Second))
@@ -736,6 +952,9 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 	if llmCfg.LLM.TruncationStrategy != "" {
 		clientOpts = append(clientOpts, allm.WithTruncationStrategy(llmCfg.LLM.TruncationStrategy))
 	}
+	if llmCfg.LLM.MaxInputLength > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxInputLen(llmCfg.LLM.MaxInputLength))
+	}
 
 	llmRouter.Register(cfg.name, allm.New(p, clientOpts...))
 	return nil
@@ -744,7 +963,7 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error {
 	ac := cfg.LLM.Anthropic
 
-	// Create client with retry and context window options
+	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
 	if ac.MaxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(ac.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
@@ -754,6 +973,9 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 	}
 	if cfg.LLM.TruncationStrategy != "" {
 		clientOpts = append(clientOpts, allm.WithTruncationStrategy(cfg.LLM.TruncationStrategy))
+	}
+	if cfg.LLM.MaxInputLength > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxInputLen(cfg.LLM.MaxInputLength))
 	}
 
 	// CLI mode: use claude command, no API key needed
@@ -810,7 +1032,7 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))
 	}
 
-	// Create client with retry and context window options
+	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
 	if cfg.LLM.OpenAI.MaxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.LLM.OpenAI.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
@@ -820,6 +1042,9 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 	}
 	if cfg.LLM.TruncationStrategy != "" {
 		clientOpts = append(clientOpts, allm.WithTruncationStrategy(cfg.LLM.TruncationStrategy))
+	}
+	if cfg.LLM.MaxInputLength > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxInputLen(cfg.LLM.MaxInputLength))
 	}
 
 	llmRouter.Register("openai", allm.New(provider.OpenAI(cfg.LLM.OpenAI.APIKey, opts...), clientOpts...))

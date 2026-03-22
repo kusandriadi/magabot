@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kusandriadi/allm-go"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -574,52 +575,21 @@ func (c *Client) embedLocal(ctx context.Context, texts []string) ([]Embedding, e
 }
 
 // CosineSimilarity computes the cosine similarity between two vectors.
+// Delegates to allm.CosineSimilarity.
 func CosineSimilarity(a, b []float32) float32 {
-	if len(a) != len(b) {
-		return 0
-	}
-
-	var dotProduct, normA, normB float64
-	for i := range a {
-		dotProduct += float64(a[i]) * float64(b[i])
-		normA += float64(a[i]) * float64(a[i])
-		normB += float64(b[i]) * float64(b[i])
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-
-	return float32(dotProduct / (math.Sqrt(normA) * math.Sqrt(normB)))
+	return float32(allm.CosineSimilarity(a, b))
 }
 
 // EuclideanDistance computes the Euclidean distance between two vectors.
+// Delegates to allm.EuclideanDistance.
 func EuclideanDistance(a, b []float32) float32 {
-	if len(a) != len(b) {
-		return float32(math.MaxFloat32)
-	}
-
-	var sum float64
-	for i := range a {
-		diff := float64(a[i]) - float64(b[i])
-		sum += diff * diff
-	}
-
-	return float32(math.Sqrt(sum))
+	return float32(allm.EuclideanDistance(a, b))
 }
 
 // DotProduct computes the dot product of two vectors.
+// Delegates to allm.DotProduct.
 func DotProduct(a, b []float32) float32 {
-	if len(a) != len(b) {
-		return 0
-	}
-
-	var result float64
-	for i := range a {
-		result += float64(a[i]) * float64(b[i])
-	}
-
-	return float32(result)
+	return float32(allm.DotProduct(a, b))
 }
 
 // VectorStore provides persistent storage and retrieval of embeddings.
@@ -870,7 +840,7 @@ func (s *VectorStore) SearchByVector(queryVector []float32, limit int) ([]Search
 			_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
-		similarity := CosineSimilarity(queryVector, entry.Embedding)
+		similarity := float32(allm.CosineSimilarity(queryVector, entry.Embedding))
 
 		results = append(results, SearchResult{
 			Entry:      &entry,

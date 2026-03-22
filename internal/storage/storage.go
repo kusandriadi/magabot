@@ -303,6 +303,24 @@ func (s *Store) Stats() (map[string]interface{}, error) {
 	}
 	stats["messages"] = msgCounts
 
+	// Unique users per platform
+	userRows, err := s.db.Query(`SELECT platform, COUNT(DISTINCT user_id) FROM messages WHERE direction = 'in' GROUP BY platform`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = userRows.Close() }()
+
+	userCounts := make(map[string]int64)
+	for userRows.Next() {
+		var platform string
+		var count int64
+		if err := userRows.Scan(&platform, &count); err != nil {
+			return nil, err
+		}
+		userCounts[platform] = count
+	}
+	stats["users"] = userCounts
+
 	// Sessions
 	var sessionCount int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&sessionCount); err != nil {
