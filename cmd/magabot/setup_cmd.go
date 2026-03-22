@@ -3,10 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -544,11 +542,27 @@ func setupLLM() {
 	fmt.Println()
 
 	defaultLLM := askString(reader, "Default provider", "anthropic")
-	cfg.LLM.Main = defaultLLM
+
+	// Map choice to provider name
+	providerMap := map[string]string{
+		"1": "anthropic", "anthropic": "anthropic",
+		"2": "openai", "openai": "openai",
+		"3": "gemini", "gemini": "gemini",
+		"4": "deepseek", "deepseek": "deepseek",
+		"5": "glm", "glm": "glm",
+		"6": "kimi", "kimi": "kimi",
+		"7": "qwen", "qwen": "qwen",
+		"8": "minimax", "minimax": "minimax",
+	}
+	provider := providerMap[strings.ToLower(defaultLLM)]
+	if provider == "" {
+		provider = "anthropic"
+	}
+	cfg.LLM.Main = provider
 
 	fmt.Println()
-	if askYesNo(reader, "Configure Anthropic (Claude)?", true) {
-		fmt.Println()
+	switch provider {
+	case "anthropic":
 		fmt.Println("  Authentication method:")
 		fmt.Println("    1. API Key (sk-ant-api03-...)")
 		fmt.Println("    2. Claude Pro/Max subscription (via Claude Code)")
@@ -556,21 +570,21 @@ func setupLLM() {
 		authMethod := askString(reader, "Choose [1/2]", "1")
 
 		if authMethod == "2" {
-			token, err := readClaudeCredentials()
-			if err != nil {
+			token := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN")
+			if token == "" {
 				fmt.Println()
-				fmt.Println("  ❌ Claude Code credentials not found.")
+				fmt.Println("  ❌ CLAUDE_CODE_OAUTH_TOKEN not set.")
 				fmt.Println()
 				fmt.Println("  To use your Claude Pro/Max subscription:")
-				fmt.Println("    1. Install Claude Code: curl -fsSL https://claude.ai/install.sh | bash")
-				fmt.Println("    2. Run: claude setup-token")
-				fmt.Println("    3. Re-run: magabot setup llm")
+				fmt.Println("    export CLAUDE_CODE_OAUTH_TOKEN=<your-oauth-token>")
+				fmt.Println()
+				fmt.Println("  Then re-run: magabot setup llm")
 				fmt.Println()
 				return
 			}
-			saveSecret("llm/anthropic_auth_token", token)
+			saveSecret("llm/claude_code_auth_token", token)
 			cfg.LLM.Anthropic.Enabled = true
-			fmt.Println("  ✅ Claude Pro/Max token loaded from Claude Code credentials")
+			fmt.Println("  ✅ Claude Pro/Max token loaded from CLAUDE_CODE_OAUTH_TOKEN")
 		} else {
 			key := askString(reader, "Anthropic API Key (sk-ant-...)", "")
 			if key != "" {
@@ -578,55 +592,43 @@ func setupLLM() {
 				cfg.LLM.Anthropic.Enabled = true
 			}
 		}
-	}
-
-	fmt.Println()
-	if askYesNo(reader, "Configure OpenAI (GPT)?", false) {
+	case "openai":
 		key := askString(reader, "OpenAI API Key (sk-...)", "")
 		if key != "" {
 			saveSecret("llm/openai_api_key", key)
 			cfg.LLM.OpenAI.Enabled = true
 		}
-	}
-
-	fmt.Println()
-	if askYesNo(reader, "Configure Google Gemini?", false) {
+	case "gemini":
 		key := askString(reader, "Google API Key", "")
 		if key != "" {
 			saveSecret("llm/gemini_api_key", key)
 			cfg.LLM.Gemini.Enabled = true
 		}
-	}
-
-	fmt.Println()
-	if askYesNo(reader, "Configure DeepSeek?", false) {
+	case "deepseek":
 		key := askString(reader, "DeepSeek API Key", "")
 		if key != "" {
 			saveSecret("llm/deepseek_api_key", key)
 			cfg.LLM.DeepSeek.Enabled = true
 		}
-	}
-
-	fmt.Println()
-	if askYesNo(reader, "Configure Moonshot Kimi?", false) {
+	case "glm":
+		key := askString(reader, "GLM API Key", "")
+		if key != "" {
+			saveSecret("llm/glm_api_key", key)
+			cfg.LLM.GLM.Enabled = true
+		}
+	case "kimi":
 		key := askString(reader, "Kimi API Key", "")
 		if key != "" {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
 		}
-	}
-
-	fmt.Println()
-	if askYesNo(reader, "Configure Alibaba Qwen?", false) {
+	case "qwen":
 		key := askString(reader, "Qwen API Key (DashScope)", "")
 		if key != "" {
 			saveSecret("llm/qwen_api_key", key)
 			cfg.LLM.Qwen.Enabled = true
 		}
-	}
-
-	fmt.Println()
-	if askYesNo(reader, "Configure MiniMax?", false) {
+	case "minimax":
 		key := askString(reader, "MiniMax API Key", "")
 		if key != "" {
 			saveSecret("llm/minimax_api_key", key)
@@ -646,10 +648,11 @@ func setupLLM() {
 	fmt.Println()
 	fmt.Println("🔄 Testing connection to", cfg.LLM.Main, "...")
 
-	var apiKey string
+	var apiKey, authToken string
 	switch cfg.LLM.Main {
 	case "anthropic":
 		apiKey = cfg.LLM.Anthropic.APIKey
+		authToken = cfg.LLM.Anthropic.AuthToken
 	case "openai":
 		apiKey = cfg.LLM.OpenAI.APIKey
 	case "gemini":
@@ -666,8 +669,8 @@ func setupLLM() {
 		apiKey = cfg.LLM.MiniMax.APIKey
 	}
 
-	if apiKey != "" {
-		models, err := llm.FetchModels(cfg.LLM.Main, apiKey, "")
+	if apiKey != "" || authToken != "" {
+		models, err := llm.FetchModels(cfg.LLM.Main, apiKey, "", authToken)
 		if err != nil {
 			fmt.Printf("❌ Connection failed: %v\n", err)
 			fmt.Println("   Check your API key and try again with: magabot setup llm")
@@ -745,38 +748,3 @@ func restartDaemon() {
 
 // isRunning, processExists, getPID are defined in commands.go / commands_unix.go / commands_windows.go
 
-// claudeCredentials represents the Claude Code credentials file structure.
-type claudeCredentials struct {
-	ClaudeAiOauth *claudeOAuth `json:"claudeAiOauth"`
-}
-
-type claudeOAuth struct {
-	AccessToken string `json:"accessToken"`
-	ExpiresAt   int64  `json:"expiresAt"`
-}
-
-// readClaudeCredentials reads the OAuth access token from Claude Code's credentials file.
-// Returns the access token or an error if the file doesn't exist or is invalid.
-func readClaudeCredentials() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
-	}
-
-	credPath := filepath.Join(home, ".claude", ".credentials.json")
-	data, err := os.ReadFile(credPath)
-	if err != nil {
-		return "", fmt.Errorf("credentials file not found: %w", err)
-	}
-
-	var creds claudeCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("invalid credentials file: %w", err)
-	}
-
-	if creds.ClaudeAiOauth == nil || creds.ClaudeAiOauth.AccessToken == "" {
-		return "", fmt.Errorf("no OAuth token found in credentials")
-	}
-
-	return creds.ClaudeAiOauth.AccessToken, nil
-}

@@ -49,9 +49,10 @@ type WizardState struct {
 	WhatsAppEnabled bool
 
 	// LLM
-	LLMDefault       string
-	AnthropicEnabled bool
-	AnthropicKey     string
+	LLMDefault            string
+	AnthropicEnabled      bool
+	AnthropicKey          string
+	ClaudeCodeAuthToken    string
 	OpenAIEnabled    bool
 	OpenAIKey        string
 	GeminiEnabled    bool
@@ -74,11 +75,12 @@ func testLLMConnection(state *WizardState) {
 
 	// Determine which provider to test
 	providerName := state.LLMDefault
-	var apiKey string
+	var apiKey, authToken string
 
 	switch providerName {
 	case "anthropic":
 		apiKey = state.AnthropicKey
+		authToken = state.ClaudeCodeAuthToken
 	case "openai":
 		apiKey = state.OpenAIKey
 	case "gemini":
@@ -95,13 +97,13 @@ func testLLMConnection(state *WizardState) {
 		apiKey = state.MiniMaxKey
 	}
 
-	if apiKey == "" {
+	if apiKey == "" && authToken == "" {
 		fmt.Println("⚠️  No API key provided, skipping connection test")
 		return
 	}
 
 	// Use FetchModels from internal/llm to test
-	models, err := llm.FetchModels(providerName, apiKey, "")
+	models, err := llm.FetchModels(providerName, apiKey, "", authToken)
 	if err != nil {
 		fmt.Printf("❌ Connection failed: %v\n", err)
 		fmt.Println("   Check your API key and try again with: magabot setup llm")
@@ -436,9 +438,31 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.AnthropicEnabled = true
 		fmt.Println("🟣 Anthropic Configuration")
 		fmt.Println("──────────────────────────")
-		fmt.Println("  Get API key: https://console.anthropic.com/")
 		fmt.Println()
-		state.AnthropicKey = askPassword(reader, "API key (sk-ant-...)")
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key (sk-ant-api03-...)")
+		fmt.Println("    2. Claude Pro/Max subscription (via Claude Code)")
+		fmt.Println()
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
+			token := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN")
+			if token == "" {
+				fmt.Println()
+				fmt.Println("  ❌ CLAUDE_CODE_OAUTH_TOKEN not set.")
+				fmt.Println()
+				fmt.Println("  To use your Claude Pro/Max subscription:")
+				fmt.Println("    export CLAUDE_CODE_OAUTH_TOKEN=<your-oauth-token>")
+				fmt.Println()
+			} else {
+				state.ClaudeCodeAuthToken = token
+				fmt.Println("  ✅ Claude Pro/Max token loaded from CLAUDE_CODE_OAUTH_TOKEN")
+			}
+		} else {
+			fmt.Println("  Get API key: https://console.anthropic.com/")
+			fmt.Println()
+			state.AnthropicKey = askPassword(reader, "API key (sk-ant-...)")
+		}
 
 	case "openai":
 		state.OpenAIEnabled = true
@@ -497,80 +521,6 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.MiniMaxKey = askPassword(reader, "API key")
 	}
 
-	// Ask about additional providers
-	fmt.Println()
-	if askYesNo(reader, "Configure additional LLM providers?", false) {
-		fmt.Println()
-		fmt.Println("Which additional providers? (comma-separated, e.g., 2,3)")
-		fmt.Println()
-		for name, num := range map[string]string{"anthropic": "1", "openai": "2", "gemini": "3", "deepseek": "4", "glm": "5", "kimi": "6", "qwen": "7", "minimax": "8"} {
-			if name != state.LLMDefault {
-				fmt.Printf("  %s. %s\n", num, name)
-			}
-		}
-		fmt.Println()
-		additional := askString(reader, "Additional providers", "")
-		for _, num := range parseNumberList(additional) {
-			switch num {
-			case 1:
-				if !state.AnthropicEnabled {
-					state.AnthropicEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://console.anthropic.com/")
-					state.AnthropicKey = askPassword(reader, "Anthropic API key (sk-ant-...)")
-				}
-			case 2:
-				if !state.OpenAIEnabled {
-					state.OpenAIEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://platform.openai.com/api-keys")
-					state.OpenAIKey = askPassword(reader, "OpenAI API key (sk-...)")
-				}
-			case 3:
-				if !state.GeminiEnabled {
-					state.GeminiEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://makersuite.google.com/app/apikey")
-					state.GeminiKey = askPassword(reader, "Gemini API key")
-				}
-			case 4:
-				if !state.DeepSeekEnabled {
-					state.DeepSeekEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://platform.deepseek.com/")
-					state.DeepSeekKey = askPassword(reader, "DeepSeek API key")
-				}
-			case 5:
-				if !state.GLMEnabled {
-					state.GLMEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://open.bigmodel.cn/")
-					state.GLMKey = askPassword(reader, "GLM API key")
-				}
-			case 6:
-				if !state.KimiEnabled {
-					state.KimiEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://platform.moonshot.cn/")
-					state.KimiKey = askPassword(reader, "Kimi API key")
-				}
-			case 7:
-				if !state.QwenEnabled {
-					state.QwenEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://dashscope.console.aliyun.com/")
-					state.QwenKey = askPassword(reader, "Qwen API key (DashScope)")
-				}
-			case 8:
-				if !state.MiniMaxEnabled {
-					state.MiniMaxEnabled = true
-					fmt.Println()
-					fmt.Println("  Get API key: https://platform.minimaxi.com/")
-					state.MiniMaxKey = askPassword(reader, "MiniMax API key")
-				}
-			}
-		}
-	}
 }
 
 // Step 4: Security
@@ -766,6 +716,7 @@ llm:
   anthropic:
     enabled: %t
     api_key: "%s"
+    auth_token: "%s"
     model: "claude-sonnet-4-20250514"
     max_tokens: 4096
     temperature: 0.7
@@ -866,6 +817,7 @@ tools:
 		state.LLMDefault,
 		state.AnthropicEnabled,
 		state.AnthropicKey,
+		state.ClaudeCodeAuthToken,
 		state.OpenAIEnabled,
 		state.OpenAIKey,
 		state.GeminiEnabled,

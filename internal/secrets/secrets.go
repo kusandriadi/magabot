@@ -104,7 +104,7 @@ const (
 	KeySlackBotToken      = "magabot/slack/bot_token"
 	KeySlackAppToken      = "magabot/slack/app_token"
 	KeyAnthropicAPIKey    = "magabot/llm/anthropic_api_key"
-	KeyAnthropicAuthToken = "magabot/llm/anthropic_auth_token"
+	KeyClaudeCodeAuthToken = "magabot/llm/claude_code_auth_token"
 	KeyOpenAIAPIKey       = "magabot/llm/openai_api_key"
 	KeyGeminiAPIKey       = "magabot/llm/gemini_api_key"
 	KeyGLMAPIKey          = "magabot/llm/glm_api_key"

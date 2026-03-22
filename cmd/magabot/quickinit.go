@@ -92,7 +92,7 @@ func cmdInit() {
 	fmt.Println()
 
 	fmt.Println("  Detected:")
-	if detected.AnthropicKey != "" || detected.AnthropicAuthToken != "" {
+	if detected.AnthropicKey != "" || detected.ClaudeCodeAuthToken != "" {
 		fmt.Println("    LLM: anthropic (Claude)")
 	}
 	if detected.OpenAIKey != "" {
@@ -125,7 +125,7 @@ func cmdInit() {
 type envConfig struct {
 	// LLM providers
 	AnthropicKey       string
-	AnthropicAuthToken string
+	ClaudeCodeAuthToken string
 	OpenAIKey          string
 	GeminiKey          string
 	DeepSeekKey        string
@@ -144,13 +144,13 @@ type envConfig struct {
 }
 
 func (e *envConfig) hasLLM() bool {
-	return e.AnthropicKey != "" || e.AnthropicAuthToken != "" || e.OpenAIKey != "" || e.GeminiKey != "" ||
+	return e.AnthropicKey != "" || e.ClaudeCodeAuthToken != "" || e.OpenAIKey != "" || e.GeminiKey != "" ||
 		e.DeepSeekKey != "" || e.GLMKey != "" || e.LocalEnabled
 }
 
 func (e *envConfig) defaultProvider() string {
 	switch {
-	case e.AnthropicKey != "" || e.AnthropicAuthToken != "":
+	case e.AnthropicKey != "" || e.ClaudeCodeAuthToken != "":
 		return "anthropic"
 	case e.OpenAIKey != "":
 		return "openai"
@@ -172,7 +172,7 @@ func (e *envConfig) defaultProvider() string {
 func detectEnvConfig() *envConfig {
 	cfg := &envConfig{
 		AnthropicKey:       os.Getenv("ANTHROPIC_API_KEY"),
-		AnthropicAuthToken: os.Getenv("ANTHROPIC_AUTH_TOKEN"),
+		ClaudeCodeAuthToken: os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
 		OpenAIKey:          os.Getenv("OPENAI_API_KEY"),
 		GeminiKey:          firstEnv("GEMINI_API_KEY", "GOOGLE_API_KEY"),
 		DeepSeekKey:        os.Getenv("DEEPSEEK_API_KEY"),
@@ -180,13 +180,6 @@ func detectEnvConfig() *envConfig {
 		TelegramToken:      firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
 		SlackBotToken:      os.Getenv("SLACK_BOT_TOKEN"),
 		SlackAppToken:      os.Getenv("SLACK_APP_TOKEN"),
-	}
-
-	// Auto-detect Claude Code credentials if no Anthropic key/token in env
-	if cfg.AnthropicKey == "" && cfg.AnthropicAuthToken == "" {
-		if token, err := readClaudeCredentials(); err == nil {
-			cfg.AnthropicAuthToken = token
-		}
 	}
 
 	// Detect local LLM from env
@@ -231,11 +224,11 @@ func buildInitConfig(cfg *envConfig) string {
 	b.WriteString("  timeout: 60\n")
 	b.WriteString("  rate_limit: 10\n\n")
 
-	if cfg.AnthropicKey != "" || cfg.AnthropicAuthToken != "" {
+	if cfg.AnthropicKey != "" || cfg.ClaudeCodeAuthToken != "" {
 		b.WriteString("  anthropic:\n")
 		b.WriteString("    enabled: true\n")
-		if cfg.AnthropicAuthToken != "" {
-			fmt.Fprintf(&b, "    auth_token: \"%s\"\n", cfg.AnthropicAuthToken)
+		if cfg.ClaudeCodeAuthToken != "" {
+			fmt.Fprintf(&b, "    auth_token: \"%s\"\n", cfg.ClaudeCodeAuthToken)
 		} else {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
 		}

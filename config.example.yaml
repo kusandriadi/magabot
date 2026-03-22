@@ -92,7 +92,7 @@ llm:
   #
   # API mode auth (choose one):
   #   api_key     → Anthropic API key, or env ANTHROPIC_API_KEY
-  #   auth_token  → Claude OAuth token, or env ANTHROPIC_AUTH_TOKEN (Pro/Max)
+  #   auth_token  → Claude OAuth token, or env CLAUDE_CODE_OAUTH_TOKEN (Pro/Max)
   #
   # CLI mode: requires `claude` installed and authenticated (claude login)
   anthropic:

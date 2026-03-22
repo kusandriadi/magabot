@@ -628,7 +628,7 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 	mappings := []secretMapping{
 		{secrets.KeyEncryptionKey, &cfg.Security.EncryptionKey, "encryption_key"},
 		{secrets.KeyAnthropicAPIKey, &cfg.LLM.Anthropic.APIKey, "anthropic_api_key"},
-		{secrets.KeyAnthropicAuthToken, &cfg.LLM.Anthropic.AuthToken, "anthropic_auth_token"},
+		{secrets.KeyClaudeCodeAuthToken, &cfg.LLM.Anthropic.AuthToken, "claude_code_auth_token"},
 		{secrets.KeyOpenAIAPIKey, &cfg.LLM.OpenAI.APIKey, "openai_api_key"},
 		{secrets.KeyGeminiAPIKey, &cfg.LLM.Gemini.APIKey, "gemini_api_key"},
 		{secrets.KeyGLMAPIKey, &cfg.LLM.GLM.APIKey, "glm_api_key"},
