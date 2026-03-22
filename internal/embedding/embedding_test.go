@@ -124,7 +124,7 @@ func TestVectorStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
@@ -134,7 +134,7 @@ func TestVectorStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add entries with embeddings
 	testEntries := []struct {
@@ -225,13 +225,13 @@ func TestVectorStore(t *testing.T) {
 
 func TestVectorStoreList(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
 		Dimensions: 3,
 	})
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add entries
 	for i := 0; i < 10; i++ {
@@ -263,13 +263,13 @@ func TestVectorStoreList(t *testing.T) {
 
 func TestVectorStoreMetadata(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
 		Dimensions: 3,
 	})
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	metadata := map[string]interface{}{
 		"type":       "test",
@@ -322,14 +322,14 @@ func TestNewClient(t *testing.T) {
 
 func TestSearchWithClient(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create store without client
 	store, _ := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
 		Dimensions: 3,
 	})
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add some data
 	_ = store.AddWithEmbedding("1", "test", []float32{1, 0, 0}, nil)
@@ -343,13 +343,13 @@ func TestSearchWithClient(t *testing.T) {
 
 func TestUpdateEntry(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
 		Dimensions: 3,
 	})
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add initial entry
 	_ = store.AddWithEmbedding("1", "original", []float32{1, 0, 0}, nil)
@@ -373,7 +373,7 @@ func TestUpdateEntry(t *testing.T) {
 
 func TestNewVectorStore_InvalidTableName(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tests := []struct {
 		name      string
@@ -408,7 +408,7 @@ func TestNewVectorStore_InvalidTableName(t *testing.T) {
 
 func TestNewVectorStore_ValidTableNames(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	validNames := []string{
 		"embeddings",
@@ -429,14 +429,14 @@ func TestNewVectorStore_ValidTableNames(t *testing.T) {
 				t.Errorf("expected valid table name %q to succeed, got: %v", name, err)
 				return
 			}
-			store.Close()
+			_ = store.Close()
 		})
 	}
 }
 
 func TestSearchByVector_EmptyStore(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
@@ -445,7 +445,7 @@ func TestSearchByVector_EmptyStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	results, err := store.SearchByVector([]float32{1, 0, 0}, 10)
 	if err != nil {
@@ -458,7 +458,7 @@ func TestSearchByVector_EmptyStore(t *testing.T) {
 
 func TestAddAndSearch_SortOrder(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "embedding-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewVectorStore(VectorStoreConfig{
 		DBPath:     tmpDir + "/test.db",
@@ -467,7 +467,7 @@ func TestAddAndSearch_SortOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Add entries with known similarities to query vector [1, 0, 0]
 	entries := []struct {

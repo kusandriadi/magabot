@@ -129,8 +129,8 @@ func TestSecretsEnvBackend(t *testing.T) {
 	})
 
 	t.Run("GetFromEnv", func(t *testing.T) {
-		os.Setenv("ANTHROPIC_API_KEY", "env_secret")
-		defer os.Unsetenv("ANTHROPIC_API_KEY")
+		_ = os.Setenv("ANTHROPIC_API_KEY", "env_secret")
+		defer func() { _ = os.Unsetenv("ANTHROPIC_API_KEY") }()
 
 		value, err := backend.Get(ctx, secrets.KeyAnthropicAPIKey)
 		if err != nil {
@@ -143,7 +143,7 @@ func TestSecretsEnvBackend(t *testing.T) {
 	})
 
 	t.Run("GetNonExistent", func(t *testing.T) {
-		os.Unsetenv("NONEXISTENT_KEY_12345")
+		_ = os.Unsetenv("NONEXISTENT_KEY_12345")
 		_, err := backend.Get(ctx, "nonexistent_key_12345")
 		if err != secrets.ErrNotFound {
 			t.Errorf("Expected ErrNotFound, got %v", err)
@@ -181,8 +181,8 @@ func TestSecretsChainBackend(t *testing.T) {
 	}
 
 	// Create env backend
-	os.Setenv("ANTHROPIC_API_KEY", "from_env")
-	defer os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Setenv("ANTHROPIC_API_KEY", "from_env")
+	defer func() { _ = os.Unsetenv("ANTHROPIC_API_KEY") }()
 	envBackend := secrets.NewEnv()
 
 	// Create chain (env first, then local)

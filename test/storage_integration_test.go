@@ -17,7 +17,7 @@ func TestStorageIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	t.Run("SaveAndRetrieveMessages", func(t *testing.T) {
 		msg := &storage.Message{
@@ -237,7 +237,7 @@ func TestStorageConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Concurrent writes
 	done := make(chan bool, 20)
@@ -292,7 +292,7 @@ func TestStorageReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to reopen: %v", err)
 	}
-	defer store2.Close()
+	defer func() { _ = store2.Close() }()
 
 	value, err := store2.GetConfig("test_key")
 	if err != nil {
@@ -316,7 +316,7 @@ func TestStoragePlatformIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Save messages for different platforms
 	platforms := []string{"telegram", "whatsapp", "slack"}

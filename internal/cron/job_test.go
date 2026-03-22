@@ -8,7 +8,7 @@ import (
 
 func TestJobStore(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-cron-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewJobStore(tmpDir)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestJobStore(t *testing.T) {
 
 func TestJobPersistence(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-cron-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create and save job
 	store1, _ := NewJobStore(tmpDir)
@@ -162,7 +162,7 @@ func TestValidateSchedule(t *testing.T) {
 
 func TestJobTimestamps(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-cron-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewJobStore(tmpDir)
 

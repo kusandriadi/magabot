@@ -127,18 +127,18 @@ func (l *Local) save() error {
 	tmpName := tmp.Name()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return err
 	}
 	// Set restrictive permissions on Unix; Windows uses ACLs instead.
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(tmpName, 0600); err != nil {
-			os.Remove(tmpName)
+			_ = os.Remove(tmpName)
 			return err
 		}
 	}

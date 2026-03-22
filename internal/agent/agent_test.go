@@ -89,8 +89,8 @@ func TestNewSessionNotADir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
-	defer os.Remove(f.Name())
+	_ = f.Close()
+	defer func() { _ = os.Remove(f.Name()) }()
 
 	m := NewManager(Config{AllowedDirs: []string{os.TempDir()}}, nil)
 

@@ -59,7 +59,7 @@ func runDaemon() {
 			fmt.Fprintf(os.Stderr, "open log file: %v\n", err)
 			os.Exit(1)
 		}
-		defer logFileHandle.Close()
+		defer func() { _ = logFileHandle.Close() }()
 		logHandler = slog.NewJSONHandler(logFileHandle, logOpts)
 	} else {
 		logHandler = slog.NewTextHandler(os.Stderr, logOpts)
@@ -93,7 +93,7 @@ func runDaemon() {
 		logger.Error("init storage failed", "error", err)
 		os.Exit(1)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Initialize backup manager
 	backupMgr := backup.New(cfg.GetBackupDir(), cfg.Storage.Backup.KeepCount)
@@ -229,7 +229,7 @@ func runDaemon() {
 		logger.Warn("init audit logger failed, continuing without it", "error", err)
 	} else {
 		rtr.SetAuditLogger(auditLogger)
-		defer auditLogger.Close()
+		defer func() { _ = auditLogger.Close() }()
 	}
 
 	// Initialize hooks manager — load from config-hooks.yml, merge with inline config hooks

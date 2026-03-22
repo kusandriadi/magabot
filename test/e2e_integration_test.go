@@ -31,7 +31,7 @@ func TestE2EUserWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	vault, err := security.NewVault(security.GenerateKey())
 	if err != nil {
@@ -228,7 +228,7 @@ func TestE2EConcurrentUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	sessionMgr := session.NewManager(func(p, c, m string) error { return nil }, 50, logger)
 
@@ -324,7 +324,7 @@ func TestE2EErrorRecovery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to reopen storage: %v", err)
 		}
-		defer store2.Close()
+		defer func() { _ = store2.Close() }()
 
 		messages, err := store2.GetMessages("telegram", "chat1", 10)
 		if err != nil {

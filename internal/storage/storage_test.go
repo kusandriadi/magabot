@@ -16,7 +16,7 @@ func newTestStore(t *testing.T) *storage.Store {
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
-	t.Cleanup(func() { store.Close() })
+	t.Cleanup(func() { _ = store.Close() })
 	return store
 }
 
@@ -26,7 +26,7 @@ func TestNew_ValidPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 }
 
 func TestNew_InvalidPath(t *testing.T) {

@@ -331,7 +331,7 @@ func (c *Client) embedOpenAI(ctx context.Context, texts []string) ([]Embedding, 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
@@ -410,7 +410,7 @@ func (c *Client) embedVoyage(ctx context.Context, texts []string) ([]Embedding, 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
@@ -481,7 +481,7 @@ func (c *Client) embedCohere(ctx context.Context, texts []string) ([]Embedding, 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
@@ -542,7 +542,7 @@ func (c *Client) embedLocal(ctx context.Context, texts []string) ([]Embedding, e
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
@@ -675,7 +675,7 @@ func NewVectorStore(cfg VectorStoreConfig) (*VectorStore, error) {
 	}
 
 	if err := store.initSchema(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
 
@@ -847,7 +847,7 @@ func (s *VectorStore) SearchByVector(queryVector []float32, limit int) ([]Search
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []SearchResult
 
@@ -935,7 +935,7 @@ func (s *VectorStore) List(offset, limit int) ([]*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []*Entry
 

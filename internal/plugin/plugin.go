@@ -651,7 +651,7 @@ func (m *Manager) SaveConfig() error {
 	}
 
 	if err := os.Rename(tmpFile, configPath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("rename plugin configs: %w", err)
 	}
 

@@ -40,7 +40,7 @@ func (p *testPlugin) Stop(ctx context.Context) error {
 
 func TestManagerRegister(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -75,7 +75,7 @@ func TestManagerRegister(t *testing.T) {
 
 func TestManagerLifecycle(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -131,7 +131,7 @@ func TestManagerLifecycle(t *testing.T) {
 
 func TestManagerStartAll(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -163,7 +163,7 @@ func TestManagerStartAll(t *testing.T) {
 
 func TestManagerStopAll(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -190,7 +190,7 @@ func TestManagerStopAll(t *testing.T) {
 
 func TestManagerDependencies(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -228,7 +228,7 @@ func TestManagerDependencies(t *testing.T) {
 
 func TestManagerCommands(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -276,7 +276,7 @@ func TestManagerCommands(t *testing.T) {
 
 func TestManagerHooks(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -315,7 +315,7 @@ func TestManagerHooks(t *testing.T) {
 
 func TestManagerStats(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -347,7 +347,7 @@ func TestManagerStats(t *testing.T) {
 
 func TestManagerEvents(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -381,7 +381,7 @@ func TestManagerEvents(t *testing.T) {
 
 func TestManagerConfig(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -428,7 +428,7 @@ func TestManagerConfig(t *testing.T) {
 
 func TestManagerList(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 
@@ -448,7 +448,7 @@ func TestManagerList(t *testing.T) {
 
 func TestPluginContextDataDir(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "plugin-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	mgr := NewManager(Config{DataDir: tmpDir})
 

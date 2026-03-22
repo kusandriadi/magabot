@@ -11,7 +11,7 @@ func TestMemoryStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create store
 	store, err := NewStore(tmpDir, "test-user")
@@ -60,7 +60,7 @@ func TestMemoryStore(t *testing.T) {
 
 func TestMemoryRemember(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewStore(tmpDir, "test-user")
 
@@ -88,7 +88,7 @@ func TestMemoryRemember(t *testing.T) {
 
 func TestMemoryStats(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewStore(tmpDir, "test-user")
 
@@ -112,7 +112,7 @@ func TestMemoryStats(t *testing.T) {
 
 func TestMemoryClear(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewStore(tmpDir, "test-user")
 
@@ -134,7 +134,7 @@ func TestMemoryClear(t *testing.T) {
 
 func TestMemoryContext(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, _ := NewStore(tmpDir, "test-user")
 

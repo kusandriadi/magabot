@@ -33,7 +33,7 @@ func TestRegistrySpawn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	cfg := Config{
 		DataDir:   tmpDir,
@@ -83,7 +83,7 @@ func TestRegistrySpawn(t *testing.T) {
 
 func TestRegistryCancel(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done", delay: 10 * time.Second}
@@ -118,7 +118,7 @@ func TestRegistryCancel(t *testing.T) {
 
 func TestRegistryNestingLimit(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// MaxDepth of 3 allows: root (depth 0) -> child (depth 1) -> grandchild (depth 2)
 	// Great-grandchild would be depth 3 which exceeds maxDepth
@@ -173,7 +173,7 @@ func TestRegistryNestingLimit(t *testing.T) {
 
 func TestRegistryMaxAgents(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{
 		DataDir:   tmpDir,
@@ -196,7 +196,7 @@ func TestRegistryMaxAgents(t *testing.T) {
 
 func TestRegistryMessaging(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done", delay: 1 * time.Second}
@@ -237,7 +237,7 @@ func TestRegistryMessaging(t *testing.T) {
 
 func TestRegistryStats(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done"}
@@ -263,7 +263,7 @@ func TestRegistryStats(t *testing.T) {
 
 func TestRegistryCleanup(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done"}
@@ -298,7 +298,7 @@ func TestRegistryCleanup(t *testing.T) {
 
 func TestRegistryTimeout(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done", delay: 5 * time.Second}
@@ -323,7 +323,7 @@ func TestRegistryTimeout(t *testing.T) {
 
 func TestRegistryChildren(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done"}
@@ -352,7 +352,7 @@ func TestRegistryChildren(t *testing.T) {
 
 func TestRegistryContext(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "subagent-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	registry, _ := NewRegistry(Config{DataDir: tmpDir})
 	executor := &mockExecutor{result: "done"}

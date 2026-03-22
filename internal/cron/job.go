@@ -108,7 +108,7 @@ func (s *JobStore) save() error {
 	}
 
 	if err := os.Rename(tmpFile, s.filePath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to rename jobs file: %w", err)
 	}
 

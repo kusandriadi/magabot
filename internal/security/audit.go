@@ -139,7 +139,7 @@ func (a *AuditLogger) rotateIfNeeded() {
 	oldWriter := a.writer
 	a.writer = file
 	if closer, ok := oldWriter.(io.Closer); ok {
-		closer.Close()
+		_ = closer.Close()
 	}
 }
 

@@ -12,7 +12,7 @@ func TestConfigLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -33,7 +33,7 @@ func TestConfigLoad(t *testing.T) {
 
 func TestConfigSave(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "magabot-config-test-*")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
 

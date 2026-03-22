@@ -109,7 +109,7 @@ func (n *Notifier) sendWhatsApp(ctx context.Context, phone, message string) erro
 	if err != nil {
 		return fmt.Errorf("whatsapp request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -149,7 +149,7 @@ func (n *Notifier) sendSlack(ctx context.Context, channel, message string) error
 	if err != nil {
 		return fmt.Errorf("slack request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		OK    bool   `json:"ok"`
@@ -225,7 +225,7 @@ func (n *Notifier) sendDiscordBot(ctx context.Context, channelID, message string
 	if err != nil {
 		return fmt.Errorf("discord request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -268,7 +268,7 @@ func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

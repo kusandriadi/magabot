@@ -613,7 +613,7 @@ func (c *Config) Save() error {
 	}
 
 	if err := os.Rename(tmpFile, c.filePath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -832,7 +832,7 @@ func SaveHooksFile(filePath string, hooks []HookConfig) error {
 	}
 
 	if err := os.Rename(tmpFile, filePath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("save hooks file: %w", err)
 	}
 

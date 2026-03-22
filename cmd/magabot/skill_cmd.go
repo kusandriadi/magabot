@@ -106,8 +106,8 @@ func cmdSkillList() {
 	fmt.Println("===================")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tDESCRIPTION\tTRIGGERS")
-	fmt.Fprintln(w, "----\t-------\t-----------\t--------")
+	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tDESCRIPTION\tTRIGGERS")
+	_, _ = fmt.Fprintln(w, "----\t-------\t-----------\t--------")
 
 	for _, skill := range skillList {
 		triggers := []string{}
@@ -121,13 +121,13 @@ func cmdSkillList() {
 			triggers = append(triggers, "[always]")
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			skill.Name,
 			skill.Version,
 			truncateStr(skill.Description, 40),
 			strings.Join(triggers, ", "))
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Printf("\nTotal: %d skills\n", len(skillList))
 }
@@ -238,8 +238,8 @@ func cmdSkillBuiltin() {
 	fmt.Println()
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tDESCRIPTION\tTRIGGERS")
-	fmt.Fprintln(w, "----\t-----------\t--------")
+	_, _ = fmt.Fprintln(w, "NAME\tDESCRIPTION\tTRIGGERS")
+	_, _ = fmt.Fprintln(w, "----\t-----------\t--------")
 
 	for _, skill := range builtins {
 		triggers := []string{}
@@ -250,12 +250,12 @@ func cmdSkillBuiltin() {
 			triggers = append(triggers, "\""+skill.Triggers.Keywords[0]+"\"")
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n",
 			skill.Name,
 			truncateStr(skill.Description, 40),
 			strings.Join(triggers, ", "))
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Printf("\nTotal: %d built-in skills\n", len(builtins))
 }

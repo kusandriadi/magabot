@@ -250,7 +250,7 @@ func (b *Bot) downloadFile(fileID, prefix string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("download file: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
@@ -273,12 +273,12 @@ func (b *Bot) downloadFile(fileID, prefix string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create file: %w", err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	// Limit download size to prevent disk exhaustion
 	limited := io.LimitReader(resp.Body, maxDownloadSize)
 	if _, err := io.Copy(out, limited); err != nil {
-		os.Remove(localPath)
+		_ = os.Remove(localPath)
 		return "", fmt.Errorf("save file: %w", err)
 	}
 

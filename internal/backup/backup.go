@@ -64,10 +64,10 @@ func (m *Manager) Create(dataDir string, platforms []string) (*BackupInfo, error
 	var closed bool
 	defer func() {
 		if !closed {
-			tw.Close()
-			gw.Close()
-			f.Close()
-			os.Remove(backupFile) // cleanup incomplete backup
+			_ = tw.Close()
+			_ = gw.Close()
+			_ = f.Close()
+			_ = os.Remove(backupFile) // cleanup incomplete backup
 		}
 	}()
 
@@ -179,7 +179,7 @@ func copyFileToArchive(tw *tar.Writer, file string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = io.Copy(tw, f)
 	return err
 }
@@ -192,13 +192,13 @@ func (m *Manager) Restore(filename, dataDir string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gr, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 
@@ -237,7 +237,7 @@ func (m *Manager) Restore(filename, dataDir string) error {
 
 			// Limit extraction per file
 			n, err := io.Copy(outFile, io.LimitReader(tr, maxFileExtractSize))
-			outFile.Close()
+			_ = outFile.Close()
 			if err != nil {
 				return err
 			}
@@ -304,7 +304,7 @@ func (m *Manager) cleanup() {
 	}
 
 	for _, b := range backups[m.keepCount:] {
-		os.Remove(filepath.Join(m.backupPath, b.Filename))
+		_ = os.Remove(filepath.Join(m.backupPath, b.Filename))
 	}
 }
 

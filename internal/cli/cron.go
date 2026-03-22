@@ -55,7 +55,7 @@ func cronListCmd(dataDir string) *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME\tSCHEDULE\tSTATUS\tCHANNELS\tLAST RUN")
+			_, _ = fmt.Fprintln(w, "ID\tNAME\tSCHEDULE\tSTATUS\tCHANNELS\tLAST RUN")
 
 			for _, job := range jobs {
 				if !showAll && !job.Enabled {
@@ -77,7 +77,7 @@ func cronListCmd(dataDir string) *cobra.Command {
 					lastRun = job.LastRunAt.Format("01/02 15:04")
 				}
 
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 					job.ID,
 					util.Truncate(job.Name, 20),
 					job.Schedule,
@@ -87,7 +87,7 @@ func cronListCmd(dataDir string) *cobra.Command {
 				)
 			}
 
-			w.Flush()
+			_ = w.Flush()
 			return nil
 		},
 	}

@@ -484,7 +484,7 @@ func TestAuditLogger(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create audit logger: %v", err)
 		}
-		defer logger.Close()
+		defer func() { _ = logger.Close() }()
 
 		logger.LogAuthFailure("telegram", "user1", "wrong password")
 		logger.LogAuthLockout("telegram", "user1")
@@ -501,7 +501,7 @@ func TestAuditLogger(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create audit logger: %v", err)
 		}
-		defer logger.Close()
+		defer func() { _ = logger.Close() }()
 
 		event := security.SecurityEvent{
 			EventType: security.EventAuthSuccess,

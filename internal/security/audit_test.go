@@ -19,7 +19,7 @@ func TestNewAuditLogger(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create logger: %v", err)
 		}
-		defer logger.Close()
+		defer func() { _ = logger.Close() }()
 
 		if logger == nil {
 			t.Error("Logger should not be nil")
@@ -40,7 +40,7 @@ func TestNewAuditLogger(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Should create directory: %v", err)
 		}
-		defer logger.Close()
+		defer func() { _ = logger.Close() }()
 
 		if _, err := os.Stat(newDir); os.IsNotExist(err) {
 			t.Error("Directory should be created")
@@ -51,7 +51,7 @@ func TestNewAuditLogger(t *testing.T) {
 func TestAuditLoggerLog(t *testing.T) {
 	dir := t.TempDir()
 	logger, _ := NewAuditLogger(dir)
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	t.Run("BasicLog", func(t *testing.T) {
 		err := logger.Log(SecurityEvent{
@@ -125,7 +125,7 @@ func TestAuditLoggerLog(t *testing.T) {
 func TestAuditLoggerInferSeverity(t *testing.T) {
 	dir := t.TempDir()
 	logger, _ := NewAuditLogger(dir)
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	tests := []struct {
 		eventType SecurityEventType
@@ -155,7 +155,7 @@ func TestAuditLoggerInferSeverity(t *testing.T) {
 func TestAuditLoggerHelpers(t *testing.T) {
 	dir := t.TempDir()
 	logger, _ := NewAuditLogger(dir)
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	t.Run("LogAuthSuccess", func(t *testing.T) {
 		logger.LogAuthSuccess("telegram", "user1")
@@ -208,7 +208,7 @@ func TestAuditLoggerClose(t *testing.T) {
 func TestAuditLoggerConcurrency(t *testing.T) {
 	dir := t.TempDir()
 	logger, _ := NewAuditLogger(dir)
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -240,7 +240,7 @@ func TestAuditLoggerConcurrency(t *testing.T) {
 func TestAuditLoggerLogFormat(t *testing.T) {
 	dir := t.TempDir()
 	logger, _ := NewAuditLogger(dir)
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	event := SecurityEvent{
 		EventType: EventAuthSuccess,
@@ -300,7 +300,7 @@ func TestAuditLoggerWithCustomWriter(t *testing.T) {
 func TestAuditLoggerRotation(t *testing.T) {
 	dir := t.TempDir()
 	logger, _ := NewAuditLogger(dir)
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	// Set small max size for testing
 	logger.maxSizeMB = 0 // Force rotation on first call
@@ -334,7 +334,7 @@ func TestAuditLoggerCloseWithCloser(t *testing.T) {
 		writer: mc,
 	}
 
-	logger.Close()
+	_ = logger.Close()
 	if !mc.closed {
 		t.Error("Close should be called on io.Closer")
 	}
@@ -371,7 +371,7 @@ func TestAuditLoggerRotateScenario(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	defer logger.Close()
+	defer func() { _ = logger.Close() }()
 
 	// Set small threshold
 	logger.maxSizeMB = 0 // 0 MB means any file will trigger rotation

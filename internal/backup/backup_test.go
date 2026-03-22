@@ -63,9 +63,9 @@ func TestCreate_Success(t *testing.T) {
 
 	// Verify archive contains manifest
 	f, _ := os.Open(fullPath)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	gr, _ := gzip.NewReader(f)
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 	tr := tar.NewReader(gr)
 
 	foundManifest := false
@@ -123,11 +123,11 @@ func TestRestore_PathTraversal(t *testing.T) {
 		Mode: 0600,
 		Size: 4,
 	}
-	tw.WriteHeader(hdr)
-	tw.Write([]byte("evil"))
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_ = tw.WriteHeader(hdr)
+	_, _ = tw.Write([]byte("evil"))
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	m := New(backupDir, 5)
 	err := m.Restore("malicious.tar.gz", restoreDir)
@@ -238,7 +238,7 @@ func TestCleanup_KeepCount(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Write minimal valid gzip so it counts as a backup file
-		f.Close()
+		_ = f.Close()
 	}
 
 	// Verify all 3 exist

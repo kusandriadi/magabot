@@ -759,7 +759,7 @@ func (r *Registry) persist() {
 	}
 
 	if err := os.Rename(tmpFile, r.persistPath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		r.logger.Error("failed to rename agents file", "error", err)
 	}
 }

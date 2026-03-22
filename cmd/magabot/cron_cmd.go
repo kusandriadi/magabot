@@ -62,7 +62,7 @@ func cmdCronList(showAll bool) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tSCHEDULE\tSTATUS\tCHANNELS\tLAST RUN")
+	_, _ = fmt.Fprintln(w, "ID\tNAME\tSCHEDULE\tSTATUS\tCHANNELS\tLAST RUN")
 
 	for _, job := range jobs {
 		if !showAll && !job.Enabled {
@@ -84,7 +84,7 @@ func cmdCronList(showAll bool) {
 			lastRun = job.LastRunAt.Format("01/02 15:04")
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			job.ID,
 			truncateStr(job.Name, 20),
 			job.Schedule,
@@ -94,7 +94,7 @@ func cmdCronList(showAll bool) {
 		)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 	fmt.Printf("\nUse 'magabot cron list -a' to show disabled jobs\n")
 }
 

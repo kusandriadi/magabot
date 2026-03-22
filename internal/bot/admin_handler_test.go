@@ -170,7 +170,7 @@ func TestHandleCommand_AdminRemove(t *testing.T) {
 	h := NewAdminHandler(cfg, t.TempDir())
 
 	// First add another admin so we can remove one
-	h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "global", "add", "admin2"})
+	_, _, _ = h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "global", "add", "admin2"})
 
 	response, _, err := h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "global", "rm", "admin2"})
 	if err != nil {

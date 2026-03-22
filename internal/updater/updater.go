@@ -102,7 +102,7 @@ func (u *Updater) getLatestRelease(ctx context.Context) (*Release, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to check updates: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 404 {
 		return nil, fmt.Errorf("no releases found")
@@ -146,7 +146,7 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tmpFile := filepath.Join(tmpDir, "download")
 
@@ -172,14 +172,14 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 
 	// Make executable
 	if err := os.Chmod(tmpFile, 0755); err != nil { // #nosec G302 -- binary must be executable
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to chmod: %w", err)
 	}
 
 	// Backup current binary
 	backupPath := execPath + ".backup"
 	if err := os.Rename(execPath, backupPath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to backup current binary: %w", err)
 	}
 
@@ -242,7 +242,7 @@ func (u *Updater) downloadAsset(ctx context.Context, asset *Asset, destPath stri
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("download failed: %d", resp.StatusCode)
@@ -252,7 +252,7 @@ func (u *Updater) downloadAsset(ctx context.Context, asset *Asset, destPath stri
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	// Limit download to 200MB to prevent disk exhaustion
 	_, err = io.Copy(out, io.LimitReader(resp.Body, 200*1024*1024))
@@ -265,13 +265,13 @@ func (u *Updater) extractTarGz(archivePath, destDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return "", err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	tr := tar.NewReader(gzr)
 
@@ -315,10 +315,10 @@ func (u *Updater) extractTarGz(archivePath, destDir string) (string, error) {
 		}
 		// Limit extracted file size to 200MB
 		if _, err := io.Copy(outFile, io.LimitReader(tr, 200*1024*1024)); err != nil {
-			outFile.Close()
+			_ = outFile.Close()
 			return "", err
 		}
-		outFile.Close()
+		_ = outFile.Close()
 	}
 
 	if binaryPath == "" {
@@ -352,7 +352,7 @@ func (u *Updater) verifyChecksum(ctx context.Context, checksumAsset *Asset, asse
 	if err != nil {
 		return fmt.Errorf("download checksums: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
 	if err != nil {
@@ -378,7 +378,7 @@ func (u *Updater) verifyChecksum(ctx context.Context, checksumAsset *Asset, asse
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, f); err != nil {

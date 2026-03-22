@@ -73,7 +73,7 @@ func TestRouterIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Setup vault
 	key := security.GenerateKey()
@@ -323,7 +323,7 @@ func TestRouterConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	key := security.GenerateKey()
 	vault, err := security.NewVault(key)
