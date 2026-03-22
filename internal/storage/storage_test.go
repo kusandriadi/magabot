@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -30,8 +31,12 @@ func TestNew_ValidPath(t *testing.T) {
 }
 
 func TestNew_InvalidPath(t *testing.T) {
-	// Attempt to create a database in a path that does not exist and is not writable.
-	_, err := storage.New("/nonexistent/dir/that/should/fail/test.db")
+	// Use a regular file as the parent so MkdirAll fails on all platforms.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := storage.New(filepath.Join(blocker, "sub", "test.db"))
 	if err == nil {
 		t.Fatal("expected error for invalid path, got nil")
 	}
