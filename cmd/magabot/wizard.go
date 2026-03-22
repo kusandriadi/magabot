@@ -449,14 +449,13 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 			token := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN")
 			if token == "" {
 				fmt.Println()
-				fmt.Println("  ❌ CLAUDE_CODE_OAUTH_TOKEN not set.")
+				fmt.Println("  Get your token by running: claude setup-token")
 				fmt.Println()
-				fmt.Println("  To use your Claude Pro/Max subscription:")
-				fmt.Println("    export CLAUDE_CODE_OAUTH_TOKEN=<your-oauth-token>")
-				fmt.Println()
-			} else {
+				token = askPassword(reader, "OAuth token")
+			}
+			if token != "" {
 				state.ClaudeCodeAuthToken = token
-				fmt.Println("  ✅ Claude Pro/Max token loaded from CLAUDE_CODE_OAUTH_TOKEN")
+				fmt.Println("  ✅ Claude Pro/Max token configured")
 			}
 		} else {
 			fmt.Println("  Get API key: https://console.anthropic.com/")

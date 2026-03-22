@@ -4,6 +4,8 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -36,6 +38,9 @@ type Session struct {
 
 // New creates a new storage instance
 func New(dbPath string) (*Store, error) {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
+		return nil, fmt.Errorf("create database directory: %w", err)
+	}
 	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, err

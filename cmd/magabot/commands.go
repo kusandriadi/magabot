@@ -144,7 +144,7 @@ func cmdReset() {
 	}
 
 	// Remove database
-	dbFile := filepath.Join(dataDir, "magabot.db")
+	dbFile := filepath.Join(dataDir, "db", "magabot.db")
 	if err := os.Remove(dbFile); err != nil && !os.IsNotExist(err) {
 		fmt.Printf("Warning: failed to remove database: %v\n", err)
 	} else {
@@ -217,6 +217,7 @@ func ensureDirs() {
 		logDir,
 		filepath.Join(dataDir, "sessions"),
 		filepath.Join(dataDir, "backups"),
+		filepath.Join(dataDir, "db"),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0700); err != nil {
