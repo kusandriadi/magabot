@@ -159,6 +159,13 @@ func cmdReset() {
 		fmt.Println("🗑️  Secrets cleared")
 	}
 
+	// Clear log file
+	if err := os.Truncate(logFile, 0); err != nil && !os.IsNotExist(err) {
+		fmt.Printf("Warning: failed to clear log file: %v\n", err)
+	} else {
+		fmt.Println("🗑️  Log cleared")
+	}
+
 	// Recreate directories
 	ensureDirs()
 
