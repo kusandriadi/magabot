@@ -203,14 +203,14 @@ type LLMConfig struct {
 
 // LLMProviderConfig holds config for a single LLM provider
 type LLMProviderConfig struct {
-	Enabled     bool    `yaml:"enabled"`
-	Mode        string  `yaml:"mode,omitempty"`       // "api" (default) or "cli" (Claude CLI)
-	APIKey      string  `yaml:"api_key"`              // #nosec G117 -- config field
-	AuthToken   string  `yaml:"auth_token,omitempty"` // OAuth token (Claude Pro/Max)
-	Model       string  `yaml:"model"`
-	MaxTokens   int     `yaml:"max_tokens"`
-	Temperature float64 `yaml:"temperature"`
-	BaseURL     string  `yaml:"base_url,omitempty"`
+	Enabled      bool     `yaml:"enabled"`
+	Mode         string   `yaml:"mode,omitempty"`       // "api" (default) or "cli" (Claude CLI)
+	APIKey       string   `yaml:"api_key"`              // #nosec G117 -- config field
+	AuthToken    string   `yaml:"auth_token,omitempty"` // OAuth token (Claude Pro/Max)
+	Model        string   `yaml:"model"`
+	MaxTokens    int      `yaml:"max_tokens"`
+	Temperature  float64  `yaml:"temperature"`
+	BaseURL      string   `yaml:"base_url,omitempty"`
 	CLIPath      string   `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
 	AllowedTools []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = no tools)
 	MaxRetries   int      `yaml:"max_retries"`
