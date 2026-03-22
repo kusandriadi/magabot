@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 )
@@ -59,6 +60,55 @@ type WizardState struct {
 	DeepSeekKey      string
 	GLMEnabled       bool
 	GLMKey           string
+	KimiEnabled      bool
+	KimiKey          string
+	QwenEnabled      bool
+	QwenKey          string
+	MiniMaxEnabled   bool
+	MiniMaxKey       string
+}
+
+// testLLMConnection tests the LLM connection with the configured provider
+func testLLMConnection(state *WizardState) {
+	fmt.Println("\n🔄 Testing LLM connection...")
+
+	// Determine which provider to test
+	providerName := state.LLMDefault
+	var apiKey string
+
+	switch providerName {
+	case "anthropic":
+		apiKey = state.AnthropicKey
+	case "openai":
+		apiKey = state.OpenAIKey
+	case "gemini":
+		apiKey = state.GeminiKey
+	case "deepseek":
+		apiKey = state.DeepSeekKey
+	case "glm":
+		apiKey = state.GLMKey
+	case "kimi":
+		apiKey = state.KimiKey
+	case "qwen":
+		apiKey = state.QwenKey
+	case "minimax":
+		apiKey = state.MiniMaxKey
+	}
+
+	if apiKey == "" {
+		fmt.Println("⚠️  No API key provided, skipping connection test")
+		return
+	}
+
+	// Use FetchModels from internal/llm to test
+	models, err := llm.FetchModels(providerName, apiKey, "")
+	if err != nil {
+		fmt.Printf("❌ Connection failed: %v\n", err)
+		fmt.Println("   Check your API key and try again with: magabot setup llm")
+		return
+	}
+
+	fmt.Printf("✅ Connected to %s! (%d models available)\n", providerName, len(models))
 }
 
 // RunWizard runs the interactive setup wizard
@@ -97,6 +147,9 @@ func RunWizard() {
 
 	// Step 5: Generate config
 	step5Generate(state)
+
+	// Test LLM connection
+	testLLMConnection(state)
 
 	// Done!
 	printSuccess()
@@ -353,6 +406,9 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 	fmt.Println("  3. gemini     - Google Gemini")
 	fmt.Println("  4. deepseek   - DeepSeek")
 	fmt.Println("  5. glm        - Zhipu GLM")
+	fmt.Println("  6. kimi       - Moonshot Kimi")
+	fmt.Println("  7. qwen       - Alibaba Qwen")
+	fmt.Println("  8. minimax    - MiniMax")
 	fmt.Println()
 
 	mainChoice := askString(reader, "Main provider", "1")
@@ -364,6 +420,9 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		"3": "gemini", "gemini": "gemini",
 		"4": "deepseek", "deepseek": "deepseek",
 		"5": "glm", "glm": "glm",
+		"6": "kimi", "kimi": "kimi",
+		"7": "qwen", "qwen": "qwen",
+		"8": "minimax", "minimax": "minimax",
 	}
 	state.LLMDefault = providerMap[strings.ToLower(mainChoice)]
 	if state.LLMDefault == "" {
@@ -412,6 +471,30 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://open.bigmodel.cn/")
 		fmt.Println()
 		state.GLMKey = askPassword(reader, "API key")
+
+	case "kimi":
+		state.KimiEnabled = true
+		fmt.Println("🌙 Moonshot Kimi Configuration")
+		fmt.Println("──────────────────────────────")
+		fmt.Println("  Get API key: https://platform.moonshot.cn/")
+		fmt.Println()
+		state.KimiKey = askPassword(reader, "API key")
+
+	case "qwen":
+		state.QwenEnabled = true
+		fmt.Println("☁️  Alibaba Qwen Configuration")
+		fmt.Println("──────────────────────────────")
+		fmt.Println("  Get API key: https://dashscope.console.aliyun.com/")
+		fmt.Println()
+		state.QwenKey = askPassword(reader, "API key (DashScope)")
+
+	case "minimax":
+		state.MiniMaxEnabled = true
+		fmt.Println("⚡ MiniMax Configuration")
+		fmt.Println("────────────────────────")
+		fmt.Println("  Get API key: https://platform.minimaxi.com/")
+		fmt.Println()
+		state.MiniMaxKey = askPassword(reader, "API key")
 	}
 
 	// Ask about additional providers
@@ -420,7 +503,7 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println()
 		fmt.Println("Which additional providers? (comma-separated, e.g., 2,3)")
 		fmt.Println()
-		for name, num := range map[string]string{"anthropic": "1", "openai": "2", "gemini": "3", "deepseek": "4", "glm": "5"} {
+		for name, num := range map[string]string{"anthropic": "1", "openai": "2", "gemini": "3", "deepseek": "4", "glm": "5", "kimi": "6", "qwen": "7", "minimax": "8"} {
 			if name != state.LLMDefault {
 				fmt.Printf("  %s. %s\n", num, name)
 			}
@@ -463,6 +546,27 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 					fmt.Println()
 					fmt.Println("  Get API key: https://open.bigmodel.cn/")
 					state.GLMKey = askPassword(reader, "GLM API key")
+				}
+			case 6:
+				if !state.KimiEnabled {
+					state.KimiEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://platform.moonshot.cn/")
+					state.KimiKey = askPassword(reader, "Kimi API key")
+				}
+			case 7:
+				if !state.QwenEnabled {
+					state.QwenEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://dashscope.console.aliyun.com/")
+					state.QwenKey = askPassword(reader, "Qwen API key (DashScope)")
+				}
+			case 8:
+				if !state.MiniMaxEnabled {
+					state.MiniMaxEnabled = true
+					fmt.Println()
+					fmt.Println("  Get API key: https://platform.minimaxi.com/")
+					state.MiniMaxKey = askPassword(reader, "MiniMax API key")
 				}
 			}
 		}
@@ -693,6 +797,27 @@ llm:
     model: "glm-4"
     max_tokens: 4096
     temperature: 0.7
+  
+  kimi:
+    enabled: %t
+    api_key: "%s"
+    model: "moonshot-v1-8k"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  qwen:
+    enabled: %t
+    api_key: "%s"
+    model: "qwen-max"
+    max_tokens: 4096
+    temperature: 0.7
+  
+  minimax:
+    enabled: %t
+    api_key: "%s"
+    model: "abab6.5-chat"
+    max_tokens: 4096
+    temperature: 0.7
 
 # Tools (all free, no API keys needed)
 tools:
@@ -749,6 +874,12 @@ tools:
 		state.DeepSeekKey,
 		state.GLMEnabled,
 		state.GLMKey,
+		state.KimiEnabled,
+		state.KimiKey,
+		state.QwenEnabled,
+		state.QwenKey,
+		state.MiniMaxEnabled,
+		state.MiniMaxKey,
 	)
 }
 

@@ -156,6 +156,19 @@ func (s *Store) GetMessages(platform, chatID string, limit int) ([]Message, erro
 	return messages, rows.Err()
 }
 
+// IsFirstMessage checks if this is the first message from a user on a platform
+func (s *Store) IsFirstMessage(platform, userID string) (bool, error) {
+	var count int
+	err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM messages WHERE platform = ? AND user_id = ?",
+		platform, userID,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == 0, nil
+}
+
 // SaveSession saves a platform session
 func (s *Store) SaveSession(platform, data string) error {
 	_, err := s.db.Exec(

@@ -278,6 +278,13 @@ func runDaemon() {
 			return routeToAgent(ctx, msg, agentMgr)
 		}
 
+		// Check if first-time user
+		isFirst, err := store.IsFirstMessage(msg.Platform, msg.UserID)
+		if err != nil {
+			// Log but don't block — non-critical
+			logger.Warn("first message check failed", "error", err)
+		}
+
 		// Get or create session for this chat
 		sess := sessionMgr.GetOrCreate(msg.Platform, msg.ChatID, msg.UserID)
 
@@ -327,7 +334,13 @@ func runDaemon() {
 			"latency", resp.Latency,
 		)
 
-		return resp.Content, nil
+		// Prepend welcome message for first-time users
+		response := resp.Content
+		if isFirst && response != "" {
+			response = "👋 *Selamat datang!* Ini pertama kali kita ngobrol.\nKetik /help untuk lihat semua fitur.\n\n" + response
+		}
+
+		return response, nil
 	})
 
 	// Register platforms
@@ -466,7 +479,31 @@ func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.St
 
 	switch cmd {
 	case "/start":
-		return "👋 Halo! Saya Magabot.\n\nKirim pesan apapun dan saya akan menjawab menggunakan AI.\n\nCommands:\n• /status - Status bot\n• /models - List models\n• /config - Admin config\n• /memory - Memory management\n• /task - Background tasks\n• /help - Bantuan", nil
+		welcome := `👋 *Halo! Saya Magabot* — AI chatbot pribadi kamu.
+
+💬 *Cara Pakai:*
+Kirim pesan apapun, saya jawab pakai AI.
+
+🎯 *Yang Bisa Saya Lakukan:*
+• 💬 Chat — tanya apapun, multi-turn conversation
+• 📷 Gambar — kirim foto, saya analisis (vision)
+• 🎤 Voice — kirim voice message, saya transcribe & jawab
+• 📄 Dokumen — kirim PDF/file, saya baca & analisis
+• 🎨 Generate — minta saya buatkan gambar (DALL-E)
+• 🔊 TTS — saya bisa balas pakai voice message
+• 💭 Thinking — reasoning mendalam untuk pertanyaan kompleks
+
+⚡ *Commands:*
+• /help — bantuan lengkap
+• /status — status bot & provider
+• /models — list AI models tersedia
+• /providers — LLM providers aktif
+
+🔧 *Admin:*
+• /config — konfigurasi bot
+• /memory — memory management
+• /task — background tasks`
+		return welcome, nil
 
 	case "/help":
 		return `📖 *Magabot Help*

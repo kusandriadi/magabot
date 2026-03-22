@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
+	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/util"
@@ -535,6 +536,9 @@ func setupLLM() {
 	fmt.Println("  3. gemini     - Google Gemini")
 	fmt.Println("  4. deepseek   - DeepSeek")
 	fmt.Println("  5. glm        - Zhipu GLM")
+	fmt.Println("  6. kimi       - Moonshot Kimi")
+	fmt.Println("  7. qwen       - Alibaba Qwen")
+	fmt.Println("  8. minimax    - MiniMax")
 	fmt.Println()
 
 	defaultLLM := askString(reader, "Default provider", "anthropic")
@@ -576,6 +580,33 @@ func setupLLM() {
 		}
 	}
 
+	fmt.Println()
+	if askYesNo(reader, "Configure Moonshot Kimi?", false) {
+		key := askString(reader, "Kimi API Key", "")
+		if key != "" {
+			saveSecret("llm/kimi_api_key", key)
+			cfg.LLM.Kimi.Enabled = true
+		}
+	}
+
+	fmt.Println()
+	if askYesNo(reader, "Configure Alibaba Qwen?", false) {
+		key := askString(reader, "Qwen API Key (DashScope)", "")
+		if key != "" {
+			saveSecret("llm/qwen_api_key", key)
+			cfg.LLM.Qwen.Enabled = true
+		}
+	}
+
+	fmt.Println()
+	if askYesNo(reader, "Configure MiniMax?", false) {
+		key := askString(reader, "MiniMax API Key", "")
+		if key != "" {
+			saveSecret("llm/minimax_api_key", key)
+			cfg.LLM.MiniMax.Enabled = true
+		}
+	}
+
 	if err := cfg.Save(); err != nil {
 		fmt.Printf("❌ Failed to save config: %v\n", err)
 		return
@@ -583,6 +614,40 @@ func setupLLM() {
 
 	fmt.Println()
 	fmt.Println("✅ LLM providers configured!")
+
+	// Test connection to default provider
+	fmt.Println()
+	fmt.Println("🔄 Testing connection to", cfg.LLM.Main, "...")
+
+	var apiKey string
+	switch cfg.LLM.Main {
+	case "anthropic":
+		apiKey = cfg.LLM.Anthropic.APIKey
+	case "openai":
+		apiKey = cfg.LLM.OpenAI.APIKey
+	case "gemini":
+		apiKey = cfg.LLM.Gemini.APIKey
+	case "deepseek":
+		apiKey = cfg.LLM.DeepSeek.APIKey
+	case "glm":
+		apiKey = cfg.LLM.GLM.APIKey
+	case "kimi":
+		apiKey = cfg.LLM.Kimi.APIKey
+	case "qwen":
+		apiKey = cfg.LLM.Qwen.APIKey
+	case "minimax":
+		apiKey = cfg.LLM.MiniMax.APIKey
+	}
+
+	if apiKey != "" {
+		models, err := llm.FetchModels(cfg.LLM.Main, apiKey, "")
+		if err != nil {
+			fmt.Printf("❌ Connection failed: %v\n", err)
+			fmt.Println("   Check your API key and try again with: magabot setup llm")
+		} else {
+			fmt.Printf("✅ Connected to %s! (%d models available)\n", cfg.LLM.Main, len(models))
+		}
+	}
 
 	askRestart(reader)
 }
