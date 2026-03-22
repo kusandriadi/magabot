@@ -201,12 +201,12 @@ func (m *Manager) CloseSession(platform, chatID string) {
 
 // Execute runs a message through the agent CLI and returns the output.
 // Each call is a one-shot CLI invocation (no persistent process).
-func (m *Manager) Execute(ctx context.Context, sess *Session, message string) (string, error) {
+func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string) (string, error) {
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	args := buildArgs(sess, message)
+	args := buildArgs(sess, message, media)
 	bin := agentInfo[sess.Agent]
 
 	m.logger.Debug("executing agent",
@@ -249,11 +249,24 @@ func (s *Session) GetMsgCount() int {
 }
 
 // buildArgs constructs CLI arguments for the given agent and message.
-func buildArgs(sess *Session, message string) []string {
+func buildArgs(sess *Session, message string, media []string) []string {
+	// Prepend file references so the agent can read them
+	if len(media) > 0 {
+		var parts []string
+		parts = append(parts, "User sent files (use Read tool to view them):")
+		for _, path := range media {
+			parts = append(parts, "  "+path)
+		}
+		if message != "" {
+			parts = append(parts, "", message)
+		}
+		message = strings.Join(parts, "\n")
+	}
+
 	count := sess.GetMsgCount()
 	switch sess.Agent {
 	case AgentClaude:
-		args := []string{"-p", message, "--output-format", "text"}
+		args := []string{"-p", message, "--output-format", "text", "--dangerously-skip-permissions"}
 		if count > 0 {
 			args = append(args, "--continue")
 		}

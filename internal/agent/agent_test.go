@@ -183,8 +183,8 @@ func TestBuildArgs(t *testing.T) {
 		message string
 		wantLen int
 	}{
-		{AgentClaude, 0, "hello", 4}, // -p hello --output-format text
-		{AgentClaude, 1, "hello", 5}, // + --continue
+		{AgentClaude, 0, "hello", 5}, // -p hello --output-format text --dangerously-skip-permissions
+		{AgentClaude, 1, "hello", 6}, // + --continue
 		{AgentCodex, 0, "hello", 3},  // exec -- hello
 		{AgentGemini, 0, "hello", 3}, // -p -- hello
 	}
@@ -192,7 +192,7 @@ func TestBuildArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.agent, func(t *testing.T) {
 			sess := &Session{Agent: tt.agent, MsgCount: tt.count}
-			args := buildArgs(sess, tt.message)
+			args := buildArgs(sess, tt.message, nil)
 			if len(args) != tt.wantLen {
 				t.Errorf("buildArgs(%s, count=%d) len = %d, want %d: %v",
 					tt.agent, tt.count, len(args), tt.wantLen, args)
@@ -204,14 +204,14 @@ func TestBuildArgs(t *testing.T) {
 func TestBuildArgsFlagInjection(t *testing.T) {
 	// Codex and Gemini use -- separator to prevent flag injection
 	sess := &Session{Agent: AgentCodex}
-	args := buildArgs(sess, "--malicious-flag")
+	args := buildArgs(sess, "--malicious-flag", nil)
 	// Should be: exec -- --malicious-flag
 	if len(args) < 2 || args[1] != "--" {
 		t.Errorf("codex args should have -- separator: %v", args)
 	}
 
 	sess = &Session{Agent: AgentGemini}
-	args = buildArgs(sess, "--malicious-flag")
+	args = buildArgs(sess, "--malicious-flag", nil)
 	// Should be: -p -- --malicious-flag
 	if len(args) < 2 || args[1] != "--" {
 		t.Errorf("gemini args should have -- separator: %v", args)
@@ -227,7 +227,7 @@ func TestExecuteCanceledContext(t *testing.T) {
 	cancel() // cancel immediately
 
 	sess := &Session{Agent: AgentClaude, Dir: dir}
-	_, err := m.Execute(ctx, sess, "test")
+	_, err := m.Execute(ctx, sess, "test", nil)
 	if err == nil {
 		t.Error("expected error from canceled context")
 	}

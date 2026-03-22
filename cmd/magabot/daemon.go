@@ -987,6 +987,9 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 		if ac.CLIPath != "" {
 			cliOpts = append(cliOpts, provider.WithCLIPath(ac.CLIPath))
 		}
+		if len(ac.AllowedTools) > 0 {
+			cliOpts = append(cliOpts, provider.WithCLIAllowedTools(ac.AllowedTools))
+		}
 		llmRouter.Register("anthropic", allm.New(provider.ClaudeCLI(cliOpts...), clientOpts...))
 		return nil
 	}
@@ -1105,7 +1108,7 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 		message := strings.TrimSpace(strings.TrimPrefix(msg.Text, parts[0]))
 		sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
 		ctx := context.Background()
-		output, err := agentMgr.Execute(ctx, sess, message)
+		output, err := agentMgr.Execute(ctx, sess, message, msg.Media)
 		if err != nil {
 			return fmt.Sprintf("Agent error: %v", err), nil
 		}
@@ -1140,7 +1143,7 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		return "", nil
 	}
 
-	output, err := agentMgr.Execute(ctx, sess, msg.Text)
+	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media)
 	if err != nil {
 		return fmt.Sprintf("Agent error: %v", err), nil
 	}

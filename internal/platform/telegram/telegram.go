@@ -241,6 +241,7 @@ var allowedMediaExts = map[string]bool{
 	".mp4": true, ".webm": true, ".mov": true,
 	".ogg": true, ".oga": true, ".mp3": true, ".m4a": true, ".wav": true,
 	".pdf": true, ".txt": true, ".md": true, ".csv": true, ".json": true,
+	".docx": true, ".xlsx": true, ".pptx": true,
 }
 
 // downloadFile downloads a file from Telegram and saves it locally

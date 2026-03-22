@@ -211,8 +211,9 @@ type LLMProviderConfig struct {
 	MaxTokens   int     `yaml:"max_tokens"`
 	Temperature float64 `yaml:"temperature"`
 	BaseURL     string  `yaml:"base_url,omitempty"`
-	CLIPath     string  `yaml:"cli_path,omitempty"` // Path to claude binary (default: "claude")
-	MaxRetries  int     `yaml:"max_retries"`
+	CLIPath      string   `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
+	AllowedTools []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = no tools)
+	MaxRetries   int      `yaml:"max_retries"`
 }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)
