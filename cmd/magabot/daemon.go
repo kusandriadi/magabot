@@ -637,9 +637,8 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 
 		var selectedID string
 		// Try as number first
-		if n, err := fmt.Sscanf(selection, "%d", new(int)); n == 1 && err == nil {
-			idx := 0
-			fmt.Sscanf(selection, "%d", &idx)
+		var idx int
+		if n, err := fmt.Sscanf(selection, "%d", &idx); n == 1 && err == nil {
 			if idx < 1 || idx > len(flat) {
 				return fmt.Sprintf("❌ Invalid number. Choose 1-%d", len(flat)), nil
 			}

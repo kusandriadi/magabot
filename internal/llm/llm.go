@@ -99,13 +99,13 @@ func NewRouter(cfg *Config) *Router {
 	}
 
 	return &Router{
-		clients:     make(map[string]*allm.Client),
-		mainName:    cfg.Main,
+		clients:      make(map[string]*allm.Client),
+		mainName:     cfg.Main,
 		systemPrompt: cfg.SystemPrompt,
-		maxInput:    cfg.MaxInput,
-		timeout:     cfg.Timeout,
-		rateLimiter: newRateLimiter(cfg.RateLimit),
-		logger:      logger,
+		maxInput:     cfg.MaxInput,
+		timeout:      cfg.Timeout,
+		rateLimiter:  newRateLimiter(cfg.RateLimit),
+		logger:       logger,
 	}
 }
 
