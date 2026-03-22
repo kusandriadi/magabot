@@ -588,6 +588,9 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 		{secrets.KeyGeminiAPIKey, &cfg.LLM.Gemini.APIKey, "gemini_api_key"},
 		{secrets.KeyGLMAPIKey, &cfg.LLM.GLM.APIKey, "glm_api_key"},
 		{secrets.KeyDeepSeekAPIKey, &cfg.LLM.DeepSeek.APIKey, "deepseek_api_key"},
+		{secrets.KeyKimiAPIKey, &cfg.LLM.Kimi.APIKey, "kimi_api_key"},
+		{secrets.KeyQwenAPIKey, &cfg.LLM.Qwen.APIKey, "qwen_api_key"},
+		{secrets.KeyMiniMaxAPIKey, &cfg.LLM.MiniMax.APIKey, "minimax_api_key"},
 	}
 
 	// Platform secrets need nil-safe handling

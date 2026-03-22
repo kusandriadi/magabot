@@ -68,6 +68,12 @@ func mapSecretToEnvVar(key string) string {
 		return "GLM_API_KEY"
 	case KeyDeepSeekAPIKey:
 		return "DEEPSEEK_API_KEY"
+	case KeyKimiAPIKey:
+		return "KIMI_API_KEY"
+	case KeyQwenAPIKey:
+		return "QWEN_API_KEY"
+	case KeyMiniMaxAPIKey:
+		return "MINIMAX_API_KEY"
 	case KeyBraveAPIKey:
 		return "BRAVE_API_KEY"
 	case KeyTelegramToken:
