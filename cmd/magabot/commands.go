@@ -160,10 +160,7 @@ func cmdReset() {
 	// Recreate directories
 	ensureDirs()
 
-	fmt.Println()
-
-	// Run setup
-	cmdSetup()
+	fmt.Println("✅ Reset complete. Run 'magabot setup' to reconfigure.")
 }
 
 // cmdUninstall completely removes magabot

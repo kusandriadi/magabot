@@ -141,8 +141,9 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 		return fmt.Errorf("failed to resolve executable path: %w", err)
 	}
 
-	// Use a unique temporary directory to prevent TOCTOU race
-	tmpDir, err := os.MkdirTemp("", "magabot-update-*")
+	// Create temp directory alongside the executable so os.Rename works
+	// (os.Rename fails across different filesystems/mount points)
+	tmpDir, err := os.MkdirTemp(filepath.Dir(execPath), ".magabot-update-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
