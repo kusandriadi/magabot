@@ -110,14 +110,22 @@ func runDaemon() {
 	)
 
 	// Initialize LLM router
-	llmRouter := llm.NewRouter(&llm.Config{
-		Main:         cfg.LLM.Main,
-		SystemPrompt: cfg.LLM.SystemPrompt,
-		MaxInput:     cfg.LLM.MaxInputLength,
-		Timeout:      time.Duration(cfg.LLM.Timeout) * time.Second,
-		RateLimit:    cfg.LLM.RateLimit,
-		Logger:       logger.With("component", "llm"),
-	})
+	llmCfg := &llm.Config{
+		Main:               cfg.LLM.Main,
+		SystemPrompt:       cfg.LLM.SystemPrompt,
+		MaxInput:           cfg.LLM.MaxInputLength,
+		Timeout:            time.Duration(cfg.LLM.Timeout) * time.Second,
+		RateLimit:          cfg.LLM.RateLimit,
+		Logger:             logger.With("component", "llm"),
+		MaxContextTokens:   cfg.LLM.MaxContextTokens,
+		TruncationStrategy: cfg.LLM.TruncationStrategy,
+	}
+	llmRouter := llm.NewRouter(llmCfg)
+
+	// Enable prompt caching if configured
+	if cfg.LLM.PromptCaching {
+		llmRouter.EnablePromptCaching()
+	}
 
 	// Register LLM providers using allm-go (with URL validation - A10 SSRF protection)
 	if cfg.LLM.Anthropic.Enabled {
@@ -138,7 +146,7 @@ func runDaemon() {
 			model: cfg.LLM.Gemini.Model, maxTokens: cfg.LLM.Gemini.MaxTokens,
 			temperature: cfg.LLM.Gemini.Temperature, maxRetries: cfg.LLM.Gemini.MaxRetries,
 			constructor: provider.Gemini,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register gemini provider failed", "error", err)
 		}
 	}
@@ -150,7 +158,7 @@ func runDaemon() {
 			temperature: cfg.LLM.GLM.Temperature, baseURL: cfg.LLM.GLM.BaseURL,
 			maxRetries:  cfg.LLM.GLM.MaxRetries,
 			constructor: provider.GLM,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register glm provider failed", "error", err)
 		}
 	}
@@ -162,7 +170,7 @@ func runDaemon() {
 			temperature: cfg.LLM.DeepSeek.Temperature, baseURL: cfg.LLM.DeepSeek.BaseURL,
 			maxRetries:  cfg.LLM.DeepSeek.MaxRetries,
 			constructor: provider.DeepSeek,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register deepseek provider failed", "error", err)
 		}
 	}
@@ -172,7 +180,7 @@ func runDaemon() {
 			name: "local", model: cfg.LLM.Local.Model,
 			maxTokens: cfg.LLM.Local.MaxTokens, temperature: cfg.LLM.Local.Temperature,
 			baseURL: cfg.LLM.Local.BaseURL, isLocal: true, maxRetries: cfg.LLM.Local.MaxRetries,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register local provider failed", "error", err)
 		}
 	}
@@ -183,7 +191,7 @@ func runDaemon() {
 			model: cfg.LLM.Kimi.Model, maxTokens: cfg.LLM.Kimi.MaxTokens,
 			temperature: cfg.LLM.Kimi.Temperature, maxRetries: cfg.LLM.Kimi.MaxRetries,
 			constructor: provider.Kimi,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register kimi provider failed", "error", err)
 		}
 	}
@@ -194,7 +202,7 @@ func runDaemon() {
 			model: cfg.LLM.Qwen.Model, maxTokens: cfg.LLM.Qwen.MaxTokens,
 			temperature: cfg.LLM.Qwen.Temperature, maxRetries: cfg.LLM.Qwen.MaxRetries,
 			constructor: provider.Qwen,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register qwen provider failed", "error", err)
 		}
 	}
@@ -205,7 +213,7 @@ func runDaemon() {
 			model: cfg.LLM.MiniMax.Model, maxTokens: cfg.LLM.MiniMax.MaxTokens,
 			temperature: cfg.LLM.MiniMax.Temperature, maxRetries: cfg.LLM.MiniMax.MaxRetries,
 			constructor: provider.MiniMax,
-		}); err != nil {
+		}, cfg); err != nil {
 			logger.Error("register minimax provider failed", "error", err)
 		}
 	}
@@ -641,7 +649,7 @@ type compatProviderConfig struct {
 }
 
 // registerCompatProvider registers an OpenAI-compatible provider with shared validation logic.
-func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig) error {
+func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llmCfg *config.Config) error {
 	if cfg.baseURL != "" {
 		var err error
 		if cfg.isLocal {
@@ -674,10 +682,16 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig) err
 		p = cfg.constructor(cfg.apiKey, opts...)
 	}
 
-	// Create client with retry options
+	// Create client with retry and context window options
 	clientOpts := []allm.Option{}
 	if cfg.maxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.maxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
+	if llmCfg.LLM.MaxContextTokens > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxContextTokens(llmCfg.LLM.MaxContextTokens))
+	}
+	if llmCfg.LLM.TruncationStrategy != "" {
+		clientOpts = append(clientOpts, allm.WithTruncationStrategy(llmCfg.LLM.TruncationStrategy))
 	}
 
 	llmRouter.Register(cfg.name, allm.New(p, clientOpts...))
@@ -687,10 +701,16 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig) err
 func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error {
 	ac := cfg.LLM.Anthropic
 
-	// Create client with retry options
+	// Create client with retry and context window options
 	clientOpts := []allm.Option{}
 	if ac.MaxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(ac.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
+	if cfg.LLM.MaxContextTokens > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxContextTokens(cfg.LLM.MaxContextTokens))
+	}
+	if cfg.LLM.TruncationStrategy != "" {
+		clientOpts = append(clientOpts, allm.WithTruncationStrategy(cfg.LLM.TruncationStrategy))
 	}
 
 	// CLI mode: use claude command, no API key needed
@@ -749,10 +769,16 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))
 	}
 
-	// Create client with retry options
+	// Create client with retry and context window options
 	clientOpts := []allm.Option{}
 	if cfg.LLM.OpenAI.MaxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.LLM.OpenAI.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
+	if cfg.LLM.MaxContextTokens > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxContextTokens(cfg.LLM.MaxContextTokens))
+	}
+	if cfg.LLM.TruncationStrategy != "" {
+		clientOpts = append(clientOpts, allm.WithTruncationStrategy(cfg.LLM.TruncationStrategy))
 	}
 
 	llmRouter.Register("openai", allm.New(provider.OpenAI(cfg.LLM.OpenAI.APIKey, opts...), clientOpts...))

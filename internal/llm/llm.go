@@ -22,6 +22,18 @@ type (
 	Image          = allm.Image
 	ResponseFormat = allm.ResponseFormat
 	ThinkingConfig = allm.ThinkingConfig
+	StreamChunk    = allm.StreamChunk
+	CacheControl   = allm.CacheControl
+	TokenCount     = allm.TokenCount
+	ImageResponse  = allm.ImageResponse
+	ImageOption    = allm.ImageOption
+)
+
+var (
+	WithImageSize    = allm.WithImageSize
+	WithImageQuality = allm.WithImageQuality
+	WithImageCount   = allm.WithImageCount
+	WithImageModel   = allm.WithImageModel
 )
 
 const (
@@ -39,24 +51,29 @@ var (
 
 // Router manages LLM clients
 type Router struct {
-	clients      map[string]*allm.Client
-	mainName     string
-	systemPrompt string
-	maxInput     int
-	timeout      time.Duration
-	rateLimiter  *rateLimiter
-	logger       *slog.Logger
-	mu           sync.RWMutex
+	clients            map[string]*allm.Client
+	mainName           string
+	systemPrompt       string
+	maxInput           int
+	timeout            time.Duration
+	rateLimiter        *rateLimiter
+	logger             *slog.Logger
+	mu                 sync.RWMutex
+	maxContextTokens   int
+	truncationStrategy string
+	promptCaching      bool
 }
 
 // Config for LLM router
 type Config struct {
-	Main         string
-	SystemPrompt string
-	MaxInput     int
-	Timeout      time.Duration
-	RateLimit    int // requests per minute per user
-	Logger       *slog.Logger
+	Main               string
+	SystemPrompt       string
+	MaxInput           int
+	Timeout            time.Duration
+	RateLimit          int // requests per minute per user
+	Logger             *slog.Logger
+	MaxContextTokens   int
+	TruncationStrategy string
 }
 
 // NewRouter creates a new LLM router
@@ -76,14 +93,21 @@ func NewRouter(cfg *Config) *Router {
 		logger = slog.Default()
 	}
 
+	truncationStrategy := cfg.TruncationStrategy
+	if truncationStrategy == "" {
+		truncationStrategy = "tail"
+	}
+
 	return &Router{
-		clients:      make(map[string]*allm.Client),
-		mainName:     cfg.Main,
-		systemPrompt: cfg.SystemPrompt,
-		maxInput:     cfg.MaxInput,
-		timeout:      cfg.Timeout,
-		rateLimiter:  newRateLimiter(cfg.RateLimit),
-		logger:       logger,
+		clients:            make(map[string]*allm.Client),
+		mainName:           cfg.Main,
+		systemPrompt:       cfg.SystemPrompt,
+		maxInput:           cfg.MaxInput,
+		timeout:            cfg.Timeout,
+		rateLimiter:        newRateLimiter(cfg.RateLimit),
+		logger:             logger,
+		maxContextTokens:   cfg.MaxContextTokens,
+		truncationStrategy: truncationStrategy,
 	}
 }
 
@@ -132,6 +156,13 @@ func (r *Router) Register(name string, client *allm.Client) {
 	}
 }
 
+// EnablePromptCaching enables prompt caching on system prompts
+func (r *Router) EnablePromptCaching() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.promptCaching = true
+}
+
 // Complete sends a simple text request to the LLM
 func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, error) {
 	// Rate limit check
@@ -150,20 +181,17 @@ func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, 
 	}
 
 	// Build messages
-	messages := []allm.Message{
+	messages := []Message{
 		{Role: "user", Content: text},
 	}
 
-	// Add system prompt if set
-	if r.systemPrompt != "" {
-		messages = append([]allm.Message{{Role: "system", Content: r.systemPrompt}}, messages...)
-	}
+	allmMessages := r.buildMessages(messages)
 
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	return r.chat(ctx, messages)
+	return r.chat(ctx, allmMessages)
 }
 
 // Chat sends a multi-turn conversation
@@ -174,7 +202,7 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	}
 
 	// Copy messages to avoid mutating caller's slice during sanitization
-	sanitized := make([]allm.Message, len(messages))
+	sanitized := make([]Message, len(messages))
 	copy(sanitized, messages)
 	for i := range sanitized {
 		sanitized[i].Content = util.SanitizeInput(sanitized[i].Content)
@@ -200,16 +228,13 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 		return nil, ErrInputTooLong
 	}
 
-	// Add system prompt if set
-	if r.systemPrompt != "" {
-		messages = append([]allm.Message{{Role: "system", Content: r.systemPrompt}}, messages...)
-	}
+	allmMessages := r.buildMessages(messages)
 
 	// Apply timeout
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	return r.chat(ctx, messages)
+	return r.chat(ctx, allmMessages)
 }
 
 // chat is the internal method that calls the main client
@@ -232,6 +257,125 @@ func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, 
 	}
 
 	return resp, nil
+}
+
+// buildMessages converts user messages to allm messages with system prompt
+func (r *Router) buildMessages(messages []Message) []allm.Message {
+	r.mu.RLock()
+	systemPrompt := r.systemPrompt
+	promptCaching := r.promptCaching
+	r.mu.RUnlock()
+
+	result := make([]allm.Message, 0, len(messages)+1)
+
+	// Add system prompt if set
+	if systemPrompt != "" {
+		sysMsg := allm.Message{Role: "system", Content: systemPrompt}
+		if promptCaching {
+			sysMsg.CacheControl = &allm.CacheControl{Type: "ephemeral"}
+		}
+		result = append(result, sysMsg)
+	}
+
+	// Append user messages
+	result = append(result, messages...)
+
+	return result
+}
+
+// StreamChat streams a chat response
+func (r *Router) StreamChat(ctx context.Context, userID string, messages []Message) (<-chan StreamChunk, error) {
+	// Rate limit check
+	if !r.rateLimiter.allow(userID) {
+		r.logger.Warn("rate limit exceeded", "user", util.MaskSecret(userID))
+		return nil, ErrRateLimited
+	}
+
+	// Copy messages to avoid mutating caller's slice during sanitization
+	sanitized := make([]Message, len(messages))
+	copy(sanitized, messages)
+	for i := range sanitized {
+		sanitized[i].Content = util.SanitizeInput(sanitized[i].Content)
+	}
+	messages = sanitized
+
+	// Calculate total input length (with size limit for images)
+	totalLen := 0
+	for _, m := range messages {
+		totalLen += len(m.Content)
+		for _, img := range m.Images {
+			// Limit image size contribution to prevent bypass via huge images
+			imgSize := len(img.Data)
+			if imgSize > 10*1024*1024 { // 10MB max per image
+				r.logger.Warn("image too large", "user", util.MaskSecret(userID), "size", imgSize)
+				return nil, fmt.Errorf("image too large: %d bytes (max 10MB)", imgSize)
+			}
+			totalLen += imgSize
+		}
+	}
+	if totalLen > r.maxInput*10 { // Allow 10x for images
+		r.logger.Warn("total input too large", "user", util.MaskSecret(userID), "length", totalLen)
+		return nil, ErrInputTooLong
+	}
+
+	// Get main client
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("%w: provider %q not registered", ErrNoProvider, r.mainName)
+	}
+
+	// Build allm messages
+	allmMessages := r.buildMessages(messages)
+
+	// Apply timeout
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	go func() {
+		<-ctx.Done()
+		cancel()
+	}()
+
+	// Return stream channel
+	return client.Stream(ctx, allmMessages), nil
+}
+
+// CountTokens counts tokens in a set of messages
+func (r *Router) CountTokens(ctx context.Context, messages []Message) (*TokenCount, error) {
+	r.mu.RLock()
+	client, ok := r.clients[r.mainName]
+	r.mu.RUnlock()
+
+	if !ok {
+		return nil, ErrNoProvider
+	}
+
+	allmMessages := r.buildMessages(messages)
+	return client.CountTokens(ctx, allmMessages)
+}
+
+// GenerateImage generates an image from a text prompt
+func (r *Router) GenerateImage(ctx context.Context, userID, prompt string, opts ...ImageOption) (*ImageResponse, error) {
+	// Rate limit check
+	if r.rateLimiter != nil && !r.rateLimiter.allow(userID) {
+		return nil, ErrRateLimited
+	}
+
+	// Need OpenAI client specifically (DALL-E)
+	r.mu.RLock()
+	client, ok := r.clients["openai"]
+	if !ok {
+		// Fall back to main client
+		client, ok = r.clients[r.mainName]
+	}
+	r.mu.RUnlock()
+
+	if !ok {
+		return nil, ErrNoProvider
+	}
+
+	return client.GenerateImage(ctx, prompt, opts...)
 }
 
 // SetSystemPrompt updates the system prompt

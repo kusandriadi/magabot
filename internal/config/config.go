@@ -178,13 +178,16 @@ type WebhookConfig struct {
 
 // LLMConfig holds LLM provider settings
 type LLMConfig struct {
-	Main           string          `yaml:"main"`          // Main/primary provider
-	MainProvider   string          `yaml:"main_provider"` // Alias for main
-	Providers      ProvidersConfig `yaml:"providers"`     // Alternative structure
-	SystemPrompt   string          `yaml:"system_prompt"`
-	MaxInputLength int             `yaml:"max_input_length"`
-	Timeout        int             `yaml:"timeout"` // seconds
-	RateLimit      int             `yaml:"rate_limit"`
+	Main               string          `yaml:"main"`          // Main/primary provider
+	MainProvider       string          `yaml:"main_provider"` // Alias for main
+	Providers          ProvidersConfig `yaml:"providers"`     // Alternative structure
+	SystemPrompt       string          `yaml:"system_prompt"`
+	MaxInputLength     int             `yaml:"max_input_length"`
+	Timeout            int             `yaml:"timeout"` // seconds
+	RateLimit          int             `yaml:"rate_limit"`
+	MaxContextTokens   int             `yaml:"max_context_tokens"`
+	TruncationStrategy string          `yaml:"truncation_strategy"`
+	PromptCaching      bool            `yaml:"prompt_caching"`
 
 	// Direct provider configs (preferred structure)
 	Anthropic LLMProviderConfig `yaml:"anthropic"`

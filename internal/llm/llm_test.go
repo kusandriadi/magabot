@@ -636,3 +636,241 @@ func TestRouter_SetThinking(t *testing.T) {
 	// We can't easily verify the thinking was set without introspection,
 	// but at least we confirm the method runs without error
 }
+
+func TestRouter_StreamChat(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "Hello!"}),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	ch, err := router.StreamChat(context.Background(), "user1", []Message{{Role: "user", Content: "Hi"}})
+	if err != nil {
+		t.Fatalf("StreamChat error: %v", err)
+	}
+
+	// Note: Mock provider may not support streaming, so Stream() might send error chunks
+	// Just verify the channel is not nil and we can read from it
+	if ch == nil {
+		t.Fatal("Expected non-nil channel")
+	}
+
+	// Drain channel
+	for range ch {
+	}
+}
+
+func TestRouter_StreamChat_RateLimit(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test", RateLimit: 1})
+	router.Register("test", allm.New(mock))
+
+	ctx := context.Background()
+	userID := "user1"
+
+	// First request should succeed
+	ch, err := router.StreamChat(ctx, userID, []Message{{Role: "user", Content: "test"}})
+	if err != nil {
+		t.Fatalf("First StreamChat failed: %v", err)
+	}
+	// Drain channel
+	for range ch {
+	}
+
+	// Second request should be rate limited
+	_, err = router.StreamChat(ctx, userID, []Message{{Role: "user", Content: "test"}})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Errorf("Expected ErrRateLimited, got %v", err)
+	}
+}
+
+func TestRouter_CountTokens(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	messages := []Message{{Role: "user", Content: "Hello"}}
+
+	// Mock may not support CountTokens, so we test error path
+	_, err := router.CountTokens(context.Background(), messages)
+	// Either it returns a count or an error - both are acceptable
+	// We just verify it doesn't panic
+	_ = err
+}
+
+func TestRouter_CountTokens_NoProvider(t *testing.T) {
+	router := NewRouter(&Config{Main: "missing"})
+
+	messages := []Message{{Role: "user", Content: "Hello"}}
+	_, err := router.CountTokens(context.Background(), messages)
+	if !errors.Is(err, ErrNoProvider) {
+		t.Errorf("Expected ErrNoProvider, got %v", err)
+	}
+}
+
+func TestRouter_GenerateImage(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test"})
+	router.Register("test", allm.New(mock))
+
+	// Mock may not support GenerateImage, so we test error path
+	_, err := router.GenerateImage(context.Background(), "user1", "a cat")
+	// Either it returns an image or an error - both are acceptable
+	// We just verify it doesn't panic
+	_ = err
+}
+
+func TestRouter_GenerateImage_NoProvider(t *testing.T) {
+	router := NewRouter(&Config{Main: "missing"})
+
+	_, err := router.GenerateImage(context.Background(), "user1", "a cat")
+	if !errors.Is(err, ErrNoProvider) {
+		t.Errorf("Expected ErrNoProvider, got %v", err)
+	}
+}
+
+func TestRouter_GenerateImage_RateLimit(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test", RateLimit: 1})
+	router.Register("test", allm.New(mock))
+
+	ctx := context.Background()
+	userID := "user1"
+
+	// First request should succeed (or fail with provider error, but not rate limit)
+	_, err := router.GenerateImage(ctx, userID, "test")
+	if errors.Is(err, ErrRateLimited) {
+		t.Fatal("First request should not be rate limited")
+	}
+
+	// Second request should be rate limited
+	_, err = router.GenerateImage(ctx, userID, "test")
+	if !errors.Is(err, ErrRateLimited) {
+		t.Errorf("Expected ErrRateLimited, got %v", err)
+	}
+}
+
+func TestRouter_EnablePromptCaching(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{
+		Main:         "test",
+		SystemPrompt: "You are a helpful assistant.",
+	})
+	router.Register("test", allm.New(mock))
+
+	// Enable prompt caching
+	router.EnablePromptCaching()
+
+	// Make a request
+	ctx := context.Background()
+	_, err := router.Complete(ctx, "user1", "Hello")
+	if err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+
+	// Verify cache control was set on system message
+	req := mock.LastRequest()
+	if req == nil {
+		t.Fatal("No request captured")
+	}
+
+	if len(req.Messages) < 1 {
+		t.Fatal("Expected at least 1 message")
+	}
+
+	sysMsg := req.Messages[0]
+	if sysMsg.Role != "system" {
+		t.Errorf("First message role = %q, want system", sysMsg.Role)
+	}
+
+	if sysMsg.CacheControl == nil {
+		t.Error("Expected CacheControl to be set on system message")
+	} else if sysMsg.CacheControl.Type != "ephemeral" {
+		t.Errorf("CacheControl.Type = %q, want ephemeral", sysMsg.CacheControl.Type)
+	}
+}
+
+func TestRouter_BuildMessages(t *testing.T) {
+	router := NewRouter(&Config{
+		SystemPrompt: "You are helpful.",
+	})
+
+	messages := []Message{
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi!"},
+	}
+
+	result := router.buildMessages(messages)
+
+	// Should have system + 2 messages
+	if len(result) != 3 {
+		t.Fatalf("Expected 3 messages, got %d", len(result))
+	}
+
+	if result[0].Role != "system" {
+		t.Errorf("First message role = %q, want system", result[0].Role)
+	}
+
+	if result[0].Content != "You are helpful." {
+		t.Errorf("System prompt = %q, want %q", result[0].Content, "You are helpful.")
+	}
+}
+
+func TestRouter_BuildMessages_WithCaching(t *testing.T) {
+	router := NewRouter(&Config{
+		SystemPrompt: "You are helpful.",
+	})
+	router.EnablePromptCaching()
+
+	messages := []Message{
+		{Role: "user", Content: "Hello"},
+	}
+
+	result := router.buildMessages(messages)
+
+	// Should have system + user message
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 messages, got %d", len(result))
+	}
+
+	if result[0].CacheControl == nil {
+		t.Error("Expected CacheControl on system message")
+	} else if result[0].CacheControl.Type != "ephemeral" {
+		t.Errorf("CacheControl.Type = %q, want ephemeral", result[0].CacheControl.Type)
+	}
+}
+
+func TestRouter_BuildMessages_NoSystemPrompt(t *testing.T) {
+	router := NewRouter(&Config{})
+
+	messages := []Message{
+		{Role: "user", Content: "Hello"},
+	}
+
+	result := router.buildMessages(messages)
+
+	// Should only have user message
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(result))
+	}
+
+	if result[0].Role != "user" {
+		t.Errorf("First message role = %q, want user", result[0].Role)
+	}
+}
