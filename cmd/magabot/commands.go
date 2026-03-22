@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -71,7 +72,33 @@ func cmdStop() {
 
 // cmdRestart restarts the daemon
 func cmdRestart() {
-	cmdStop()
+	pid := getPID()
+	if pid == 0 {
+		fmt.Println("⚠️  Magabot is not running, starting...")
+		cmdStart()
+		return
+	}
+
+	if err := stopProcess(pid); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to stop: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Wait for process to actually exit (max 10 seconds)
+	for i := 0; i < 100; i++ {
+		if !processExists(pid) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if processExists(pid) {
+		fmt.Fprintf(os.Stderr, "❌ Process %d did not exit in time\n", pid)
+		os.Exit(1)
+	}
+
+	_ = os.Remove(pidFile)
+	fmt.Println("✅ Magabot stopped")
 	cmdStart()
 }
 
