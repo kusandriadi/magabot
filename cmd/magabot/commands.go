@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"time"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/security"
