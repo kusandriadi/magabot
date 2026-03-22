@@ -85,8 +85,14 @@ func (r *Router) ListAllModels(ctx context.Context) map[string][]ModelInfo {
 }
 
 // FetchModels fetches available models from a provider's API using the given key.
+// For Anthropic with Claude Pro/Max auth token, pass authToken instead of apiKey.
 // Returns an error if the API call fails — callers should show the error to the user.
-func FetchModels(providerName, apiKey, baseURL string) ([]ModelInfo, error) {
+func FetchModels(providerName, apiKey, baseURL string, extraOpts ...string) ([]ModelInfo, error) {
+	// Extract auth token from extraOpts if provided (extraOpts[0] = authToken)
+	var authToken string
+	if len(extraOpts) > 0 {
+		authToken = extraOpts[0]
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -102,6 +108,9 @@ func FetchModels(providerName, apiKey, baseURL string) ([]ModelInfo, error) {
 		opts := []provider.AnthropicOption{}
 		if baseURL != "" {
 			opts = append(opts, provider.WithAnthropicBaseURL(baseURL))
+		}
+		if authToken != "" {
+			opts = append(opts, provider.WithAnthropicAuthToken(authToken))
 		}
 		p = provider.Anthropic(apiKey, opts...)
 
