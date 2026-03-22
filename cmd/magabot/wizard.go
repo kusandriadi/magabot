@@ -49,24 +49,24 @@ type WizardState struct {
 	WhatsAppEnabled bool
 
 	// LLM
-	LLMDefault            string
-	AnthropicEnabled      bool
-	AnthropicKey          string
-	ClaudeCodeAuthToken    string
-	OpenAIEnabled    bool
-	OpenAIKey        string
-	GeminiEnabled    bool
-	GeminiKey        string
-	DeepSeekEnabled  bool
-	DeepSeekKey      string
-	GLMEnabled       bool
-	GLMKey           string
-	KimiEnabled      bool
-	KimiKey          string
-	QwenEnabled      bool
-	QwenKey          string
-	MiniMaxEnabled   bool
-	MiniMaxKey       string
+	LLMDefault          string
+	AnthropicEnabled    bool
+	AnthropicKey        string
+	ClaudeCodeAuthToken string
+	OpenAIEnabled       bool
+	OpenAIKey           string
+	GeminiEnabled       bool
+	GeminiKey           string
+	DeepSeekEnabled     bool
+	DeepSeekKey         string
+	GLMEnabled          bool
+	GLMKey              string
+	KimiEnabled         bool
+	KimiKey             string
+	QwenEnabled         bool
+	QwenKey             string
+	MiniMaxEnabled      bool
+	MiniMaxKey          string
 }
 
 // testLLMConnection tests the LLM connection with the configured provider

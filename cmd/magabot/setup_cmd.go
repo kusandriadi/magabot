@@ -747,4 +747,3 @@ func restartDaemon() {
 }
 
 // isRunning, processExists, getPID are defined in commands.go / commands_unix.go / commands_windows.go
-

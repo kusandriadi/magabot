@@ -124,15 +124,15 @@ func cmdInit() {
 // envConfig holds auto-detected configuration from environment variables.
 type envConfig struct {
 	// LLM providers
-	AnthropicKey       string
+	AnthropicKey        string
 	ClaudeCodeAuthToken string
-	OpenAIKey          string
-	GeminiKey          string
-	DeepSeekKey        string
-	GLMKey             string
-	LocalEnabled       bool
-	LocalURL           string
-	LocalModel         string
+	OpenAIKey           string
+	GeminiKey           string
+	DeepSeekKey         string
+	GLMKey              string
+	LocalEnabled        bool
+	LocalURL            string
+	LocalModel          string
 
 	// Platforms
 	TelegramToken string
@@ -171,15 +171,15 @@ func (e *envConfig) defaultProvider() string {
 // and auto-detects Claude Code credentials.
 func detectEnvConfig() *envConfig {
 	cfg := &envConfig{
-		AnthropicKey:       os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicKey:        os.Getenv("ANTHROPIC_API_KEY"),
 		ClaudeCodeAuthToken: os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
-		OpenAIKey:          os.Getenv("OPENAI_API_KEY"),
-		GeminiKey:          firstEnv("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-		DeepSeekKey:        os.Getenv("DEEPSEEK_API_KEY"),
-		GLMKey:             os.Getenv("GLM_API_KEY"),
-		TelegramToken:      firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
-		SlackBotToken:      os.Getenv("SLACK_BOT_TOKEN"),
-		SlackAppToken:      os.Getenv("SLACK_APP_TOKEN"),
+		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
+		GeminiKey:           firstEnv("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+		DeepSeekKey:         os.Getenv("DEEPSEEK_API_KEY"),
+		GLMKey:              os.Getenv("GLM_API_KEY"),
+		TelegramToken:       firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
+		SlackBotToken:       os.Getenv("SLACK_BOT_TOKEN"),
+		SlackAppToken:       os.Getenv("SLACK_APP_TOKEN"),
 	}
 
 	// Detect local LLM from env
