@@ -320,23 +320,22 @@ func runDaemon() {
 			})
 		}
 
-		// Add current user message (with media if present)
+		// Add current user message (with media file paths if present)
+		content := msg.Text
+		if len(msg.Media) > 0 {
+			var parts []string
+			parts = append(parts, "User sent files (use Read tool to view them):")
+			for _, path := range msg.Media {
+				parts = append(parts, "  "+path)
+			}
+			if content != "" {
+				parts = append(parts, "", content)
+			}
+			content = strings.Join(parts, "\n")
+		}
 		userMsg := llm.Message{
 			Role:    "user",
-			Content: msg.Text,
-		}
-		if len(msg.Media) > 0 {
-			imageData, errs := util.BuildImagesFromPaths(msg.Media, cfg.Paths.DownloadsDir, logger)
-			if len(errs) > 0 {
-				logger.Warn("some media files failed to load", "count", len(errs))
-			}
-			// Convert util.ImageData to llm.Image
-			for _, img := range imageData {
-				userMsg.Images = append(userMsg.Images, llm.Image{
-					MimeType: img.MimeType,
-					Data:     img.Data,
-				})
-			}
+			Content: content,
 		}
 		messages = append(messages, userMsg)
 

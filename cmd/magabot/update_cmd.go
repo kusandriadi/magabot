@@ -120,8 +120,11 @@ func cmdUpdateApply() {
 
 	fmt.Println("✅ Update successful!")
 	fmt.Printf("📦 Version: %s → %s\n", version.Short(), release.TagName)
-	fmt.Println("\n💡 Run 'magabot start' to start the new version")
 	fmt.Println("💡 Run 'magabot update rollback' if you encounter issues")
+
+	// Auto-start the new version
+	fmt.Println("\n🚀 Starting new version...")
+	cmdStart()
 }
 
 func cmdUpdateRollback() {
