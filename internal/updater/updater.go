@@ -196,33 +196,63 @@ func (u *Updater) Update(ctx context.Context, release *Release) error {
 	return nil
 }
 
-// findAsset finds the appropriate asset for the current platform
+// findAsset finds the appropriate asset for the current platform.
+// Prefers .tar.gz/.zip archives over raw binaries.
+// Skips checksum files (.sha256, .sha512, .md5).
 func (u *Updater) findAsset(release *Release) *Asset {
-	// Build expected filename patterns
 	os := runtime.GOOS
 	arch := runtime.GOARCH
 
-	// Common naming patterns
-	patterns := []string{
+	// Build base patterns (without extension)
+	bases := []string{
 		fmt.Sprintf("%s_%s_%s", u.config.BinaryName, os, arch),
 		fmt.Sprintf("%s-%s-%s", u.config.BinaryName, os, arch),
-		fmt.Sprintf("%s_%s_%s.tar.gz", u.config.BinaryName, os, arch),
-		fmt.Sprintf("%s-%s-%s.tar.gz", u.config.BinaryName, os, arch),
 	}
-
-	// Also check for amd64 -> x86_64 mapping
 	if arch == "amd64" {
-		patterns = append(patterns,
+		bases = append(bases,
 			fmt.Sprintf("%s_%s_x86_64", u.config.BinaryName, os),
 			fmt.Sprintf("%s-%s-x86_64", u.config.BinaryName, os),
-			fmt.Sprintf("%s_%s_x86_64.tar.gz", u.config.BinaryName, os),
 		)
 	}
 
+	// Preferred extensions in order (archive first, then raw binary)
+	archiveExts := []string{".tar.gz", ".tgz", ".zip"}
+	checksumExts := []string{".sha256", ".sha512", ".md5"}
+
+	isChecksum := func(name string) bool {
+		lower := strings.ToLower(name)
+		for _, ext := range checksumExts {
+			if strings.HasSuffix(lower, ext) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// First pass: look for archive files (.tar.gz, .zip)
 	for _, asset := range release.Assets {
+		if isChecksum(asset.Name) {
+			continue
+		}
 		name := strings.ToLower(asset.Name)
-		for _, pattern := range patterns {
-			if strings.Contains(name, strings.ToLower(pattern)) {
+		for _, base := range bases {
+			for _, ext := range archiveExts {
+				if name == strings.ToLower(base+ext) {
+					return &asset
+				}
+			}
+		}
+	}
+
+	// Second pass: look for raw binary (no extension or .exe)
+	for _, asset := range release.Assets {
+		if isChecksum(asset.Name) {
+			continue
+		}
+		name := strings.ToLower(asset.Name)
+		for _, base := range bases {
+			lower := strings.ToLower(base)
+			if name == lower || name == lower+".exe" {
 				return &asset
 			}
 		}
