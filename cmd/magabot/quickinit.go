@@ -167,7 +167,8 @@ func (e *envConfig) defaultProvider() string {
 	}
 }
 
-// detectEnvConfig reads configuration from well-known environment variables.
+// detectEnvConfig reads configuration from well-known environment variables
+// and auto-detects Claude Code credentials.
 func detectEnvConfig() *envConfig {
 	cfg := &envConfig{
 		AnthropicKey:       os.Getenv("ANTHROPIC_API_KEY"),
@@ -179,6 +180,13 @@ func detectEnvConfig() *envConfig {
 		TelegramToken:      firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
 		SlackBotToken:      os.Getenv("SLACK_BOT_TOKEN"),
 		SlackAppToken:      os.Getenv("SLACK_APP_TOKEN"),
+	}
+
+	// Auto-detect Claude Code credentials if no Anthropic key/token in env
+	if cfg.AnthropicKey == "" && cfg.AnthropicAuthToken == "" {
+		if token, err := readClaudeCredentials(); err == nil {
+			cfg.AnthropicAuthToken = token
+		}
 	}
 
 	// Detect local LLM from env

@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -546,10 +548,35 @@ func setupLLM() {
 
 	fmt.Println()
 	if askYesNo(reader, "Configure Anthropic (Claude)?", true) {
-		key := askString(reader, "Anthropic API Key (sk-ant-...)", "")
-		if key != "" {
-			saveSecret("llm/anthropic_api_key", key)
+		fmt.Println()
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key (sk-ant-api03-...)")
+		fmt.Println("    2. Claude Pro/Max subscription (via Claude Code)")
+		fmt.Println()
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
+			token, err := readClaudeCredentials()
+			if err != nil {
+				fmt.Println()
+				fmt.Println("  ❌ Claude Code credentials not found.")
+				fmt.Println()
+				fmt.Println("  To use your Claude Pro/Max subscription:")
+				fmt.Println("    1. Install Claude Code: curl -fsSL https://claude.ai/install.sh | bash")
+				fmt.Println("    2. Run: claude setup-token")
+				fmt.Println("    3. Re-run: magabot setup llm")
+				fmt.Println()
+				return
+			}
+			saveSecret("llm/anthropic_auth_token", token)
 			cfg.LLM.Anthropic.Enabled = true
+			fmt.Println("  ✅ Claude Pro/Max token loaded from Claude Code credentials")
+		} else {
+			key := askString(reader, "Anthropic API Key (sk-ant-...)", "")
+			if key != "" {
+				saveSecret("llm/anthropic_api_key", key)
+				cfg.LLM.Anthropic.Enabled = true
+			}
 		}
 	}
 
@@ -717,3 +744,39 @@ func restartDaemon() {
 }
 
 // isRunning, processExists, getPID are defined in commands.go / commands_unix.go / commands_windows.go
+
+// claudeCredentials represents the Claude Code credentials file structure.
+type claudeCredentials struct {
+	ClaudeAiOauth *claudeOAuth `json:"claudeAiOauth"`
+}
+
+type claudeOAuth struct {
+	AccessToken string `json:"accessToken"`
+	ExpiresAt   int64  `json:"expiresAt"`
+}
+
+// readClaudeCredentials reads the OAuth access token from Claude Code's credentials file.
+// Returns the access token or an error if the file doesn't exist or is invalid.
+func readClaudeCredentials() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+
+	credPath := filepath.Join(home, ".claude", ".credentials.json")
+	data, err := os.ReadFile(credPath)
+	if err != nil {
+		return "", fmt.Errorf("credentials file not found: %w", err)
+	}
+
+	var creds claudeCredentials
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return "", fmt.Errorf("invalid credentials file: %w", err)
+	}
+
+	if creds.ClaudeAiOauth == nil || creds.ClaudeAiOauth.AccessToken == "" {
+		return "", fmt.Errorf("no OAuth token found in credentials")
+	}
+
+	return creds.ClaudeAiOauth.AccessToken, nil
+}
