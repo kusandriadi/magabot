@@ -27,12 +27,6 @@ jobs:
             name: Linux (arm64)
             cc: aarch64-linux-gnu-gcc
             cross_pkg: gcc-aarch64-linux-gnu
-          - goos: linux
-            goarch: arm
-            runner: ubuntu-latest
-            name: Linux (arm)
-            cc: arm-linux-gnueabihf-gcc
-            cross_pkg: gcc-arm-linux-gnueabihf
           # macOS
           - goos: darwin
             goarch: amd64
