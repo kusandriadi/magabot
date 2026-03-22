@@ -204,17 +204,25 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 		}
 	}
 
-	// Log incoming message (encrypted)
-	encryptedContent, encErr := r.vault.Encrypt([]byte(msg.Text))
-	if encErr != nil {
-		r.logger.Error("encrypt message failed", "error", encErr, "direction", "in")
+	// Log incoming message (encrypted if vault available, plaintext otherwise)
+	var contentToStore string
+	if r.vault != nil {
+		encrypted, encErr := r.vault.Encrypt([]byte(msg.Text))
+		if encErr != nil {
+			r.logger.Error("encrypt message failed", "error", encErr, "direction", "in")
+		} else {
+			contentToStore = encrypted
+		}
 	} else {
+		contentToStore = msg.Text
+	}
+	if contentToStore != "" {
 		if err := r.store.SaveMessage(&storage.Message{
 			Platform:  msg.Platform,
 			ChatID:    msg.ChatID,
 			UserID:    hashedUser,
 			Username:  msg.Username,
-			Content:   encryptedContent,
+			Content:   contentToStore,
 			Timestamp: msg.Timestamp,
 			Direction: "in",
 		}); err != nil {
@@ -284,15 +292,23 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 
 	// Log outgoing message
 	if response != "" {
-		encryptedResponse, encErr := r.vault.Encrypt([]byte(response))
-		if encErr != nil {
-			r.logger.Error("encrypt message failed", "error", encErr, "direction", "out")
+		var responseToStore string
+		if r.vault != nil {
+			encrypted, encErr := r.vault.Encrypt([]byte(response))
+			if encErr != nil {
+				r.logger.Error("encrypt message failed", "error", encErr, "direction", "out")
+			} else {
+				responseToStore = encrypted
+			}
 		} else {
+			responseToStore = response
+		}
+		if responseToStore != "" {
 			if err := r.store.SaveMessage(&storage.Message{
 				Platform:  msg.Platform,
 				ChatID:    msg.ChatID,
 				UserID:    "bot",
-				Content:   encryptedResponse,
+				Content:   responseToStore,
 				Timestamp: time.Now(),
 				Direction: "out",
 			}); err != nil {

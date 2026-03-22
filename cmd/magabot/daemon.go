@@ -80,11 +80,17 @@ func runDaemon() {
 		os.Exit(1)
 	}
 
-	// Initialize vault
-	vault, err := security.NewVault(cfg.Security.EncryptionKey)
-	if err != nil {
-		logger.Error("init vault failed", "error", err)
-		os.Exit(1)
+	// Initialize vault (optional — if no encryption key, messages are stored in plaintext)
+	var vault *security.Vault
+	if cfg.Security.EncryptionKey != "" {
+		var err error
+		vault, err = security.NewVault(cfg.Security.EncryptionKey)
+		if err != nil {
+			logger.Error("init vault failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		logger.Warn("no encryption key configured, message logging will store plaintext")
 	}
 
 	// Initialize storage
