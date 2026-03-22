@@ -157,6 +157,13 @@ func (m *Manager) AddMessage(session *Session, role, content string) {
 	}
 }
 
+// ClearMessages clears all messages from a session.
+func (m *Manager) ClearMessages(session *Session) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	session.Messages = session.Messages[:0]
+}
+
 // GetHistory returns recent messages for context (returns a copy to avoid races)
 func (m *Manager) GetHistory(session *Session, limit int) []Message {
 	m.mu.RLock()

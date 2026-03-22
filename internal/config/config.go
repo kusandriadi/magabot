@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -203,17 +204,19 @@ type LLMConfig struct {
 
 // LLMProviderConfig holds config for a single LLM provider
 type LLMProviderConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	Mode         string   `yaml:"mode,omitempty"`       // "api" (default) or "cli" (Claude CLI)
-	APIKey       string   `yaml:"api_key"`              // #nosec G117 -- config field
-	AuthToken    string   `yaml:"auth_token,omitempty"` // OAuth token (Claude Pro/Max)
-	Model        string   `yaml:"model"`
-	MaxTokens    int      `yaml:"max_tokens"`
-	Temperature  float64  `yaml:"temperature"`
-	BaseURL      string   `yaml:"base_url,omitempty"`
-	CLIPath      string   `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
-	AllowedTools []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = no tools)
-	MaxRetries   int      `yaml:"max_retries"`
+	Enabled       bool     `yaml:"enabled"`
+	Mode          string   `yaml:"mode,omitempty"`           // "api" (default) or "cli" (Claude CLI)
+	APIKey        string   `yaml:"api_key"`                  // #nosec G117 -- config field
+	AuthToken     string   `yaml:"auth_token,omitempty"`     // OAuth token (Claude Pro/Max)
+	Model         string   `yaml:"model"`
+	MaxTokens     int      `yaml:"max_tokens"`
+	Temperature   float64  `yaml:"temperature"`
+	BaseURL       string   `yaml:"base_url,omitempty"`
+	CLIPath       string   `yaml:"cli_path,omitempty"`       // Path to claude binary (default: "claude")
+	AllowedTools  []string `yaml:"allowed_tools,omitempty"`  // Allowed tools for CLI mode (empty = no tools)
+	MaxRetries    int      `yaml:"max_retries"`
+	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
+	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
 }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)
@@ -841,4 +844,103 @@ func SaveHooksFile(filePath string, hooks []HookConfig) error {
 	}
 
 	return nil
+}
+
+// PatchYAMLField updates a single field in the config YAML file using
+// yaml.Node to preserve comments, formatting, and env var references.
+// Path is dot-separated (e.g., "llm.anthropic.model").
+// An empty value removes the key from the file.
+func (c *Config) PatchYAMLField(path, value string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	data, err := os.ReadFile(c.filePath)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return fmt.Errorf("invalid YAML document")
+	}
+
+	parts := strings.Split(path, ".")
+	if err := patchYAMLNode(doc.Content[0], parts, value); err != nil {
+		return fmt.Errorf("patch %s: %w", path, err)
+	}
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	_ = enc.Close()
+
+	// Write atomically
+	tmpFile := c.filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, buf.Bytes(), 0600); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	if err := os.Rename(tmpFile, c.filePath); err != nil {
+		_ = os.Remove(tmpFile)
+		return fmt.Errorf("save config: %w", err)
+	}
+
+	return nil
+}
+
+// patchYAMLNode navigates the yaml.Node tree and sets or removes a value.
+func patchYAMLNode(node *yaml.Node, path []string, value string) error {
+	if len(path) == 0 || node.Kind != yaml.MappingNode {
+		return fmt.Errorf("invalid path or node type")
+	}
+
+	key := path[0]
+	rest := path[1:]
+
+	// Search for existing key in mapping (content alternates key, value)
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		if node.Content[i].Value == key {
+			if len(rest) == 0 {
+				if value == "" {
+					// Remove key-value pair
+					node.Content = append(node.Content[:i], node.Content[i+2:]...)
+					return nil
+				}
+				node.Content[i+1] = &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Value: value,
+					Tag:   "!!str",
+				}
+				return nil
+			}
+			return patchYAMLNode(node.Content[i+1], rest, value)
+		}
+	}
+
+	// Key not found — add it
+	if value == "" {
+		return nil // nothing to remove
+	}
+
+	if len(rest) == 0 {
+		node.Content = append(node.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: key},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: value},
+		)
+		return nil
+	}
+
+	// Create intermediate mapping
+	newMap := &yaml.Node{Kind: yaml.MappingNode}
+	node.Content = append(node.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: key},
+		newMap,
+	)
+	return patchYAMLNode(newMap, rest, value)
 }

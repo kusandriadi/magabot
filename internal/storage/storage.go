@@ -110,6 +110,17 @@ func (s *Store) migrate() error {
 			action TEXT NOT NULL,
 			details TEXT
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS conversation_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_key TEXT NOT NULL,
+			role TEXT NOT NULL,
+			content TEXT NOT NULL,
+			timestamp DATETIME NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_conv_session ON conversation_history(session_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_conv_session_ts ON conversation_history(session_key, timestamp)`,
 	}
 
 	for _, m := range migrations {
@@ -345,4 +356,73 @@ func (s *Store) Stats() (map[string]interface{}, error) {
 func (s *Store) Vacuum() error {
 	_, err := s.db.Exec(`VACUUM`)
 	return err
+}
+
+// ConversationMessage represents a message in conversation history.
+type ConversationMessage struct {
+	ID         int64
+	SessionKey string
+	Role       string
+	Content    string
+	Timestamp  time.Time
+}
+
+// SaveConversationMessage saves a single message to conversation history.
+func (s *Store) SaveConversationMessage(sessionKey, role, content string, timestamp time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO conversation_history (session_key, role, content, timestamp) VALUES (?, ?, ?, ?)`,
+		sessionKey, role, content, timestamp,
+	)
+	return err
+}
+
+// GetConversationHistory retrieves recent messages for a session, oldest first.
+func (s *Store) GetConversationHistory(sessionKey string, limit int) ([]ConversationMessage, error) {
+	rows, err := s.db.Query(
+		`SELECT id, session_key, role, content, timestamp
+		 FROM conversation_history WHERE session_key = ?
+		 ORDER BY timestamp DESC LIMIT ?`,
+		sessionKey, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var messages []ConversationMessage
+	for rows.Next() {
+		var m ConversationMessage
+		if err := rows.Scan(&m.ID, &m.SessionKey, &m.Role, &m.Content, &m.Timestamp); err != nil {
+			return nil, err
+		}
+		messages = append(messages, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Reverse to get oldest-first order
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+	return messages, nil
+}
+
+// ClearConversationHistory clears history for a session.
+func (s *Store) ClearConversationHistory(sessionKey string) error {
+	_, err := s.db.Exec(`DELETE FROM conversation_history WHERE session_key = ?`, sessionKey)
+	return err
+}
+
+// PurgeOldConversations deletes conversation history older than retention days.
+func (s *Store) PurgeOldConversations(retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+	result, err := s.db.Exec(`DELETE FROM conversation_history WHERE timestamp < ?`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

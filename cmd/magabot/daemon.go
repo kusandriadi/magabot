@@ -223,6 +223,9 @@ func runDaemon() {
 		}
 	}
 
+	// Restore persisted LLM settings (effort, fallback) from config
+	restoreLLMSettings(llmRouter, cfg, logger)
+
 	// Initialize bot handlers
 	adminHandler := bot.NewAdminHandler(cfg, configDir)
 	memoryHandler := bot.NewMemoryHandler(cfg.Paths.MemoryDir)
@@ -270,7 +273,7 @@ func runDaemon() {
 
 		// Handle bot commands
 		if strings.HasPrefix(msg.Text, "/") {
-			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler)
+			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler, sessionMgr, logger)
 		}
 
 		// Handle agent session commands (:new, :send, :quit, :status)
@@ -292,6 +295,20 @@ func runDaemon() {
 
 		// Get or create session for this chat
 		sess := sessionMgr.GetOrCreate(msg.Platform, msg.ChatID, msg.UserID)
+
+		// Restore conversation history from DB if session is empty (e.g., after restart)
+		if len(sess.Messages) == 0 {
+			sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
+			dbHistory, dbErr := store.GetConversationHistory(sessionKey, maxHistory)
+			if dbErr != nil {
+				logger.Warn("restore conversation history failed", "error", dbErr)
+			} else if len(dbHistory) > 0 {
+				for _, h := range dbHistory {
+					sessionMgr.AddMessage(sess, h.Role, h.Content)
+				}
+				logger.Info("restored conversation history", "session", sessionKey, "messages", len(dbHistory))
+			}
+		}
 
 		// Build message list from session history
 		history := sessionMgr.GetHistory(sess, maxHistory)
@@ -332,6 +349,16 @@ func runDaemon() {
 		// Record messages in session
 		sessionMgr.AddMessage(sess, "user", msg.Text)
 		sessionMgr.AddMessage(sess, "assistant", resp.Content)
+
+		// Persist conversation to database
+		sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
+		now := time.Now()
+		if err := store.SaveConversationMessage(sessionKey, "user", msg.Text, now); err != nil {
+			logger.Warn("save conversation message failed", "error", err, "role", "user")
+		}
+		if err := store.SaveConversationMessage(sessionKey, "assistant", resp.Content, now); err != nil {
+			logger.Warn("save conversation message failed", "error", err, "role", "assistant")
+		}
 
 		logger.Debug("llm response",
 			"provider", resp.Provider,
@@ -473,7 +500,7 @@ func runDaemon() {
 }
 
 // handleCommand handles bot commands
-func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store, cfg *config.Config, adminH *bot.AdminHandler, memoryH *bot.MemoryHandler, sessionH *bot.SessionHandler) (string, error) {
+func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store, cfg *config.Config, adminH *bot.AdminHandler, memoryH *bot.MemoryHandler, sessionH *bot.SessionHandler, sessionMgr *session.Manager, logger *slog.Logger) (string, error) {
 	parts := strings.Fields(msg.Text)
 	if len(parts) == 0 {
 		return "", nil
@@ -528,6 +555,7 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 • /fallback - Set fallback model
 • /budget - Set budget limit per request
 • /providers - LLM providers
+• /clear - Hapus conversation history
 • /config - Admin configuration
 • /memory - Memory management
 • /task - Background tasks
@@ -657,6 +685,12 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 		}
 
 		llmRouter.SetModel(selectedID)
+		// Persist model to config YAML
+		if provider := llmRouter.MainProvider(); provider != "" {
+			if err := cfg.PatchYAMLField("llm."+provider+".model", selectedID); err != nil {
+				logger.Warn("persist model failed", "error", err)
+			}
+		}
 		return fmt.Sprintf("✅ Model switched to `%s`", selectedID), nil
 
 	case "/effort":
@@ -695,9 +729,19 @@ _Reset: /effort reset_`, current), nil
 		switch level {
 		case "low", "medium", "high", "max":
 			cli.SetEffort(level)
+			if provider := llmRouter.MainProvider(); provider != "" {
+				if err := cfg.PatchYAMLField("llm."+provider+".effort", level); err != nil {
+					logger.Warn("persist effort failed", "error", err)
+				}
+			}
 			return fmt.Sprintf("✅ Effort set to `%s`", level), nil
 		case "default", "off", "reset":
 			cli.SetEffort("")
+			if provider := llmRouter.MainProvider(); provider != "" {
+				if err := cfg.PatchYAMLField("llm."+provider+".effort", ""); err != nil {
+					logger.Warn("persist effort reset failed", "error", err)
+				}
+			}
 			return "✅ Effort reset to default", nil
 		default:
 			return "❌ Invalid effort. Options: `low` | `medium` | `high` | `max`", nil
@@ -737,10 +781,20 @@ _Reset: /effort reset_`, current), nil
 		}
 		if args[0] == "off" || args[0] == "reset" || args[0] == "none" {
 			cli.SetFallbackModel("")
+			if provider := llmRouter.MainProvider(); provider != "" {
+				if err := cfg.PatchYAMLField("llm."+provider+".fallback_model", ""); err != nil {
+					logger.Warn("persist fallback reset failed", "error", err)
+				}
+			}
 			return "✅ Fallback model disabled", nil
 		}
 		model := args[0]
 		cli.SetFallbackModel(model)
+		if provider := llmRouter.MainProvider(); provider != "" {
+			if err := cfg.PatchYAMLField("llm."+provider+".fallback_model", model); err != nil {
+				logger.Warn("persist fallback failed", "error", err)
+			}
+		}
 		return fmt.Sprintf("✅ Fallback model set to `%s`", model), nil
 
 	case "/budget":
@@ -765,6 +819,15 @@ _Reset: /effort reset_`, current), nil
 		}
 		cli.SetMaxBudget(amount)
 		return fmt.Sprintf("✅ Budget set to $%.2f per request", amount), nil
+
+	case "/clear":
+		sess := sessionMgr.GetOrCreate(msg.Platform, msg.ChatID, msg.UserID)
+		sessionMgr.ClearMessages(sess)
+		sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
+		if err := store.ClearConversationHistory(sessionKey); err != nil {
+			return fmt.Sprintf("⚠️ History cleared from memory but DB error: %v", err), nil
+		}
+		return "🗑 Conversation history cleared.", nil
 
 	case "/providers":
 		stats := llmRouter.Stats()
@@ -1185,4 +1248,31 @@ func mergeHooksConfig(cfg *config.Config, logger *slog.Logger) []config.HookConf
 
 	logger.Info("hooks loaded", "file", len(fileHooks), "inline", len(cfg.Hooks), "merged", len(merged))
 	return merged
+}
+
+// restoreLLMSettings applies persisted effort and fallback settings from config.
+func restoreLLMSettings(llmRouter *llm.Router, cfg *config.Config, logger *slog.Logger) {
+	cli := llmRouter.CLIProvider()
+	if cli == nil {
+		return
+	}
+
+	// Determine which provider config to read from
+	providerName := llmRouter.MainProvider()
+	var pc *config.LLMProviderConfig
+	switch providerName {
+	case "anthropic":
+		pc = &cfg.LLM.Anthropic
+	default:
+		return // effort/fallback only apply to CLI providers (anthropic)
+	}
+
+	if pc.Effort != "" {
+		cli.SetEffort(pc.Effort)
+		logger.Info("restored effort from config", "effort", pc.Effort)
+	}
+	if pc.FallbackModel != "" {
+		cli.SetFallbackModel(pc.FallbackModel)
+		logger.Info("restored fallback model from config", "fallback", pc.FallbackModel)
+	}
 }

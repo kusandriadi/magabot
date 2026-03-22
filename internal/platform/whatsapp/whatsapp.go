@@ -229,10 +229,24 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 
 	ctx := context.Background()
+
+	// Send typing indicator
+	b.mu.RLock()
+	client := b.client
+	b.mu.RUnlock()
+	if client != nil && client.IsConnected() {
+		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+	}
+
 	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)
 		return
+	}
+
+	// Clear typing indicator
+	if client != nil && client.IsConnected() {
+		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresencePaused, types.ChatPresenceMediaText)
 	}
 
 	if response == "" {

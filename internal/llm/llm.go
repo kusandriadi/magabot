@@ -514,6 +514,13 @@ func (r *Router) HealthCheck(ctx context.Context) map[string]*allm.HealthStatus 
 	return results
 }
 
+// MainProvider returns the name of the main/active LLM provider.
+func (r *Router) MainProvider() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mainName
+}
+
 // SetModel sets the model on the main client
 func (r *Router) SetModel(model string) {
 	r.mu.RLock()

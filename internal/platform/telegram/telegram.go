@@ -213,6 +213,12 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
+	// Send typing indicator
+	action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
+	if _, err := b.api.Send(action); err != nil {
+		b.logger.Debug("send typing failed", "error", err)
+	}
+
 	response, err := handler(ctx, routerMsg)
 	if err != nil {
 		b.logger.Warn("handler error", "error", err)
