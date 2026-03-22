@@ -2,6 +2,7 @@
 package test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -304,7 +305,11 @@ func TestStorageReopen(t *testing.T) {
 }
 
 func TestStorageInvalidPath(t *testing.T) {
-	_, err := storage.New("/nonexistent/path/to/db")
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := storage.New(filepath.Join(blocker, "sub", "test.db"))
 	if err == nil {
 		t.Error("Expected error for invalid path")
 	}
