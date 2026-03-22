@@ -110,11 +110,17 @@ func cmdLog() {
 // cmdReset resets config to default (keeps platform connections)
 func cmdReset() {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("⚠️  This will reset your config but keep platform sessions. Continue? [y/N]: ")
+	fmt.Print("⚠️  This will reset your config, sessions, and database. Continue? [y/N]: ")
 	answer, _ := reader.ReadString('\n')
 	if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 		fmt.Println("Reset canceled.")
 		return
+	}
+
+	// Stop if running
+	if isRunning() {
+		fmt.Println("🛑 Stopping magabot...")
+		cmdStop()
 	}
 
 	// Backup current config
@@ -123,9 +129,38 @@ func cmdReset() {
 		if err := os.Rename(configFile, backupFile); err != nil {
 			fmt.Printf("Warning: failed to backup config: %v\n", err)
 		} else {
-			fmt.Printf("Config backed up to: %s\n", backupFile)
+			fmt.Printf("📦 Config backed up to: %s\n", backupFile)
 		}
 	}
+
+	// Remove sessions
+	sessionsDir := filepath.Join(dataDir, "sessions")
+	if err := os.RemoveAll(sessionsDir); err != nil {
+		fmt.Printf("Warning: failed to remove sessions: %v\n", err)
+	} else {
+		fmt.Println("🗑️  Sessions cleared")
+	}
+
+	// Remove database
+	dbFile := filepath.Join(dataDir, "magabot.db")
+	if err := os.Remove(dbFile); err != nil && !os.IsNotExist(err) {
+		fmt.Printf("Warning: failed to remove database: %v\n", err)
+	} else {
+		fmt.Println("🗑️  Database cleared")
+	}
+
+	// Remove secrets
+	secretsFile := filepath.Join(configDir, "secrets.json")
+	if err := os.Remove(secretsFile); err != nil && !os.IsNotExist(err) {
+		fmt.Printf("Warning: failed to remove secrets: %v\n", err)
+	} else {
+		fmt.Println("🗑️  Secrets cleared")
+	}
+
+	// Recreate directories
+	ensureDirs()
+
+	fmt.Println()
 
 	// Run setup
 	cmdSetup()
