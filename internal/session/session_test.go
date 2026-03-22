@@ -259,6 +259,10 @@ func TestSpawn(t *testing.T) {
 		if result != "Task done" {
 			t.Errorf("Expected result 'Task done', got '%s'", result)
 		}
+		// Notification fires after status update (outside lock), so poll briefly
+		for i := 0; i < 20 && !notified.Load(); i++ {
+			time.Sleep(10 * time.Millisecond)
+		}
 		if !notified.Load() {
 			t.Error("Should notify on completion")
 		}
