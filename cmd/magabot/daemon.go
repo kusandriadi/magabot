@@ -279,6 +279,32 @@ func runDaemon() {
 	}, maxHistory, logger)
 	sessionHandler := bot.NewSessionHandler(sessionMgr)
 
+	// Preload conversation history from DB into session memory
+	if keys, err := store.ListConversationSessions(); err != nil {
+		logger.Warn("failed to list conversation sessions", "error", err)
+	} else {
+		restored := 0
+		for _, key := range keys {
+			// key format: "platform:chatID"
+			parts := strings.SplitN(key, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			dbHistory, err := store.GetConversationHistory(key, maxHistory)
+			if err != nil || len(dbHistory) == 0 {
+				continue
+			}
+			sess := sessionMgr.GetOrCreate(parts[0], parts[1], "")
+			for _, h := range dbHistory {
+				sessionMgr.AddMessage(sess, h.Role, h.Content)
+			}
+			restored++
+		}
+		if restored > 0 {
+			logger.Info("preloaded conversation sessions", "count", restored)
+		}
+	}
+
 	// Set message handler with LLM integration
 	rtr.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
 		logger.Info("received message",
@@ -317,20 +343,6 @@ func runDaemon() {
 
 		// Get or create session for this chat
 		sess := sessionMgr.GetOrCreate(msg.Platform, msg.ChatID, msg.UserID)
-
-		// Restore conversation history from DB if session is empty (e.g., after restart)
-		if len(sess.Messages) == 0 {
-			sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
-			dbHistory, dbErr := store.GetConversationHistory(sessionKey, maxHistory)
-			if dbErr != nil {
-				logger.Warn("restore conversation history failed", "error", dbErr)
-			} else if len(dbHistory) > 0 {
-				for _, h := range dbHistory {
-					sessionMgr.AddMessage(sess, h.Role, h.Content)
-				}
-				logger.Info("restored conversation history", "session", sessionKey, "messages", len(dbHistory))
-			}
-		}
 
 		// Build message list from session history
 		history := sessionMgr.GetHistory(sess, maxHistory)

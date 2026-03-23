@@ -408,6 +408,25 @@ func (s *Store) GetConversationHistory(sessionKey string, limit int) ([]Conversa
 	return messages, nil
 }
 
+// ListConversationSessions returns all distinct session keys that have conversation history.
+func (s *Store) ListConversationSessions() ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT session_key FROM conversation_history`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		keys = append(keys, key)
+	}
+	return keys, rows.Err()
+}
+
 // ClearConversationHistory clears history for a session.
 func (s *Store) ClearConversationHistory(sessionKey string) error {
 	_, err := s.db.Exec(`DELETE FROM conversation_history WHERE session_key = ?`, sessionKey)
