@@ -93,8 +93,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/kennygrant/sanitize v1.2.4 h1:gN25/otpP5vAsO2djbMhF/LQX6R7+O1TB4yv8NzpJ3o=
 github.com/kennygrant/sanitize v1.2.4/go.mod h1:LGsjYYtgxbetdg5owWB2mpgUL6e2nfw2eObZ0u0qvak=
-github.com/kusandriadi/allm-go v0.8.10 h1:o7ge+cEuWT0D+s5EQd0wmgTvyWJC1F2oKveTP1F1Rho=
-github.com/kusandriadi/allm-go v0.8.10/go.mod h1:FLWhBJZ+ZuDJIYcYmWx0Of6YhpToDLj2XOPW86zmn9g=
+github.com/kusandriadi/allm-go v0.8.11 h1:Vya2v7lXpa5PtGmuly89K2tavh6KmzWyDt/CB+h+UGM=
+github.com/kusandriadi/allm-go v0.8.11/go.mod h1:FLWhBJZ+ZuDJIYcYmWx0Of6YhpToDLj2XOPW86zmn9g=
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHPsaIE=
 github.com/mattn/go-colorable v0.1.14/go.mod h1:6LmQG8QLFO4G5z1gPvYEzlUgJ2wF+stgPZH1UqBm1s8=

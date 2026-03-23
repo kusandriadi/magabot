@@ -123,7 +123,10 @@ func cmdUpdateApply() {
 
 	// Stop bot if running
 	fmt.Println("\n⏳ Stopping bot if running...")
-	stopIfRunning()
+	if err := stopIfRunning(); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		os.Exit(1)
+	}
 
 	// Download and apply update
 	fmt.Println("⬇️  Downloading update...")
@@ -187,25 +190,25 @@ Notes:
   - Rollback available until next update`)
 }
 
-func stopIfRunning() {
+func stopIfRunning() error {
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
-		return
+		return nil // not running
 	}
 
 	var pid int
 	if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid); err != nil {
-		return
+		return nil
 	}
 
 	if !processExists(pid) {
 		_ = os.Remove(pidFile)
-		return
+		return nil
 	}
 
 	// Uses platform-specific stopProcess from commands_unix.go / commands_windows.go
 	if err := stopProcess(pid); err != nil {
-		return
+		return fmt.Errorf("failed to stop process %d: %w", pid, err)
 	}
 
 	// Wait for process to actually exit (max 10 seconds)
@@ -216,7 +219,12 @@ func stopIfRunning() {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	if processExists(pid) {
+		return fmt.Errorf("process %d did not exit in time", pid)
+	}
+
 	_ = os.Remove(pidFile)
+	return nil
 }
 
 // startUpdatedDaemon starts the daemon using an explicit binary path.
