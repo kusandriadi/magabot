@@ -41,15 +41,16 @@ type ReplyContext struct {
 
 // Message represents an incoming message
 type Message struct {
-	Platform  string
-	ChatID    string
-	UserID    string
-	Username  string
-	Text      string
-	Media     []string      // File paths for images/voice/documents
-	ReplyTo   *ReplyContext // Quoted/replied-to message context
-	Timestamp time.Time
-	Raw       interface{} // Platform-specific raw message
+	Platform       string
+	ChatID         string
+	UserID         string
+	Username       string
+	Text           string
+	Media          []string      // File paths for images/voice/documents
+	ReplyTo        *ReplyContext // Quoted/replied-to message context
+	Timestamp      time.Time
+	Raw            interface{} // Platform-specific raw message
+	StreamCallback func(text string) // Called with accumulated text during LLM streaming; nil = no streaming
 }
 
 // MessageHandler handles incoming messages

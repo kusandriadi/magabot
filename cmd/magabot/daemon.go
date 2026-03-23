@@ -430,15 +430,63 @@ func runDaemon() {
 		}
 		messages = append(messages, userMsg)
 
-		// Send to LLM with full conversation history
-		resp, err := llmRouter.Chat(ctx, msg.UserID, messages)
-		if err != nil {
-			return llm.FormatError(err), nil
+		// Prepend welcome message for first-time users
+		welcomePrefix := ""
+		if isFirst {
+			welcomePrefix = "👋 *Welcome!* This is our first conversation.\nType /help to see all features.\n\n"
+		}
+
+		// Send to LLM — use streaming if platform supports it, else blocking
+		var respContent string
+		if msg.StreamCallback != nil {
+			ch, err := llmRouter.StreamChat(ctx, msg.UserID, messages)
+			if err != nil {
+				return llm.FormatError(err), nil
+			}
+
+			var content strings.Builder
+			var thinking bool
+			for chunk := range ch {
+				if chunk.Error != nil {
+					if content.Len() == 0 {
+						return llm.FormatError(chunk.Error), nil
+					}
+					break // keep partial response
+				}
+				// Show thinking indicator while AI reasons
+				if chunk.Thinking != "" && content.Len() == 0 {
+					if !thinking {
+						thinking = true
+						msg.StreamCallback(welcomePrefix + "🤔 _Thinking..._")
+					}
+					continue
+				}
+				content.WriteString(chunk.Content)
+				if content.Len() > 0 {
+					msg.StreamCallback(welcomePrefix + content.String())
+				}
+			}
+			respContent = content.String()
+		} else {
+			resp, err := llmRouter.Chat(ctx, msg.UserID, messages)
+			if err != nil {
+				return llm.FormatError(err), nil
+			}
+			respContent = resp.Content
+			logger.Debug("llm response",
+				"provider", resp.Provider,
+				"model", resp.Model,
+				"latency", resp.Latency,
+			)
+		}
+
+		if respContent == "" {
+			return "", nil
 		}
 
 		// Record messages in session
 		sessionMgr.AddMessage(sess, "user", msg.Text)
-		sessionMgr.AddMessage(sess, "assistant", resp.Content)
+		sessionMgr.AddMessage(sess, "assistant", respContent)
 
 		// Persist conversation to database
 		sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
@@ -446,23 +494,11 @@ func runDaemon() {
 		if err := store.SaveConversationMessage(sessionKey, "user", msg.Text, now); err != nil {
 			logger.Warn("save conversation message failed", "error", err, "role", "user")
 		}
-		if err := store.SaveConversationMessage(sessionKey, "assistant", resp.Content, now); err != nil {
+		if err := store.SaveConversationMessage(sessionKey, "assistant", respContent, now); err != nil {
 			logger.Warn("save conversation message failed", "error", err, "role", "assistant")
 		}
 
-		logger.Debug("llm response",
-			"provider", resp.Provider,
-			"model", resp.Model,
-			"latency", resp.Latency,
-		)
-
-		// Prepend welcome message for first-time users
-		response := resp.Content
-		if isFirst && response != "" {
-			response = "👋 *Welcome!* This is our first conversation.\nType /help to see all features.\n\n" + response
-		}
-
-		return response, nil
+		return welcomePrefix + respContent, nil
 	})
 
 	// Register platforms

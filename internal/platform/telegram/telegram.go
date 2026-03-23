@@ -237,6 +237,46 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
+	// Set up streaming callback for progressive message editing
+	var (
+		sentMsgID int
+		lastEdit  time.Time
+		lastText  string
+	)
+	const streamEditInterval = 1500 * time.Millisecond
+
+	routerMsg.StreamCallback = func(text string) {
+		if text == lastText {
+			return
+		}
+		lastText = text
+		now := time.Now()
+
+		if sentMsgID == 0 {
+			// First chunk — send new message (no Markdown to avoid partial parse errors)
+			reply := tgbotapi.NewMessage(msg.Chat.ID, text)
+			reply.ReplyToMessageID = msg.MessageID
+			sent, err := b.api.Send(reply)
+			if err != nil {
+				b.logger.Debug("stream: send initial failed", "error", err)
+				return
+			}
+			sentMsgID = sent.MessageID
+			lastEdit = now
+			return
+		}
+
+		// Throttle edits to avoid Telegram rate limits
+		if now.Sub(lastEdit) < streamEditInterval {
+			return
+		}
+		edit := tgbotapi.NewEditMessageText(msg.Chat.ID, sentMsgID, text)
+		if _, err := b.api.Send(edit); err != nil {
+			b.logger.Debug("stream: edit failed", "error", err)
+		}
+		lastEdit = now
+	}
+
 	// Send typing indicator
 	action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
 	if _, err := b.api.Send(action); err != nil {
@@ -253,12 +293,25 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
-	reply := tgbotapi.NewMessage(msg.Chat.ID, response)
-	reply.ParseMode = "Markdown"
-	reply.ReplyToMessageID = msg.MessageID
-
-	if _, err := b.api.Send(reply); err != nil {
-		b.logger.Error("send failed", "error", err)
+	if sentMsgID != 0 {
+		// Streaming happened — do final edit with Markdown
+		edit := tgbotapi.NewEditMessageText(msg.Chat.ID, sentMsgID, response)
+		edit.ParseMode = "Markdown"
+		if _, err := b.api.Send(edit); err != nil {
+			// Markdown parse failed — retry without parse mode
+			edit.ParseMode = ""
+			if _, err := b.api.Send(edit); err != nil {
+				b.logger.Error("stream: final edit failed", "error", err)
+			}
+		}
+	} else {
+		// No streaming (command, agent, etc.) — send as before
+		reply := tgbotapi.NewMessage(msg.Chat.ID, response)
+		reply.ParseMode = "Markdown"
+		reply.ReplyToMessageID = msg.MessageID
+		if _, err := b.api.Send(reply); err != nil {
+			b.logger.Error("send failed", "error", err)
+		}
 	}
 }
 

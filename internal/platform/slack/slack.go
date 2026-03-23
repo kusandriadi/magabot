@@ -192,6 +192,48 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		}
 	}
 
+	// Set up streaming callback for progressive message editing
+	var (
+		sentTS   string
+		lastEdit time.Time
+		lastText string
+	)
+	const streamEditInterval = 2 * time.Second
+
+	msg.StreamCallback = func(text string) {
+		if text == lastText {
+			return
+		}
+		lastText = text
+		now := time.Now()
+
+		if sentTS == "" {
+			// First chunk — post new message in thread
+			_, ts, err := b.api.PostMessage(ev.Channel,
+				slack.MsgOptionText(text, false),
+				slack.MsgOptionTS(ev.TimeStamp),
+			)
+			if err != nil {
+				b.logger.Debug("stream: post initial failed", "error", err)
+				return
+			}
+			sentTS = ts
+			lastEdit = now
+			return
+		}
+
+		// Throttle edits to avoid Slack rate limits
+		if now.Sub(lastEdit) < streamEditInterval {
+			return
+		}
+		if _, _, _, err := b.api.UpdateMessage(ev.Channel, sentTS,
+			slack.MsgOptionText(text, false),
+		); err != nil {
+			b.logger.Debug("stream: update failed", "error", err)
+		}
+		lastEdit = now
+	}
+
 	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)
@@ -202,11 +244,21 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		return
 	}
 
-	if _, _, err := b.api.PostMessage(ev.Channel,
-		slack.MsgOptionText(response, false),
-		slack.MsgOptionTS(ev.TimeStamp),
-	); err != nil {
-		b.logger.Error("send message failed", "channel", ev.Channel, "error", err)
+	if sentTS != "" {
+		// Streaming happened — do final update with complete text
+		if _, _, _, err := b.api.UpdateMessage(ev.Channel, sentTS,
+			slack.MsgOptionText(response, false),
+		); err != nil {
+			b.logger.Error("stream: final update failed", "error", err)
+		}
+	} else {
+		// No streaming (command, agent, etc.) — send as before
+		if _, _, err := b.api.PostMessage(ev.Channel,
+			slack.MsgOptionText(response, false),
+			slack.MsgOptionTS(ev.TimeStamp),
+		); err != nil {
+			b.logger.Error("send message failed", "channel", ev.Channel, "error", err)
+		}
 	}
 }
 

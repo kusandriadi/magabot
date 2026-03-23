@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal/v3"
@@ -243,6 +244,49 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 	}
 
+	// Set up streaming callback for progressive message editing
+	var (
+		sentMsgID types.MessageID
+		lastEdit  time.Time
+		lastText  string
+	)
+	const streamEditInterval = 3 * time.Second // WhatsApp edits are heavier; throttle more
+
+	jid := evt.Info.Chat
+	msg.StreamCallback = func(text string) {
+		if text == lastText || client == nil || !client.IsConnected() {
+			return
+		}
+		lastText = text
+		now := time.Now()
+
+		if sentMsgID == "" {
+			// First chunk — send new message, capture ID for editing
+			resp, err := client.SendMessage(ctx, jid, &waE2E.Message{
+				Conversation: proto.String(text),
+			})
+			if err != nil {
+				b.logger.Debug("stream: send initial failed", "error", err)
+				return
+			}
+			sentMsgID = resp.ID
+			lastEdit = now
+			return
+		}
+
+		// Throttle edits
+		if now.Sub(lastEdit) < streamEditInterval {
+			return
+		}
+		editMsg := client.BuildEdit(jid, sentMsgID, &waE2E.Message{
+			Conversation: proto.String(text),
+		})
+		if _, err := client.SendMessage(ctx, jid, editMsg); err != nil {
+			b.logger.Debug("stream: edit failed", "error", err)
+		}
+		lastEdit = now
+	}
+
 	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)
@@ -258,8 +302,19 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		return
 	}
 
-	if err := b.Send(chatID, response); err != nil {
-		b.logger.Error("send reply failed", "error", err)
+	if sentMsgID != "" {
+		// Streaming happened — do final edit with complete text
+		editMsg := client.BuildEdit(jid, sentMsgID, &waE2E.Message{
+			Conversation: proto.String(response),
+		})
+		if _, err := client.SendMessage(ctx, jid, editMsg); err != nil {
+			b.logger.Error("stream: final edit failed", "error", err)
+		}
+	} else {
+		// No streaming (command, agent, etc.) — send as before
+		if err := b.Send(chatID, response); err != nil {
+			b.logger.Error("send reply failed", "error", err)
+		}
 	}
 }
 

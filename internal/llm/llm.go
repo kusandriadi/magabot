@@ -234,7 +234,9 @@ func (r *Router) buildMessages(messages []Message) []allm.Message {
 	return result
 }
 
-// StreamChat streams a chat response
+// StreamChat streams a chat response with idle timeout.
+// The timeout resets on each received chunk, so long-running responses
+// (e.g. extended thinking) won't be killed as long as data keeps flowing.
 func (r *Router) StreamChat(ctx context.Context, userID string, messages []Message) (<-chan StreamChunk, error) {
 	// Rate limit check
 	if !r.rateLimiter.allow(userID) {
@@ -261,15 +263,49 @@ func (r *Router) StreamChat(ctx context.Context, userID string, messages []Messa
 	// Build allm messages
 	allmMessages := r.buildMessages(sanitized)
 
-	// Apply timeout
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	// Get raw stream from provider (no hard deadline on context)
+	rawCh := client.Stream(ctx, allmMessages)
+
+	// Wrap with idle timeout: cancel only if no chunk arrives within r.timeout
+	out := make(chan StreamChunk)
 	go func() {
-		<-ctx.Done()
-		cancel()
+		defer close(out)
+		idle := time.NewTimer(r.timeout)
+		defer idle.Stop()
+
+		for {
+			select {
+			case chunk, ok := <-rawCh:
+				if !ok {
+					return
+				}
+				// Reset idle timer on each chunk
+				if !idle.Stop() {
+					select {
+					case <-idle.C:
+					default:
+					}
+				}
+				idle.Reset(r.timeout)
+
+				select {
+				case out <- chunk:
+				case <-ctx.Done():
+					return
+				}
+				if chunk.Done || chunk.Error != nil {
+					return
+				}
+			case <-idle.C:
+				out <- StreamChunk{Error: ErrTimeout, Done: true}
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
 	}()
 
-	// Return stream channel
-	return client.Stream(ctx, allmMessages), nil
+	return out, nil
 }
 
 // CountTokens counts tokens in a set of messages
