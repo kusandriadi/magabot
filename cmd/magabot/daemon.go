@@ -261,11 +261,32 @@ func runDaemon() {
 	hooksMgr := hooks.NewManager(mergeHooksConfig(cfg, logger), logger.With("component", "hooks"))
 	rtr.SetHooks(hooksMgr)
 
-	// Initialize agent session manager
+	// Initialize agent session manager — read agent settings from active LLM provider
+	agentCfg := cfg.LLM.Anthropic.Agent // default to anthropic
+	if main := cfg.LLM.Main; main != "" {
+		switch main {
+		case "openai":
+			agentCfg = cfg.LLM.OpenAI.Agent
+		case "gemini":
+			agentCfg = cfg.LLM.Gemini.Agent
+		case "glm":
+			agentCfg = cfg.LLM.GLM.Agent
+		case "deepseek":
+			agentCfg = cfg.LLM.DeepSeek.Agent
+		case "local":
+			agentCfg = cfg.LLM.Local.Agent
+		case "kimi":
+			agentCfg = cfg.LLM.Kimi.Agent
+		case "qwen":
+			agentCfg = cfg.LLM.Qwen.Agent
+		case "minimax":
+			agentCfg = cfg.LLM.MiniMax.Agent
+		}
+	}
 	agentMgr := agent.NewManager(agent.Config{
 		Main:       cfg.Agents.Main,
-		Timeout:    cfg.Agents.Timeout,
-		MaxRetries: cfg.Agents.MaxRetries,
+		Timeout:    agentCfg.Timeout,
+		MaxRetries: agentCfg.MaxRetries,
 		GetCLISettings: func() (string, string) {
 			model := llmRouter.GetModel()
 			var effort string

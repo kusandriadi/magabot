@@ -14,8 +14,8 @@ func TestNewManager(t *testing.T) {
 	if m.config.Main != AgentClaude {
 		t.Errorf("default agent = %q, want %q", m.config.Main, AgentClaude)
 	}
-	if m.config.Timeout != 120 {
-		t.Errorf("default timeout = %d, want 120", m.config.Timeout)
+	if m.config.Timeout != 300 {
+		t.Errorf("default timeout = %d, want 300", m.config.Timeout)
 	}
 }
 

@@ -78,10 +78,10 @@ func NewManager(cfg Config, logger *slog.Logger) *Manager {
 		cfg.Main = AgentClaude
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 120
+		cfg.Timeout = 300
 	}
 	if cfg.MaxRetries < 0 {
-		cfg.MaxRetries = 0
+		cfg.MaxRetries = 2
 	}
 	return &Manager{
 		sessions: make(map[string]*Session),

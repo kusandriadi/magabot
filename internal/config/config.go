@@ -217,6 +217,13 @@ type LLMProviderConfig struct {
 	MaxRetries    int      `yaml:"max_retries"`
 	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
+	Agent         LLMAgentConfig `yaml:"agent"`              // Agent session settings for this provider
+}
+
+// LLMAgentConfig holds agent session settings per LLM provider
+type LLMAgentConfig struct {
+	Timeout    int `yaml:"timeout"`     // seconds per attempt, default 300
+	MaxRetries int `yaml:"max_retries"` // auto-retry on timeout, default 2
 }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)
@@ -349,9 +356,7 @@ type HookConfig struct {
 
 // AgentConfig holds coding agent session settings
 type AgentConfig struct {
-	Main       string `yaml:"main"`        // "claude", "codex", "gemini"
-	Timeout    int    `yaml:"timeout"`     // seconds, default 120
-	MaxRetries int    `yaml:"max_retries"` // auto-retry on timeout, default 2
+	Main string `yaml:"main"` // "claude", "codex", "gemini"
 }
 
 // HooksFile is the top-level structure for config-hooks.yml
@@ -526,8 +531,19 @@ func (c *Config) setDefaults() {
 	if c.Agents.Main == "" {
 		c.Agents.Main = "claude"
 	}
-	if c.Agents.Timeout <= 0 {
-		c.Agents.Timeout = 120
+
+	// Set agent defaults on all LLM providers
+	for _, pc := range []*LLMProviderConfig{
+		&c.LLM.Anthropic, &c.LLM.OpenAI, &c.LLM.Gemini,
+		&c.LLM.GLM, &c.LLM.DeepSeek, &c.LLM.Local,
+		&c.LLM.Kimi, &c.LLM.Qwen, &c.LLM.MiniMax,
+	} {
+		if pc.Agent.Timeout <= 0 {
+			pc.Agent.Timeout = 300
+		}
+		if pc.Agent.MaxRetries <= 0 {
+			pc.Agent.MaxRetries = 2
+		}
 	}
 
 	// Platform defaults
