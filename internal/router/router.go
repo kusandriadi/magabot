@@ -49,7 +49,7 @@ type Message struct {
 	Media          []string      // File paths for images/voice/documents
 	ReplyTo        *ReplyContext // Quoted/replied-to message context
 	Timestamp      time.Time
-	Raw            interface{} // Platform-specific raw message
+	Raw            interface{}       // Platform-specific raw message
 	StreamCallback func(text string) // Called with accumulated text during LLM streaming; nil = no streaming
 }
 
