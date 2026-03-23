@@ -41,6 +41,12 @@ var defaultCLITools = []string{
 
 // runDaemon runs the main bot daemon
 func runDaemon() {
+	// Change to home directory so CLI tools (e.g. claude) don't pick up
+	// project-specific config (CLAUDE.md, memory) from the working directory.
+	if home, err := os.UserHomeDir(); err == nil {
+		_ = os.Chdir(home)
+	}
+
 	// Load config
 	cfg, err := config.Load(configFile)
 	if err != nil {
