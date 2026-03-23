@@ -1167,6 +1167,9 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 
 	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
+	if cfg.model != "" {
+		clientOpts = append(clientOpts, allm.WithModel(cfg.model))
+	}
 	if cfg.maxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.maxRetries), allm.WithRetryBaseDelay(1*time.Second))
 	}
@@ -1189,6 +1192,9 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 
 	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
+	if ac.Model != "" {
+		clientOpts = append(clientOpts, allm.WithModel(ac.Model))
+	}
 	if ac.MaxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(ac.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
 	}
@@ -1263,6 +1269,9 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 
 	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
+	if cfg.LLM.OpenAI.Model != "" {
+		clientOpts = append(clientOpts, allm.WithModel(cfg.LLM.OpenAI.Model))
+	}
 	if cfg.LLM.OpenAI.MaxRetries > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.LLM.OpenAI.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
 	}
