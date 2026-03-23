@@ -47,7 +47,7 @@ type Message struct {
 	Username  string
 	Text      string
 	Media     []string      // File paths for images/voice/documents
-	ReplyTo   *ReplyContext  // Quoted/replied-to message context
+	ReplyTo   *ReplyContext // Quoted/replied-to message context
 	Timestamp time.Time
 	Raw       interface{} // Platform-specific raw message
 }
