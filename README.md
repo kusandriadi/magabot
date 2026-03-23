@@ -10,14 +10,16 @@
 
 ## Key Features
 
-- **Multi-LLM** — Anthropic, OpenAI, Gemini, DeepSeek, GLM, Local (Ollama/vLLM)
+- **Multi-LLM** — Anthropic, OpenAI, Gemini, DeepSeek, GLM, Kimi, Qwen, MiniMax, Local (Ollama/vLLM)
 - **Multi-Platform** — Telegram, Slack, WhatsApp, Webhooks
+- **Multi-Modal** — Vision (image analysis), voice messages, document processing, image generation
 - **Privacy-First** — All data encrypted at rest, runs on your hardware
 - **Zero Dependencies** — Single binary, no Docker/Python/Node.js required
+- **Agent Sessions** — Spawn coding agents (Claude, Codex, Gemini) directly from chat
 - **Semantic Memory** — Vector-based memory with OpenAI/Voyage/Cohere embeddings
-- **Multi-Agent** — Spawn sub-agents for parallel tasks
 - **Cron Jobs** — Schedule messages with cron, interval, or one-shot timing
 - **Skills System** — Extend with custom YAML-defined skills
+- **Live Management** — Update, restart, and configure the bot from chat
 - **Secure** — Input sanitization, rate limiting, path traversal protection, audit logging
 
 ---
@@ -31,9 +33,12 @@
 | Gemini | gemini-2.0-flash | `GEMINI_API_KEY` |
 | DeepSeek | deepseek-chat | `DEEPSEEK_API_KEY` |
 | GLM | glm-4.7 | `GLM_API_KEY` or `ZAI_API_KEY` |
+| Kimi | moonshot-v1 | `KIMI_API_KEY` |
+| Qwen | qwen-plus | `QWEN_API_KEY` |
+| MiniMax | minimax-pro | `MINIMAX_API_KEY` |
 | Local | llama3 | `LOCAL_LLM_BASE_URL` |
 
-Supports automatic failover between providers and custom base URLs.
+Supports automatic failover between providers and custom base URLs. Anthropic also supports Claude CLI mode for Pro/Max subscriptions.
 
 ---
 
@@ -43,7 +48,7 @@ Supports automatic failover between providers and custom base URLs.
 - **Slack** — Socket mode or Events API (groups & DMs)
 - **WhatsApp** — Multi-device WebSocket API via [whatsmeow](https://github.com/tulir/whatsmeow) (requires QR scan)
 - **Webhook** — HTTP POST endpoint with Bearer/HMAC/Basic auth
-- **Discord** — Notifications only (via bot token or webhook URL)
+- **Discord** — *(planned)*
 
 ---
 
@@ -85,6 +90,10 @@ magabot status
 
 # View logs
 magabot log
+
+# Restart / stop
+magabot restart
+magabot stop
 ```
 
 ---
@@ -113,12 +122,16 @@ security:
 
 Environment variables are expanded with `$VAR` or `${VAR}` syntax.
 
-**Common commands:**
+**CLI commands:**
 ```bash
 magabot config show     # View config summary
 magabot config edit     # Edit in $EDITOR
 magabot config path     # Print config file path
 magabot genkey          # Generate encryption key
+magabot update check    # Check for updates
+magabot update apply    # Apply available update
+magabot cron list       # List scheduled jobs
+magabot skill list      # List installed skills
 ```
 
 ---
@@ -127,15 +140,37 @@ magabot genkey          # Generate encryption key
 
 Send these in any connected platform:
 
-- `/help` — Show available commands
-- `/status` — Bot status and uptime
-- `/models` — List available AI models
-- `/memory add <text>` — Remember something
-- `/memory search <query>` — Search memories
-- `/task spawn <desc>` — Run a background task
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message and feature overview |
+| `/help` | Show available commands |
+| `/status` | Bot status, provider info, and user stats |
+| `/model [name]` | Show current model or switch to another |
+| `/effort [level]` | Set effort level (low/medium/high/max) |
+| `/prompt [text]` | Set custom system prompt |
+| `/fallback [model]` | Set fallback model |
+| `/budget [amount]` | Set budget limit per request |
+| `/providers` | List active LLM providers |
+| `/clear` | Clear conversation history |
+| `/memory` | Memory management (add/search/list) |
+| `/task` | Background task management |
 
-Admin-only:
-- `/config` — Manage configuration
+**Admin-only:**
+
+| Command | Description |
+|---------|-------------|
+| `/config` | Manage bot configuration and access control |
+| `/restart` | Restart the bot (with confirmation) |
+| `/update` | Check and apply updates (with confirmation) |
+
+**Agent Sessions (admin-only):**
+
+| Command | Description |
+|---------|-------------|
+| `:new [agent] <dir>` | Start a coding agent (claude/codex/gemini) |
+| `:send <message>` | Send message to active agent |
+| `:status` | Show agent session info |
+| `:quit` | Close agent session |
 
 ---
 
@@ -184,18 +219,30 @@ For vulnerability reports, see [SECURITY.md](SECURITY.md).
 
 Skills extend Magabot with custom functionality via YAML definitions.
 
-**Create a skill:**
-```bash
-magabot skill create my-skill
-```
+**Built-in skills:** weather, translate, summarize, code, math, search
 
-**Enable/disable:**
+**Create a custom skill:**
 ```bash
+magabot skill create my-skill    # Creates template in ~/.magabot/skills/
 magabot skill enable my-skill
 magabot skill disable my-skill
+magabot skill builtin            # List built-in skills
 ```
 
-See `magabot skill help` for full documentation.
+---
+
+## Cron Jobs
+
+Schedule recurring messages or tasks:
+
+```bash
+magabot cron add "daily-report" --schedule "0 9 * * *" --message "Good morning!"
+magabot cron list
+magabot cron enable daily-report
+magabot cron disable daily-report
+```
+
+Supports cron expressions, intervals, and one-shot scheduling.
 
 ---
 
@@ -210,4 +257,3 @@ MIT License - see [LICENSE](LICENSE)
 - **Documentation** — [docs/](docs/)
 - **Issues** — [GitHub Issues](https://github.com/kusandriadi/magabot/issues)
 - **Releases** — [GitHub Releases](https://github.com/kusandriadi/magabot/releases)
-- **Discord** — *(coming soon)*

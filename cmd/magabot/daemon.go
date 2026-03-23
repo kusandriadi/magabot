@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -417,7 +418,7 @@ func runDaemon() {
 		// Prepend welcome message for first-time users
 		response := resp.Content
 		if isFirst && response != "" {
-			response = "👋 *Selamat datang!* Ini pertama kali kita ngobrol.\nKetik /help untuk lihat semua fitur.\n\n" + response
+			response = "👋 *Welcome!* This is our first conversation.\nType /help to see all features.\n\n" + response
 		}
 
 		return response, nil
@@ -498,6 +499,9 @@ func runDaemon() {
 		"llm_providers", llmRouter.Providers(),
 	)
 
+	// Send post-restart notification if pending
+	sendRestartNotify(rtr, logger)
+
 	// Fire on_start hooks
 	hooksMgr.FireAsync(hooks.OnStart, &hooks.EventData{
 		Version:   version.Short(),
@@ -575,28 +579,29 @@ func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.St
 		return "No pending action to cancel.", nil
 
 	case "/start":
-		welcome := `👋 *Halo! Saya Magabot* — AI chatbot pribadi kamu.
+		welcome := `👋 *Hi! I'm Magabot* — your personal AI chatbot.
 
-💬 *Cara Pakai:*
-Kirim pesan apapun, saya jawab pakai AI.
+💬 *How to Use:*
+Send any message and I'll reply using AI.
 
-🎯 *Yang Bisa Saya Lakukan:*
-• 💬 Chat — tanya apapun, multi-turn conversation
-• 📷 Gambar — kirim foto, saya analisis (vision)
-• 🎤 Voice — kirim voice message, saya transcribe & jawab
-• 📄 Dokumen — kirim PDF/file, saya baca & analisis
-• 🎨 Generate — minta saya buatkan gambar (DALL-E)
-• 🔊 TTS — saya bisa balas pakai voice message
-• 💭 Thinking — reasoning mendalam untuk pertanyaan kompleks
+🎯 *What I Can Do:*
+• 💬 Chat — ask anything, multi-turn conversation
+• 📷 Image — send a photo, I'll analyze it (vision)
+• 🎤 Voice — send a voice message, I'll transcribe & reply
+• 📄 Document — send a PDF/file, I'll read & analyze it
+• 🎨 Generate — ask me to create an image (DALL-E)
+• 🔊 TTS — I can reply with voice messages
+• 💭 Thinking — deep reasoning for complex questions
 
 ⚡ *Commands:*
-• /help — bantuan lengkap
-• /status — status bot & provider
-• /models — list AI models tersedia
-• /providers — LLM providers aktif
+• /help — full help
+• /status — bot & provider status
+• /models — list available AI models
+• /providers — active LLM providers
 
 🔧 *Admin:*
-• /config — konfigurasi bot
+• /restart — restart bot
+• /config — bot configuration
 • /memory — memory management
 • /task — background tasks`
 		return welcome, nil
@@ -604,22 +609,23 @@ Kirim pesan apapun, saya jawab pakai AI.
 	case "/help":
 		return `📖 *Magabot Help*
 
-Kirim pesan apapun dan saya akan menjawab menggunakan AI.
+Send any message and I'll reply using AI.
 
 *Commands:*
-• /start - Mulai
-• /status - Status bot
-• /model - Model aktif & switch model
+• /start - Start
+• /status - Bot status
+• /model - Current model & switch model
 • /effort - Set effort level (low/medium/high/max)
 • /prompt - Custom system prompt
 • /fallback - Set fallback model
 • /budget - Set budget limit per request
 • /providers - LLM providers
-• /clear - Hapus conversation history
+• /clear - Clear conversation history
+• /restart - Restart bot
 • /config - Admin configuration
 • /memory - Memory management
 • /task - Background tasks
-• /help - Bantuan ini
+• /help - This help
 
 *Agent Sessions:*
 • :new [agent] <dir> - Start coding agent (claude/codex/gemini)
@@ -766,12 +772,12 @@ Kirim pesan apapun dan saya akan menjawab menggunakan AI.
 			return fmt.Sprintf(`⚡ *Effort:* `+"`%s`"+`
 
 *Options:*
-`+"`1.`"+` *low* — cepat, jawaban singkat
-`+"`2.`"+` *medium* — seimbang (default)
-`+"`3.`"+` *high* — detail, lebih lambat
-`+"`4.`"+` *max* — maksimal (Opus only)
+`+"`1.`"+` *low* — fast, short answers
+`+"`2.`"+` *medium* — balanced (default)
+`+"`3.`"+` *high* — detailed, slower
+`+"`4.`"+` *max* — maximum (Opus only)
 
-_Set: /effort <level> atau /effort <number>_
+_Set: /effort <level> or /effort <number>_
 _Reset: /effort reset_`, current), nil
 		}
 		// Support number selection
@@ -915,6 +921,22 @@ _Reset: /effort reset_`, current), nil
 	case "/task":
 		return sessionH.HandleCommand(msg.UserID, msg.Platform, msg.ChatID, args)
 
+	case "/restart":
+		if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {
+			return "🔒 Admin access required.", nil
+		}
+		prompt := confirmMgr.Request(
+			msg.Platform, msg.ChatID, msg.UserID,
+			"🔄 *Restart Magabot?*\nBot will restart and be briefly offline.",
+			2*time.Minute,
+			func() (string, error) {
+				saveRestartNotify(msg.Platform, msg.ChatID, "restart")
+				adminH.ScheduleRestart(3, nil)
+				return "✅ Restarting in 3 seconds...", nil
+			},
+		)
+		return prompt, nil
+
 	case "/update":
 		if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {
 			return "🔒 Admin access required.", nil
@@ -950,6 +972,7 @@ _Reset: /effort reset_`, current), nil
 				if err := u.Update(ctx, release); err != nil {
 					return "", fmt.Errorf("update failed: %w", err)
 				}
+				saveRestartNotify(msg.Platform, msg.ChatID, "update")
 				adminH.ScheduleRestart(3, nil)
 				return fmt.Sprintf("✅ Updated to %s! Restarting in 3s...", release.TagName), nil
 			},
@@ -958,6 +981,44 @@ _Reset: /effort reset_`, current), nil
 
 	default:
 		return "❓ Unknown command. Try /help", nil
+	}
+}
+
+// restartNotify holds info for post-restart notification.
+type restartNotify struct {
+	Platform string `json:"platform"`
+	ChatID   string `json:"chat_id"`
+	Reason   string `json:"reason"` // "restart" or "update"
+}
+
+var restartNotifyFile = filepath.Join(dataDir, "restart-notify.json")
+
+// saveRestartNotify saves notification info to be sent after restart.
+func saveRestartNotify(platform, chatID, reason string) {
+	data, _ := json.Marshal(restartNotify{Platform: platform, ChatID: chatID, Reason: reason})
+	_ = os.WriteFile(restartNotifyFile, data, 0600)
+}
+
+// sendRestartNotify sends a post-restart notification if one was saved, then removes the file.
+func sendRestartNotify(rtr *router.Router, logger *slog.Logger) {
+	data, err := os.ReadFile(restartNotifyFile)
+	if err != nil {
+		return
+	}
+	_ = os.Remove(restartNotifyFile)
+
+	var n restartNotify
+	if json.Unmarshal(data, &n) != nil {
+		return
+	}
+
+	msg := fmt.Sprintf("✅ Magabot is back online! (v%s)", version.Short())
+	if n.Reason == "update" {
+		msg = fmt.Sprintf("✅ Update complete! Magabot v%s is now running.", version.Short())
+	}
+
+	if err := rtr.Send(n.Platform, n.ChatID, msg); err != nil {
+		logger.Warn("failed to send restart notification", "error", err)
 	}
 }
 
