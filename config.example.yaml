@@ -101,7 +101,7 @@ llm:
     api_key: ""      # API mode: Anthropic API key
     # auth_token: "" # API mode: Claude OAuth token (Pro/Max)
     # cli_path: ""   # CLI mode: path to claude binary (default: "claude")
-    model: "claude-sonnet-4-20250514"
+    model: "claude-sonnet-4-6"
     max_tokens: 4096
     temperature: 0.7
   

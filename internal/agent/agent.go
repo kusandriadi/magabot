@@ -27,11 +27,17 @@ const (
 // maxOutputBytes limits CLI stdout/stderr capture to prevent OOM (10 MB).
 const maxOutputBytes = 10 * 1024 * 1024
 
+// CLISettings returns the current model and effort for Claude CLI.
+// This is called on each execution to pick up runtime changes from /model and /effort.
+type CLISettings func() (model, effort string)
+
 // Config holds agent manager settings.
 type Config struct {
-	Main        string   // main/primary agent type
-	Timeout     int      // execution timeout in seconds
-	AllowedDirs []string // directories users may target (empty = user home only)
+	Main           string      // main/primary agent type
+	Timeout        int         // execution timeout in seconds
+	MaxRetries     int         // auto-retry on timeout (0 = no retry)
+	AllowedDirs    []string    // directories users may target (empty = user home only)
+	GetCLISettings CLISettings // optional: returns current model+effort for Claude CLI
 }
 
 // Session represents an active agent session tied to a chat.
@@ -73,6 +79,9 @@ func NewManager(cfg Config, logger *slog.Logger) *Manager {
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 120
+	}
+	if cfg.MaxRetries < 0 {
+		cfg.MaxRetries = 0
 	}
 	return &Manager{
 		sessions: make(map[string]*Session),
@@ -200,45 +209,87 @@ func (m *Manager) CloseSession(platform, chatID string) {
 }
 
 // Execute runs a message through the agent CLI and returns the output.
-// Each call is a one-shot CLI invocation (no persistent process).
+// On timeout, it automatically retries with --continue up to MaxRetries times,
+// accumulating partial output across attempts.
 func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string) (string, error) {
 	timeout := time.Duration(m.config.Timeout) * time.Second
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	maxRetries := m.config.MaxRetries
 
-	args := buildArgs(sess, message, media)
-	bin := agentInfo[sess.Agent]
+	var allOutput []string
 
-	m.logger.Debug("executing agent",
-		"agent", sess.Agent, "dir", sess.Dir,
-		"msg_count", sess.MsgCount,
-	)
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, timeout)
 
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = sess.Dir
+		args := buildArgs(sess, message, media, m.config.GetCLISettings)
+		bin := agentInfo[sess.Agent]
 
-	// Limit stdout/stderr capture to prevent OOM
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &limitedWriter{w: &stdout, n: maxOutputBytes}
-	cmd.Stderr = &limitedWriter{w: &stderr, n: maxOutputBytes}
+		m.logger.Debug("executing agent",
+			"agent", sess.Agent, "dir", sess.Dir,
+			"attempt", attempt, "msg_count", sess.MsgCount,
+		)
 
-	if err := cmd.Run(); err != nil {
-		errMsg := strings.TrimSpace(stderr.String())
-		if errMsg == "" {
-			errMsg = err.Error()
+		cmd := exec.CommandContext(attemptCtx, bin, args...)
+		cmd.Dir = sess.Dir
+
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &limitedWriter{w: &stdout, n: maxOutputBytes}
+		cmd.Stderr = &limitedWriter{w: &stderr, n: maxOutputBytes}
+
+		err := cmd.Run()
+		cancel()
+
+		// Always increment so next attempt/call uses --continue
+		sess.mu.Lock()
+		sess.MsgCount++
+		sess.mu.Unlock()
+
+		partial := strings.TrimSpace(StripANSI(stdout.String()))
+		if partial != "" {
+			allOutput = append(allOutput, partial)
 		}
-		return "", fmt.Errorf("agent %s: %s", sess.Agent, errMsg)
+
+		if err == nil {
+			return strings.Join(allOutput, "\n"), nil
+		}
+
+		// Parent context canceled (e.g. shutdown) — don't retry
+		if ctx.Err() != nil {
+			combined := strings.Join(allOutput, "\n")
+			return combined, fmt.Errorf("agent %s: %s", sess.Agent, ctx.Err())
+		}
+
+		// Non-timeout error — don't retry
+		if attemptCtx.Err() == nil {
+			errMsg := strings.TrimSpace(stderr.String())
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			combined := strings.Join(allOutput, "\n")
+			if combined != "" {
+				return combined, fmt.Errorf("agent %s: %s", sess.Agent, errMsg)
+			}
+			return "", fmt.Errorf("agent %s: %s", sess.Agent, errMsg)
+		}
+
+		// Internal timeout — auto-retry with continue
+		if attempt < maxRetries {
+			m.logger.Info("agent timed out, auto-retrying",
+				"agent", sess.Agent, "attempt", attempt+1, "max_retries", maxRetries,
+			)
+			message = "continue"
+			media = nil
+			continue
+		}
 	}
 
-	// Thread-safe MsgCount increment
-	sess.mu.Lock()
-	sess.MsgCount++
-	sess.mu.Unlock()
-
-	output := StripANSI(stdout.String())
-	output = strings.TrimSpace(output)
-
-	return output, nil
+	// All retries exhausted — return as output (not error) so user sees
+	// a clean message without "Agent error:" prefix
+	combined := strings.Join(allOutput, "\n")
+	timeoutNotice := fmt.Sprintf("\n\n⏱ Agent timed out after %d attempts (%v each). Send a message to continue, or :quit to end session.", maxRetries+1, timeout)
+	if combined != "" {
+		return combined + timeoutNotice, nil
+	}
+	return strings.TrimPrefix(timeoutNotice, "\n\n"), nil
 }
 
 // GetMsgCount returns the session message count (thread-safe).
@@ -249,7 +300,7 @@ func (s *Session) GetMsgCount() int {
 }
 
 // buildArgs constructs CLI arguments for the given agent and message.
-func buildArgs(sess *Session, message string, media []string) []string {
+func buildArgs(sess *Session, message string, media []string, getCLI CLISettings) []string {
 	// Prepend file references so the agent can read them
 	if len(media) > 0 {
 		var parts []string
@@ -269,6 +320,16 @@ func buildArgs(sess *Session, message string, media []string) []string {
 		args := []string{"-p", message, "--output-format", "text", "--dangerously-skip-permissions"}
 		if count > 0 {
 			args = append(args, "--continue")
+		}
+		// Apply current model/effort from /model and /effort commands
+		if getCLI != nil {
+			model, effort := getCLI()
+			if model != "" {
+				args = append(args, "--model", model)
+			}
+			if effort != "" {
+				args = append(args, "--effort", effort)
+			}
 		}
 		return args
 	case AgentCodex:

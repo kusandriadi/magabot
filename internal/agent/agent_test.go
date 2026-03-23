@@ -192,7 +192,7 @@ func TestBuildArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.agent, func(t *testing.T) {
 			sess := &Session{Agent: tt.agent, MsgCount: tt.count}
-			args := buildArgs(sess, tt.message, nil)
+			args := buildArgs(sess, tt.message, nil, nil)
 			if len(args) != tt.wantLen {
 				t.Errorf("buildArgs(%s, count=%d) len = %d, want %d: %v",
 					tt.agent, tt.count, len(args), tt.wantLen, args)
@@ -204,14 +204,14 @@ func TestBuildArgs(t *testing.T) {
 func TestBuildArgsFlagInjection(t *testing.T) {
 	// Codex and Gemini use -- separator to prevent flag injection
 	sess := &Session{Agent: AgentCodex}
-	args := buildArgs(sess, "--malicious-flag", nil)
+	args := buildArgs(sess, "--malicious-flag", nil, nil)
 	// Should be: exec -- --malicious-flag
 	if len(args) < 2 || args[1] != "--" {
 		t.Errorf("codex args should have -- separator: %v", args)
 	}
 
 	sess = &Session{Agent: AgentGemini}
-	args = buildArgs(sess, "--malicious-flag", nil)
+	args = buildArgs(sess, "--malicious-flag", nil, nil)
 	// Should be: -p -- --malicious-flag
 	if len(args) < 2 || args[1] != "--" {
 		t.Errorf("gemini args should have -- separator: %v", args)

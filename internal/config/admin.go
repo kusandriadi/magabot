@@ -317,6 +317,34 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 	return result
 }
 
+// PromoteFirstAdmin promotes a user to platform admin if no admins exist yet
+// (no global admins and no platform admins). Returns true if promoted.
+// This is safe to call concurrently — only the very first caller wins.
+func (c *Config) PromoteFirstAdmin(platform, userID string) bool {
+	c.mu.Lock()
+
+	// Already has global admins — skip
+	if len(c.Access.GlobalAdmins) > 0 {
+		c.mu.Unlock()
+		return false
+	}
+
+	// Already has platform admins — skip
+	admins := c.platformAdmins(platform)
+	if admins == nil || len(*admins) > 0 {
+		c.mu.Unlock()
+		return false
+	}
+
+	*admins = []string{userID}
+	c.mu.Unlock()
+
+	if err := c.SaveBy("auto:first-user"); err != nil {
+		return false
+	}
+	return true
+}
+
 // platformAdmins returns a pointer to the platform's Admins slice, or nil if unknown
 func (c *Config) platformAdmins(platform string) *[]string {
 	switch platform {

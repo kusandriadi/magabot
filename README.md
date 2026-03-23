@@ -26,7 +26,7 @@
 
 | Provider | Default Model | Environment Variable |
 |----------|---------------|---------------------|
-| Anthropic | claude-sonnet-4-20250514 | `ANTHROPIC_API_KEY` |
+| Anthropic | claude-sonnet-4-6 | `ANTHROPIC_API_KEY` |
 | OpenAI | gpt-4o | `OPENAI_API_KEY` |
 | Gemini | gemini-2.0-flash | `GEMINI_API_KEY` |
 | DeepSeek | deepseek-chat | `DEEPSEEK_API_KEY` |

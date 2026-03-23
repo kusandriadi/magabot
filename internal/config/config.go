@@ -213,7 +213,7 @@ type LLMProviderConfig struct {
 	Temperature   float64  `yaml:"temperature"`
 	BaseURL       string   `yaml:"base_url,omitempty"`
 	CLIPath       string   `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
-	AllowedTools  []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = no tools)
+	AllowedTools  []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = default: Read,Glob,Grep,WebSearch,WebFetch)
 	MaxRetries    int      `yaml:"max_retries"`
 	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
@@ -350,8 +350,9 @@ type HookConfig struct {
 
 // AgentConfig holds coding agent session settings
 type AgentConfig struct {
-	Main    string `yaml:"main"`    // "claude", "codex", "gemini"
-	Timeout int    `yaml:"timeout"` // seconds, default 120
+	Main       string `yaml:"main"`        // "claude", "codex", "gemini"
+	Timeout    int    `yaml:"timeout"`     // seconds, default 120
+	MaxRetries int    `yaml:"max_retries"` // auto-retry on timeout, default 2
 }
 
 // HooksFile is the top-level structure for config-hooks.yml
@@ -692,6 +693,14 @@ func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
 	// Global admins always allowed
 	if c.isGlobalAdmin(userID) {
 		return true
+	}
+
+	// Bootstrap: no admins exist at all — allow first user through
+	// so PromoteFirstAdmin can fire in the message handler
+	if len(c.Access.GlobalAdmins) == 0 {
+		if admins := c.platformAdmins(platform); admins != nil && len(*admins) == 0 {
+			return true
+		}
 	}
 
 	// Open mode = everyone allowed

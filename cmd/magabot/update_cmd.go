@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,6 +108,19 @@ func cmdUpdateApply() {
 		return
 	}
 
+	// Resolve executable path BEFORE update (after update, os.Executable
+	// follows the inode which points to the renamed .backup file)
+	execPath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Cannot determine executable path: %v\n", err)
+		os.Exit(1)
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Cannot resolve executable path: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Stop bot if running
 	fmt.Println("\n⏳ Stopping bot if running...")
 	stopIfRunning()
@@ -122,9 +137,10 @@ func cmdUpdateApply() {
 	fmt.Printf("📦 Version: %s → %s\n", version.Short(), release.TagName)
 	fmt.Println("💡 Run 'magabot update rollback' if you encounter issues")
 
-	// Auto-start the new version
+	// Auto-start the new version using the resolved path (not os.Executable
+	// which now points to the .backup file)
 	fmt.Println("\n🚀 Starting new version...")
-	cmdStart()
+	startUpdatedDaemon(execPath)
 }
 
 func cmdUpdateRollback() {
@@ -182,12 +198,43 @@ func stopIfRunning() {
 		return
 	}
 
+	if !processExists(pid) {
+		_ = os.Remove(pidFile)
+		return
+	}
+
 	// Uses platform-specific stopProcess from commands_unix.go / commands_windows.go
 	if err := stopProcess(pid); err != nil {
 		return
 	}
 
-	time.Sleep(2 * time.Second)
+	// Wait for process to actually exit (max 10 seconds)
+	for i := 0; i < 100; i++ {
+		if !processExists(pid) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	_ = os.Remove(pidFile)
+}
+
+// startUpdatedDaemon starts the daemon using an explicit binary path.
+// This is needed after update because os.Executable() would resolve to
+// the .backup file (Linux/macOS tracks by inode, not path).
+func startUpdatedDaemon(binPath string) {
+	pid, err := startDaemonProcessAt(binPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to start: %v\n", err)
+		fmt.Println("💡 Run 'magabot start' manually")
+		return
+	}
+
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write PID file: %v\n", err)
+	}
+
+	fmt.Printf("✅ Magabot started (PID: %d)\n", pid)
 }
 
 func truncateNotes(s string, max int) string {

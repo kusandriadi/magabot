@@ -232,7 +232,7 @@ func buildInitConfig(cfg *envConfig) string {
 		} else {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
 		}
-		b.WriteString("    model: \"claude-sonnet-4-20250514\"\n")
+		b.WriteString("    model: \"claude-sonnet-4-6\"\n")
 		b.WriteString("    max_tokens: 4096\n\n")
 	}
 

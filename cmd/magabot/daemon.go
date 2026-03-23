@@ -31,6 +31,12 @@ import (
 	"github.com/kusandriadi/allm-go/provider"
 )
 
+// defaultCLITools is the default set of tools allowed for Claude CLI mode.
+// These are safe for a bot context — read-only tools plus web search.
+var defaultCLITools = []string{
+	"Read", "Glob", "Grep", "WebSearch", "WebFetch",
+}
+
 // runDaemon runs the main bot daemon
 func runDaemon() {
 	// Load config
@@ -254,8 +260,17 @@ func runDaemon() {
 
 	// Initialize agent session manager
 	agentMgr := agent.NewManager(agent.Config{
-		Main:    cfg.Agents.Main,
-		Timeout: cfg.Agents.Timeout,
+		Main:       cfg.Agents.Main,
+		Timeout:    cfg.Agents.Timeout,
+		MaxRetries: cfg.Agents.MaxRetries,
+		GetCLISettings: func() (string, string) {
+			model := llmRouter.GetModel()
+			var effort string
+			if cli := llmRouter.CLIProvider(); cli != nil {
+				effort = cli.Effort()
+			}
+			return model, effort
+		},
 	}, logger.With("component", "agent"))
 
 	// Create session manager with router's send function for background task notifications
@@ -291,6 +306,13 @@ func runDaemon() {
 		if err != nil {
 			// Log but don't block — non-critical
 			logger.Warn("first message check failed", "error", err)
+		}
+
+		// Auto-promote first user as platform admin if no admins exist yet
+		if isFirst && cfg.PromoteFirstAdmin(msg.Platform, msg.UserID) {
+			logger.Info("first user promoted to admin",
+				"platform", msg.Platform, "user_id", msg.UserID,
+			)
 		}
 
 		// Get or create session for this chat
@@ -1049,9 +1071,11 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 		if ac.CLIPath != "" {
 			cliOpts = append(cliOpts, provider.WithCLIPath(ac.CLIPath))
 		}
-		if len(ac.AllowedTools) > 0 {
-			cliOpts = append(cliOpts, provider.WithCLIAllowedTools(ac.AllowedTools))
+		allowedTools := ac.AllowedTools
+		if len(allowedTools) == 0 {
+			allowedTools = defaultCLITools
 		}
+		cliOpts = append(cliOpts, provider.WithCLIAllowedTools(allowedTools))
 		llmRouter.Register("anthropic", allm.New(provider.ClaudeCLI(cliOpts...), clientOpts...))
 		return nil
 	}
@@ -1172,6 +1196,9 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 		ctx := context.Background()
 		output, err := agentMgr.Execute(ctx, sess, message, msg.Media)
 		if err != nil {
+			if output != "" {
+				return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
+			}
 			return fmt.Sprintf("Agent error: %v", err), nil
 		}
 		if output == "" {
@@ -1207,6 +1234,9 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 
 	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media)
 	if err != nil {
+		if output != "" {
+			return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
+		}
 		return fmt.Sprintf("Agent error: %v", err), nil
 	}
 	if output == "" {

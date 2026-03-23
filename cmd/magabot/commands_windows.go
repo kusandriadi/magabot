@@ -16,8 +16,11 @@ func startDaemonProcess() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("cannot determine executable path: %w", err)
 	}
+	return startDaemonProcessAt(exePath)
+}
 
-	cmd := exec.Command(exePath, "daemon")
+func startDaemonProcessAt(binPath string) (int, error) {
+	cmd := exec.Command(binPath, "daemon")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
