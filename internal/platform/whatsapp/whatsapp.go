@@ -228,6 +228,11 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		Timestamp: evt.Info.Timestamp,
 	}
 
+	// Extract reply context if this message quotes another
+	if rc := extractReplyContext(evt, b); rc != nil {
+		msg.ReplyTo = rc
+	}
+
 	ctx := context.Background()
 
 	// Send typing indicator
@@ -320,4 +325,70 @@ func extractContent(evt *events.Message) string {
 	}
 
 	return ""
+}
+
+// extractReplyContext extracts the quoted message context from a WhatsApp reply
+func extractReplyContext(evt *events.Message, b *Bot) *router.ReplyContext {
+	msg := evt.Message
+	if msg == nil {
+		return nil
+	}
+
+	// Get ContextInfo from whichever message type has it
+	var ci *waE2E.ContextInfo
+	if ext := msg.GetExtendedTextMessage(); ext != nil {
+		ci = ext.GetContextInfo()
+	} else if img := msg.GetImageMessage(); img != nil {
+		ci = img.GetContextInfo()
+	} else if vid := msg.GetVideoMessage(); vid != nil {
+		ci = vid.GetContextInfo()
+	} else if doc := msg.GetDocumentMessage(); doc != nil {
+		ci = doc.GetContextInfo()
+	} else if aud := msg.GetAudioMessage(); aud != nil {
+		ci = aud.GetContextInfo()
+	}
+
+	if ci == nil || ci.GetQuotedMessage() == nil {
+		return nil
+	}
+
+	// Extract text from the quoted message
+	quoted := ci.GetQuotedMessage()
+	var quotedText string
+	if quoted.GetConversation() != "" {
+		quotedText = quoted.GetConversation()
+	} else if ext := quoted.GetExtendedTextMessage(); ext != nil {
+		quotedText = ext.GetText()
+	} else if img := quoted.GetImageMessage(); img != nil && img.GetCaption() != "" {
+		quotedText = "[Image] " + img.GetCaption()
+	} else if vid := quoted.GetVideoMessage(); vid != nil && vid.GetCaption() != "" {
+		quotedText = "[Video] " + vid.GetCaption()
+	}
+
+	if quotedText == "" {
+		return nil
+	}
+
+	// Determine who sent the quoted message
+	participant := ci.GetParticipant()
+	var username string
+	var isBot bool
+
+	b.mu.RLock()
+	client := b.client
+	b.mu.RUnlock()
+
+	if client != nil && participant != "" {
+		jid, err := types.ParseJID(participant)
+		if err == nil && jid.User == client.Store.ID.User {
+			isBot = true
+			username = "bot"
+		}
+	}
+
+	return &router.ReplyContext{
+		Text:     quotedText,
+		Username: username,
+		IsBot:    isBot,
+	}
 }

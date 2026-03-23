@@ -164,6 +164,34 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		msg.Username = user.Name
 	}
 
+	// Extract reply context if this message is in a thread
+	if ev.ThreadTimeStamp != "" && ev.ThreadTimeStamp != ev.TimeStamp {
+		msgs, _, _, replyErr := b.api.GetConversationReplies(&slack.GetConversationRepliesParameters{
+			ChannelID: ev.Channel,
+			Timestamp: ev.ThreadTimeStamp,
+			Limit:     1,
+			Inclusive: true,
+		})
+		if replyErr == nil && len(msgs) > 0 {
+			parent := msgs[0]
+			var parentUser string
+			var isBot bool
+			if parent.BotID != "" {
+				parentUser = "bot"
+				isBot = true
+			} else if parent.User != "" {
+				if u, uErr := b.api.GetUserInfo(parent.User); uErr == nil {
+					parentUser = u.Name
+				}
+			}
+			msg.ReplyTo = &router.ReplyContext{
+				Text:     parent.Text,
+				Username: parentUser,
+				IsBot:    isBot,
+			}
+		}
+	}
+
 	response, err := handler(ctx, msg)
 	if err != nil {
 		b.logger.Debug("handler error", "error", err)

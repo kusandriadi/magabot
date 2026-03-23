@@ -397,8 +397,22 @@ func runDaemon() {
 			})
 		}
 
-		// Add current user message (with media file paths if present)
+		// Add current user message (with reply context and media file paths if present)
 		content := msg.Text
+
+		// Prepend reply context so the LLM knows what message is being replied to
+		if msg.ReplyTo != nil && msg.ReplyTo.Text != "" {
+			sender := msg.ReplyTo.Username
+			if sender == "" {
+				if msg.ReplyTo.IsBot {
+					sender = "assistant"
+				} else {
+					sender = "someone"
+				}
+			}
+			content = fmt.Sprintf("[Replying to %s: %s]\n\n%s", sender, msg.ReplyTo.Text, content)
+		}
+
 		if len(msg.Media) > 0 {
 			var parts []string
 			parts = append(parts, "User sent files (use Read tool to view them):")

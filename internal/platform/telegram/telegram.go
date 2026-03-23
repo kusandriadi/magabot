@@ -205,6 +205,30 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		Raw:       update,
 	}
 
+	// Extract reply context if this message is a reply
+	if msg.ReplyToMessage != nil {
+		replyText := msg.ReplyToMessage.Text
+		if replyText == "" {
+			replyText = msg.ReplyToMessage.Caption
+		}
+		if replyText != "" {
+			var replyUser string
+			var isBot bool
+			if msg.ReplyToMessage.From != nil {
+				replyUser = msg.ReplyToMessage.From.UserName
+				if replyUser == "" {
+					replyUser = msg.ReplyToMessage.From.FirstName
+				}
+				isBot = msg.ReplyToMessage.From.IsBot
+			}
+			routerMsg.ReplyTo = &router.ReplyContext{
+				Text:     replyText,
+				Username: replyUser,
+				IsBot:    isBot,
+			}
+		}
+	}
+
 	b.handlerMu.RLock()
 	handler := b.handler
 	b.handlerMu.RUnlock()

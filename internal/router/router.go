@@ -32,6 +32,13 @@ type Platform interface {
 	SetHandler(handler MessageHandler)
 }
 
+// ReplyContext holds context about the message being replied to
+type ReplyContext struct {
+	Text     string // Text content of the quoted message
+	Username string // Who sent the original message
+	IsBot    bool   // Whether the quoted message was from the bot
+}
+
 // Message represents an incoming message
 type Message struct {
 	Platform  string
@@ -39,7 +46,8 @@ type Message struct {
 	UserID    string
 	Username  string
 	Text      string
-	Media     []string // File paths for images/voice/documents
+	Media     []string      // File paths for images/voice/documents
+	ReplyTo   *ReplyContext  // Quoted/replied-to message context
 	Timestamp time.Time
 	Raw       interface{} // Platform-specific raw message
 }
