@@ -991,7 +991,11 @@ type restartNotify struct {
 	Reason   string `json:"reason"` // "restart" or "update"
 }
 
-var restartNotifyFile = filepath.Join(dataDir, "restart-notify.json")
+// restartNotifyPath returns the path to the restart notification file.
+// Cannot be a package-level var because dataDir is set in init().
+func restartNotifyPath() string {
+	return filepath.Join(dataDir, "restart-notify.json")
+}
 
 // saveRestartNotify saves notification info to be sent after restart.
 func saveRestartNotify(platform, chatID, reason string) {
@@ -1001,19 +1005,19 @@ func saveRestartNotify(platform, chatID, reason string) {
 		slog.Warn("marshal restart notify failed", "error", err)
 		return
 	}
-	if err := os.WriteFile(restartNotifyFile, data, 0600); err != nil {
-		slog.Warn("write restart notify failed", "file", restartNotifyFile, "error", err)
+	if err := os.WriteFile(restartNotifyPath(), data, 0600); err != nil {
+		slog.Warn("write restart notify failed", "file", restartNotifyPath(), "error", err)
 	}
 }
 
 // sendRestartNotify sends a post-restart notification if one was saved, then removes the file.
 func sendRestartNotify(rtr *router.Router, logger *slog.Logger) {
-	data, err := os.ReadFile(restartNotifyFile)
+	data, err := os.ReadFile(restartNotifyPath())
 	if err != nil {
-		logger.Debug("no restart notify file", "file", restartNotifyFile)
+		logger.Debug("no restart notify file", "file", restartNotifyPath())
 		return
 	}
-	_ = os.Remove(restartNotifyFile)
+	_ = os.Remove(restartNotifyPath())
 
 	var n restartNotify
 	if err := json.Unmarshal(data, &n); err != nil {
