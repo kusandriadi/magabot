@@ -32,7 +32,6 @@ func TestFullWorkflow(t *testing.T) {
 	}
 
 	cfg.Bot.Name = "IntegrationBot"
-	cfg.Access.GlobalAdmins = []string{"admin123"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
 		Admins:       []string{"admin123"},
@@ -46,8 +45,8 @@ func TestFullWorkflow(t *testing.T) {
 	}
 
 	// 2. Verify access control
-	if !cfg.IsGlobalAdmin("admin123") {
-		t.Error("admin123 should be global admin")
+	if !cfg.IsPlatformAdmin("telegram", "admin123") {
+		t.Error("admin123 should be platform admin")
 	}
 
 	if !cfg.IsAllowed("telegram", "user456", "", false) {
@@ -154,7 +153,6 @@ func TestConfigAdminOperations(t *testing.T) {
 	}
 
 	// Setup initial admin
-	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
 		Admins:       []string{"admin1"},

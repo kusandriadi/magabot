@@ -44,9 +44,9 @@ func TestE2EUserWorkflow(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 	cfg.Bot.Name = "E2EBot"
-	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
+		Admins:       []string{"admin1"},
 		AllowedUsers: []string{"user1", "user2"},
 		AllowDMs:     true,
 		AllowGroups:  true,
@@ -80,8 +80,8 @@ func TestE2EUserWorkflow(t *testing.T) {
 			t.Error("unknown_user should not be allowed")
 		}
 
-		if !cfg.IsGlobalAdmin("admin1") {
-			t.Error("admin1 should be global admin")
+		if !cfg.IsPlatformAdmin("telegram", "admin1") {
+			t.Error("admin1 should be platform admin")
 		}
 	})
 
@@ -465,7 +465,6 @@ func TestE2EAdminOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
 		Admins:       []string{"admin1"},

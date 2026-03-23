@@ -128,7 +128,6 @@ func setupTelegram() {
 	if userID != "" {
 		cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
 		cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
-		cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 	}
 
 	// Settings
@@ -186,7 +185,6 @@ func setupDiscord() {
 	if userID != "" {
 		cfg.Platforms.Discord.Admins = util.AddUnique(cfg.Platforms.Discord.Admins, userID)
 		cfg.Platforms.Discord.AllowedUsers = util.AddUnique(cfg.Platforms.Discord.AllowedUsers, userID)
-		cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 	}
 
 	cfg.Platforms.Discord.AllowGroups = askYesNo(reader, "Allow server channels?", true)
@@ -373,7 +371,6 @@ func setupWebhook() {
 			tgUser := "telegram:" + userID
 			cfg.Platforms.Telegram.Admins = util.AddUnique(cfg.Platforms.Telegram.Admins, userID)
 			cfg.Platforms.Telegram.AllowedUsers = util.AddUnique(cfg.Platforms.Telegram.AllowedUsers, userID)
-			cfg.Access.GlobalAdmins = util.AddUnique(cfg.Access.GlobalAdmins, userID)
 			// Generate unique token for this user
 			userToken := security.GenerateKey()[:32]
 			bearerTokens[userToken] = tgUser

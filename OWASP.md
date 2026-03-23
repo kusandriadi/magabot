@@ -46,14 +46,12 @@ Run security check script:
 
 2. **Role-Based Access**
    ```
-   Global Admin → Platform Admin → Allowed User → Denied
+   Platform Admin → Allowed User → Denied
    ```
 
 3. **Per-Platform Authorization**
    ```go
    func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
-       // Check global admin
-       if c.IsGlobalAdmin(userID) { return true }
        // Check platform-specific rules
        // ...
    }

@@ -118,8 +118,8 @@ Update Commands:
 Config Commands:
   config show                   Show current configuration
   config edit                   Edit config.yaml
-  config admin add <id>         Add global admin
-  config admin remove <id>      Remove global admin
+  config admin <platform> add <id>     Add platform admin
+  config admin <platform> remove <id>  Remove platform admin
 
 Cron Commands:
   cron list           List all cron jobs

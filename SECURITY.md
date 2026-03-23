@@ -57,7 +57,7 @@ All admin actions are logged with:
 
 - [ ] Generate unique encryption key: `magabot genkey`
 - [ ] Set restrictive file permissions
-- [ ] Add yourself as global admin first
+- [ ] Add yourself as platform admin first
 - [ ] Enable only needed platforms
 - [ ] Review allowlist before going public
 
@@ -112,8 +112,10 @@ We will respond within 48 hours and work on a fix.
 ```yaml
 access:
   mode: allowlist
-  global_admins:
-    - "YOUR_ID"
+
+platforms:
+  telegram:
+    admins: ["YOUR_TELEGRAM_ID"]
 ```
 
 ### For Team Use
@@ -121,8 +123,6 @@ access:
 ```yaml
 access:
   mode: allowlist
-  global_admins:
-    - "OWNER_ID"
 
 platforms:
   discord:

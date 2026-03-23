@@ -46,7 +46,6 @@ func (v *ConfigValidator) ValidateAll(configPath, dataDir string, cfg *SecurityC
 type SecurityConfig struct {
 	EncryptionKey     string
 	AccessMode        string // allowlist, denylist, open
-	GlobalAdmins      []string
 	PlatformAdmins    map[string][]string
 	AllowedUsers      map[string][]string
 	RateLimitMessages int
@@ -182,21 +181,28 @@ func (v *ConfigValidator) validateAccessControl(cfg *SecurityConfig) {
 		)
 	}
 
-	// Check for global admins
-	if len(cfg.GlobalAdmins) == 0 {
+	// Check that enabled platforms have at least one admin
+	totalAdmins := 0
+	for _, admins := range cfg.PlatformAdmins {
+		totalAdmins += len(admins)
+	}
+	if totalAdmins == 0 {
 		v.addIssue(
 			"critical",
 			"access",
-			"No global admins configured",
-			"Run: magabot config admin add YOUR_USER_ID",
+			"No platform admins configured",
+			"Run: magabot config admin <platform> add YOUR_USER_ID",
 		)
 	}
 
 	// Check if allowlist is empty in allowlist mode
 	if cfg.AccessMode == "allowlist" {
-		totalAllowed := len(cfg.GlobalAdmins)
+		totalAllowed := 0
 		for _, users := range cfg.AllowedUsers {
 			totalAllowed += len(users)
+		}
+		for _, admins := range cfg.PlatformAdmins {
+			totalAllowed += len(admins)
 		}
 		if totalAllowed == 0 {
 			v.addIssue(
@@ -205,22 +211,6 @@ func (v *ConfigValidator) validateAccessControl(cfg *SecurityConfig) {
 				"Allowlist mode but no users allowed",
 				"Add users: magabot config allow user USER_ID",
 			)
-		}
-	}
-
-	// Warn about admin in multiple places (redundant but ok)
-	for _, globalAdmin := range cfg.GlobalAdmins {
-		for platform, admins := range cfg.PlatformAdmins {
-			for _, admin := range admins {
-				if admin == globalAdmin {
-					v.addIssue(
-						"info",
-						"access",
-						fmt.Sprintf("User %s is both global and %s admin (redundant)", maskID(globalAdmin), platform),
-						"Global admin already has full access",
-					)
-				}
-			}
 		}
 	}
 }

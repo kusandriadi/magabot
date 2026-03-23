@@ -20,8 +20,6 @@ bot:
   name: testbot
 access:
   mode: allowlist
-  global_admins:
-    - admin1
 platforms:
   telegram:
     enabled: true
@@ -156,11 +154,12 @@ func TestHandleCommand_AdminAdd(t *testing.T) {
 	cfg := newTestConfig(t)
 	h := NewAdminHandler(cfg, t.TempDir())
 
-	response, _, err := h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "global", "add", "admin2"})
+	// First allow user1 (already in config), then add as admin
+	response, _, err := h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "add", "user1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(response, "Added global admin") {
+	if !strings.Contains(response, "Added telegram admin") {
 		t.Errorf("expected admin add confirmation, got: %s", response)
 	}
 }
@@ -169,14 +168,14 @@ func TestHandleCommand_AdminRemove(t *testing.T) {
 	cfg := newTestConfig(t)
 	h := NewAdminHandler(cfg, t.TempDir())
 
-	// First add another admin so we can remove one
-	_, _, _ = h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "global", "add", "admin2"})
+	// First add user1 as platform admin, then remove
+	_, _, _ = h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "add", "user1"})
 
-	response, _, err := h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "global", "rm", "admin2"})
+	response, _, err := h.HandleCommand("telegram", "admin1", "chat1", []string{"admin", "rm", "user1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(response, "Removed global admin") {
+	if !strings.Contains(response, "Removed telegram admin") {
 		t.Errorf("expected admin remove confirmation, got: %s", response)
 	}
 }
@@ -190,7 +189,7 @@ func TestHandleCommand_NonAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(response, "Only global admins") {
+	if !strings.Contains(response, "Only platform admins") {
 		t.Errorf("expected permission denied, got: %s", response)
 	}
 }

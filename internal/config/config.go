@@ -233,8 +233,7 @@ type ProvidersConfig struct {
 
 // AccessConfig holds global access settings
 type AccessConfig struct {
-	Mode         string   `yaml:"mode"` // allowlist, denylist, open
-	GlobalAdmins []string `yaml:"global_admins"`
+	Mode string `yaml:"mode"` // allowlist, denylist, open
 }
 
 // CronConfig holds cron job definitions
@@ -634,23 +633,6 @@ func (c *Config) SaveBy(updatedBy string) error {
 	return c.Save()
 }
 
-// IsGlobalAdmin checks if user is a global admin
-func (c *Config) IsGlobalAdmin(userID string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.isGlobalAdmin(userID)
-}
-
-// isGlobalAdmin is the lock-free internal version (caller must hold mu)
-func (c *Config) isGlobalAdmin(userID string) bool {
-	for _, admin := range c.Access.GlobalAdmins {
-		if admin == userID {
-			return true
-		}
-	}
-	return false
-}
-
 // IsPlatformAdmin checks if user is an admin for a specific platform
 func (c *Config) IsPlatformAdmin(platform, userID string) bool {
 	c.mu.RLock()
@@ -660,10 +642,6 @@ func (c *Config) IsPlatformAdmin(platform, userID string) bool {
 
 // isPlatformAdmin is the lock-free internal version (caller must hold mu)
 func (c *Config) isPlatformAdmin(platform, userID string) bool {
-	if c.isGlobalAdmin(userID) {
-		return true
-	}
-
 	switch platform {
 	case "telegram":
 		if c.Platforms.Telegram != nil {
@@ -690,17 +668,10 @@ func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Global admins always allowed
-	if c.isGlobalAdmin(userID) {
-		return true
-	}
-
 	// Bootstrap: no admins exist at all — allow first user through
 	// so PromoteFirstAdmin can fire in the message handler
-	if len(c.Access.GlobalAdmins) == 0 {
-		if admins := c.platformAdmins(platform); admins != nil && len(*admins) == 0 {
-			return true
-		}
+	if admins := c.platformAdmins(platform); admins != nil && len(*admins) == 0 {
+		return true
 	}
 
 	// Open mode = everyone allowed

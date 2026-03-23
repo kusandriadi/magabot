@@ -39,7 +39,10 @@ func TestConfigSave(t *testing.T) {
 
 	cfg, _ := Load(configPath)
 	cfg.Bot.Name = "TestBot"
-	cfg.Access.GlobalAdmins = []string{"123456"}
+	cfg.Platforms.Telegram = &TelegramConfig{
+		Enabled: true,
+		Admins:  []string{"123456"},
+	}
 
 	err := cfg.Save()
 	if err != nil {
@@ -55,45 +58,19 @@ func TestConfigSave(t *testing.T) {
 	if cfg2.Bot.Name != "TestBot" {
 		t.Errorf("Expected bot name 'TestBot', got %s", cfg2.Bot.Name)
 	}
-	if len(cfg2.Access.GlobalAdmins) != 1 || cfg2.Access.GlobalAdmins[0] != "123456" {
-		t.Error("Global admins not saved correctly")
-	}
-}
-
-func TestIsGlobalAdmin(t *testing.T) {
-	cfg := &Config{
-		Access: AccessConfig{
-			GlobalAdmins: []string{"admin1", "admin2"},
-		},
-	}
-
-	if !cfg.IsGlobalAdmin("admin1") {
-		t.Error("admin1 should be global admin")
-	}
-	if !cfg.IsGlobalAdmin("admin2") {
-		t.Error("admin2 should be global admin")
-	}
-	if cfg.IsGlobalAdmin("user1") {
-		t.Error("user1 should not be global admin")
+	if len(cfg2.Platforms.Telegram.Admins) != 1 || cfg2.Platforms.Telegram.Admins[0] != "123456" {
+		t.Error("Platform admins not saved correctly")
 	}
 }
 
 func TestIsPlatformAdmin(t *testing.T) {
 	cfg := &Config{
-		Access: AccessConfig{
-			GlobalAdmins: []string{"global_admin"},
-		},
 		Platforms: PlatformsConfig{
 			Telegram: &TelegramConfig{
 				Enabled: true,
 				Admins:  []string{"tg_admin"},
 			},
 		},
-	}
-
-	// Global admin is admin everywhere
-	if !cfg.IsPlatformAdmin("telegram", "global_admin") {
-		t.Error("Global admin should be platform admin")
 	}
 
 	// Platform admin
@@ -115,8 +92,7 @@ func TestIsPlatformAdmin(t *testing.T) {
 func TestIsAllowed(t *testing.T) {
 	cfg := &Config{
 		Access: AccessConfig{
-			Mode:         "allowlist",
-			GlobalAdmins: []string{"global_admin"},
+			Mode: "allowlist",
 		},
 		Platforms: PlatformsConfig{
 			Telegram: &TelegramConfig{
@@ -128,11 +104,6 @@ func TestIsAllowed(t *testing.T) {
 				AllowDMs:     true,
 			},
 		},
-	}
-
-	// Global admin always allowed
-	if !cfg.IsAllowed("telegram", "global_admin", "", false) {
-		t.Error("Global admin should be allowed")
 	}
 
 	// Platform admin always allowed

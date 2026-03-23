@@ -27,7 +27,7 @@ func TestConfigValidatorValidateAll(t *testing.T) {
 	cfg := &SecurityConfig{
 		EncryptionKey:     GenerateKey(),
 		AccessMode:        "allowlist",
-		GlobalAdmins:      []string{"admin1"},
+		PlatformAdmins:    map[string][]string{"telegram": {"admin1"}},
 		RateLimitMessages: 30,
 		RateLimitCommands: 10,
 		HasTelegramToken:  true,
@@ -75,7 +75,7 @@ func TestConfigValidatorFilePermissions(t *testing.T) {
 		cfg := &SecurityConfig{
 			EncryptionKey:     GenerateKey(),
 			AccessMode:        "allowlist",
-			GlobalAdmins:      []string{"admin"},
+			PlatformAdmins:    map[string][]string{"telegram": {"admin"}},
 			RateLimitMessages: 30,
 			RateLimitCommands: 10,
 			HasTelegramToken:  true,
@@ -103,8 +103,8 @@ func TestConfigValidatorSecrets(t *testing.T) {
 	t.Run("NoEncryptionKey", func(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
-			EncryptionKey: "",
-			GlobalAdmins:  []string{"admin"},
+			EncryptionKey:  "",
+			PlatformAdmins: map[string][]string{"telegram": {"admin"}},
 		}
 		issues := v2.ValidateAll(configPath, dir, cfg)
 
@@ -123,8 +123,8 @@ func TestConfigValidatorSecrets(t *testing.T) {
 	t.Run("ShortEncryptionKey", func(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
-			EncryptionKey: "short",
-			GlobalAdmins:  []string{"admin"},
+			EncryptionKey:  "short",
+			PlatformAdmins: map[string][]string{"telegram": {"admin"}},
 		}
 		issues := v2.ValidateAll(configPath, dir, cfg)
 
@@ -143,8 +143,8 @@ func TestConfigValidatorSecrets(t *testing.T) {
 	t.Run("WeakEncryptionKey", func(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
-			EncryptionKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // All zeros
-			GlobalAdmins:  []string{"admin"},
+			EncryptionKey:  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // All zeros
+			PlatformAdmins: map[string][]string{"telegram": {"admin"}},
 		}
 		issues := v2.ValidateAll(configPath, dir, cfg)
 
@@ -164,7 +164,7 @@ func TestConfigValidatorSecrets(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
 			EncryptionKey:    GenerateKey(),
-			GlobalAdmins:     []string{"admin"},
+			PlatformAdmins:   map[string][]string{"telegram": {"admin"}},
 			HasTelegramToken: false,
 			HasDiscordToken:  false,
 			HasSlackToken:    false,
@@ -187,7 +187,7 @@ func TestConfigValidatorSecrets(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
 			EncryptionKey:    GenerateKey(),
-			GlobalAdmins:     []string{"admin"},
+			PlatformAdmins:   map[string][]string{"telegram": {"admin"}},
 			HasTelegramToken: true,
 			HasLLMKey:        false,
 		}
@@ -217,7 +217,7 @@ func TestConfigValidatorAccessControl(t *testing.T) {
 		cfg := &SecurityConfig{
 			EncryptionKey:    GenerateKey(),
 			AccessMode:       "open",
-			GlobalAdmins:     []string{"admin"},
+			PlatformAdmins:   map[string][]string{"telegram": {"admin"}},
 			HasTelegramToken: true,
 			HasLLMKey:        true,
 		}
@@ -235,12 +235,12 @@ func TestConfigValidatorAccessControl(t *testing.T) {
 		}
 	})
 
-	t.Run("NoGlobalAdmins", func(t *testing.T) {
+	t.Run("NoPlatformAdmins", func(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
 			EncryptionKey:    GenerateKey(),
 			AccessMode:       "allowlist",
-			GlobalAdmins:     []string{},
+			PlatformAdmins:   map[string][]string{},
 			HasTelegramToken: true,
 			HasLLMKey:        true,
 		}
@@ -248,13 +248,13 @@ func TestConfigValidatorAccessControl(t *testing.T) {
 
 		hasAdminIssue := false
 		for _, issue := range issues {
-			if issue.Category == "access" && strings.Contains(issue.Description, "global admins") {
+			if issue.Category == "access" && strings.Contains(issue.Description, "platform admins") {
 				hasAdminIssue = true
 				break
 			}
 		}
 		if !hasAdminIssue {
-			t.Error("Should detect no global admins")
+			t.Error("Should detect no platform admins")
 		}
 	})
 
@@ -263,7 +263,7 @@ func TestConfigValidatorAccessControl(t *testing.T) {
 		cfg := &SecurityConfig{
 			EncryptionKey:    GenerateKey(),
 			AccessMode:       "allowlist",
-			GlobalAdmins:     []string{},
+			PlatformAdmins:   map[string][]string{},
 			AllowedUsers:     map[string][]string{},
 			HasTelegramToken: true,
 			HasLLMKey:        true,
@@ -282,29 +282,28 @@ func TestConfigValidatorAccessControl(t *testing.T) {
 		}
 	})
 
-	t.Run("RedundantAdmin", func(t *testing.T) {
+	t.Run("HasPlatformAdmins", func(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
 			EncryptionKey: GenerateKey(),
 			AccessMode:    "allowlist",
-			GlobalAdmins:  []string{"admin1"},
 			PlatformAdmins: map[string][]string{
-				"telegram": {"admin1"}, // Same as global admin
+				"telegram": {"admin1"},
 			},
 			HasTelegramToken: true,
 			HasLLMKey:        true,
 		}
 		issues := v2.ValidateAll(configPath, dir, cfg)
 
-		hasInfoIssue := false
+		hasAdminIssue := false
 		for _, issue := range issues {
-			if issue.Severity == "info" && strings.Contains(issue.Description, "redundant") {
-				hasInfoIssue = true
+			if issue.Category == "access" && strings.Contains(issue.Description, "platform admins") {
+				hasAdminIssue = true
 				break
 			}
 		}
-		if !hasInfoIssue {
-			t.Error("Should note redundant admin")
+		if hasAdminIssue {
+			t.Error("Should not warn about admins when platform admins exist")
 		}
 	})
 }
@@ -319,7 +318,7 @@ func TestConfigValidatorRateLimits(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
 			EncryptionKey:     GenerateKey(),
-			GlobalAdmins:      []string{"admin"},
+			PlatformAdmins:    map[string][]string{"telegram": {"admin"}},
 			RateLimitMessages: 0,
 			RateLimitCommands: 0,
 			HasTelegramToken:  true,
@@ -343,7 +342,7 @@ func TestConfigValidatorRateLimits(t *testing.T) {
 		v2 := NewConfigValidator()
 		cfg := &SecurityConfig{
 			EncryptionKey:     GenerateKey(),
-			GlobalAdmins:      []string{"admin"},
+			PlatformAdmins:    map[string][]string{"telegram": {"admin"}},
 			RateLimitMessages: 200,
 			RateLimitCommands: 50,
 			HasTelegramToken:  true,
@@ -510,7 +509,6 @@ func TestSecurityConfig(t *testing.T) {
 	cfg := SecurityConfig{
 		EncryptionKey:     "key",
 		AccessMode:        "allowlist",
-		GlobalAdmins:      []string{"admin"},
 		PlatformAdmins:    map[string][]string{"telegram": {"padmin"}},
 		AllowedUsers:      map[string][]string{"telegram": {"user1"}},
 		RateLimitMessages: 30,
@@ -527,7 +525,7 @@ func TestSecurityConfig(t *testing.T) {
 	if cfg.AccessMode != "allowlist" {
 		t.Error("AccessMode mismatch")
 	}
-	if len(cfg.GlobalAdmins) != 1 {
-		t.Error("GlobalAdmins mismatch")
+	if len(cfg.PlatformAdmins["telegram"]) != 1 {
+		t.Error("PlatformAdmins mismatch")
 	}
 }

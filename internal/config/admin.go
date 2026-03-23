@@ -17,68 +17,7 @@ type AdminAction struct {
 	NeedRestart bool
 }
 
-// AddGlobalAdmin adds a global admin (requires global admin)
-func (c *Config) AddGlobalAdmin(requesterID, newAdminID string) AdminAction {
-	result := AdminAction{
-		Action:   "add_global_admin",
-		Target:   "global",
-		TargetID: newAdminID,
-	}
-
-	c.mu.Lock()
-	if !c.isGlobalAdmin(requesterID) {
-		c.mu.Unlock()
-		result.Message = "Only global admins can add global admins"
-		return result
-	}
-	c.Access.GlobalAdmins = addUnique(c.Access.GlobalAdmins, newAdminID)
-	c.mu.Unlock()
-
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Added global admin: %s", newAdminID)
-	return result
-}
-
-// RemoveGlobalAdmin removes a global admin
-func (c *Config) RemoveGlobalAdmin(requesterID, adminID string) AdminAction {
-	result := AdminAction{
-		Action:   "remove_global_admin",
-		Target:   "global",
-		TargetID: adminID,
-	}
-
-	c.mu.Lock()
-	if !c.isGlobalAdmin(requesterID) {
-		c.mu.Unlock()
-		result.Message = "Only global admins can remove global admins"
-		return result
-	}
-	if len(c.Access.GlobalAdmins) == 1 && c.Access.GlobalAdmins[0] == adminID {
-		c.mu.Unlock()
-		result.Message = "Cannot remove the last global admin"
-		return result
-	}
-	c.Access.GlobalAdmins = remove(c.Access.GlobalAdmins, adminID)
-	c.mu.Unlock()
-
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Removed global admin: %s", adminID)
-	return result
-}
-
-// AddPlatformAdmin adds a platform admin (requires platform admin or global admin)
+// AddPlatformAdmin adds a platform admin (requires platform admin)
 func (c *Config) AddPlatformAdmin(platform, requesterID, newAdminID string) AdminAction {
 	result := AdminAction{
 		Platform: platform,
@@ -284,7 +223,7 @@ func (c *Config) RemoveChat(platform, requesterID, chatID string) AdminAction {
 }
 
 // SetAccessMode sets the global access mode
-func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
+func (c *Config) SetAccessMode(platform, requesterID, mode string) AdminAction {
 	result := AdminAction{
 		Action:   "set_mode",
 		Target:   "access",
@@ -298,9 +237,9 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 	}
 
 	c.mu.Lock()
-	if !c.isGlobalAdmin(requesterID) {
+	if !c.isPlatformAdmin(platform, requesterID) {
 		c.mu.Unlock()
-		result.Message = "Only global admins can change access mode"
+		result.Message = "Only platform admins can change access mode"
 		return result
 	}
 	c.Access.Mode = mode
@@ -317,19 +256,12 @@ func (c *Config) SetAccessMode(requesterID, mode string) AdminAction {
 	return result
 }
 
-// PromoteFirstAdmin promotes a user to platform admin if no admins exist yet
-// (no global admins and no platform admins). Returns true if promoted.
+// PromoteFirstAdmin promotes a user to platform admin if no admins exist yet.
+// Returns true if promoted.
 // This is safe to call concurrently — only the very first caller wins.
 func (c *Config) PromoteFirstAdmin(platform, userID string) bool {
 	c.mu.Lock()
 
-	// Already has global admins — skip
-	if len(c.Access.GlobalAdmins) > 0 {
-		c.mu.Unlock()
-		return false
-	}
-
-	// Already has platform admins — skip
 	admins := c.platformAdmins(platform)
 	if admins == nil || len(*admins) > 0 {
 		c.mu.Unlock()

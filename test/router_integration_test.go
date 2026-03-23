@@ -88,9 +88,9 @@ func TestRouterIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	cfg.Access.GlobalAdmins = []string{"admin1"}
 	cfg.Platforms.Telegram = &config.TelegramConfig{
 		Enabled:      true,
+		Admins:       []string{"admin1"},
 		AllowedUsers: []string{"user1", "user2"},
 		AllowDMs:     true,
 	}

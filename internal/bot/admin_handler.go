@@ -63,7 +63,6 @@ func (h *AdminHandler) HandleCommand(platform, userID, chatID string, args []str
 
 // showStatus shows current config status
 func (h *AdminHandler) showStatus(platform, userID string) string {
-	isGlobalAdmin := h.cfg.IsGlobalAdmin(userID)
 	isPlatformAdmin := h.cfg.IsPlatformAdmin(platform, userID)
 
 	var sb strings.Builder
@@ -72,20 +71,10 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 	// Access info
 	sb.WriteString(fmt.Sprintf("Mode: `%s`\n", h.cfg.Access.Mode))
 	sb.WriteString("Your Role: ")
-	if isGlobalAdmin {
-		sb.WriteString("🌍 Global Admin\n")
-	} else if isPlatformAdmin {
+	if isPlatformAdmin {
 		sb.WriteString(fmt.Sprintf("👤 %s Admin\n", platform))
 	} else {
 		sb.WriteString("User\n")
-	}
-
-	// Global admins (only show to global admins)
-	if isGlobalAdmin {
-		sb.WriteString(fmt.Sprintf("\n*Global Admins (%d):*\n", len(h.cfg.Access.GlobalAdmins)))
-		for _, admin := range h.cfg.Access.GlobalAdmins {
-			sb.WriteString(fmt.Sprintf("  • `%s`\n", admin))
-		}
 	}
 
 	// Platform info
@@ -160,31 +149,11 @@ func (h *AdminHandler) handleAdmin(platform, userID string, args []string) (stri
 
 /config admin add <user_id>    - Add platform admin
 /config admin remove <user_id> - Remove platform admin
-/config admin global add <id>  - Add global admin
-/config admin global rm <id>   - Remove global admin
 
 Note: New admin must be in allowlist first.`, false, nil
 	}
 
 	action := strings.ToLower(args[0])
-
-	// Global admin management
-	if action == "global" && len(args) >= 3 {
-		globalAction := strings.ToLower(args[1])
-		targetID := args[2]
-
-		switch globalAction {
-		case "add":
-			result := h.cfg.AddGlobalAdmin(userID, targetID)
-			return result.Message, result.NeedRestart, nil
-		case "remove", "rm":
-			result := h.cfg.RemoveGlobalAdmin(userID, targetID)
-			return result.Message, result.NeedRestart, nil
-		}
-		return "❌ Use: /config admin global add|remove <user_id>", false, nil
-	}
-
-	// Platform admin management
 	targetID := args[1]
 
 	switch action {
@@ -276,13 +245,12 @@ Current: ` + h.cfg.Access.Mode, false, nil
 	}
 
 	mode := args[0]
-	result := h.cfg.SetAccessMode(userID, mode)
+	result := h.cfg.SetAccessMode(platform, userID, mode)
 	return result.Message, result.NeedRestart, nil
 }
 
 // showHelp shows available commands
 func (h *AdminHandler) showHelp(platform, userID string) string {
-	isGlobalAdmin := h.cfg.IsGlobalAdmin(userID)
 	isPlatformAdmin := h.cfg.IsPlatformAdmin(platform, userID)
 
 	var sb strings.Builder
@@ -300,16 +268,12 @@ func (h *AdminHandler) showHelp(platform, userID string) string {
 		sb.WriteString("\n*Platform Admins:*\n")
 		sb.WriteString("/config admin add <id>\n")
 		sb.WriteString("/config admin remove <id>\n")
-	}
 
-	if isGlobalAdmin {
-		sb.WriteString("\n*Global Admin:*\n")
-		sb.WriteString("/config admin global add <id>\n")
-		sb.WriteString("/config admin global rm <id>\n")
+		sb.WriteString("\n*Access Mode:*\n")
 		sb.WriteString("/config mode <allowlist|open>\n")
 	}
 
-	if !isPlatformAdmin && !isGlobalAdmin {
+	if !isPlatformAdmin {
 		sb.WriteString("\n_You don't have admin access._")
 	}
 
