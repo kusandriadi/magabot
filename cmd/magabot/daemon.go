@@ -995,22 +995,33 @@ var restartNotifyFile = filepath.Join(dataDir, "restart-notify.json")
 
 // saveRestartNotify saves notification info to be sent after restart.
 func saveRestartNotify(platform, chatID, reason string) {
-	data, _ := json.Marshal(restartNotify{Platform: platform, ChatID: chatID, Reason: reason})
-	_ = os.WriteFile(restartNotifyFile, data, 0600)
+	n := restartNotify{Platform: platform, ChatID: chatID, Reason: reason}
+	data, err := json.Marshal(n)
+	if err != nil {
+		slog.Warn("marshal restart notify failed", "error", err)
+		return
+	}
+	if err := os.WriteFile(restartNotifyFile, data, 0600); err != nil {
+		slog.Warn("write restart notify failed", "file", restartNotifyFile, "error", err)
+	}
 }
 
 // sendRestartNotify sends a post-restart notification if one was saved, then removes the file.
 func sendRestartNotify(rtr *router.Router, logger *slog.Logger) {
 	data, err := os.ReadFile(restartNotifyFile)
 	if err != nil {
+		logger.Debug("no restart notify file", "file", restartNotifyFile)
 		return
 	}
 	_ = os.Remove(restartNotifyFile)
 
 	var n restartNotify
-	if json.Unmarshal(data, &n) != nil {
+	if err := json.Unmarshal(data, &n); err != nil {
+		logger.Warn("unmarshal restart notify failed", "error", err, "data", string(data))
 		return
 	}
+
+	logger.Info("sending post-restart notification", "platform", n.Platform, "chat_id", n.ChatID, "reason", n.Reason)
 
 	msg := fmt.Sprintf("✅ Magabot is back online! (v%s)", version.Short())
 	if n.Reason == "update" {
