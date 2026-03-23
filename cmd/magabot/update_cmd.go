@@ -31,7 +31,8 @@ func cmdUpdate() {
 	case "check":
 		cmdUpdateCheck()
 	case "apply", "install":
-		cmdUpdateApply()
+		autoConfirm := len(os.Args) > 3 && (os.Args[3] == "--yes" || os.Args[3] == "-y")
+		cmdUpdateApply(autoConfirm)
 	case "rollback":
 		cmdUpdateRollback()
 	case "help":
@@ -70,7 +71,7 @@ func cmdUpdateCheck() {
 	}
 }
 
-func cmdUpdateApply() {
+func cmdUpdateApply(autoConfirm bool) {
 	fmt.Printf("🔄 Checking for updates...\n")
 
 	u := updater.New(updater.Config{
@@ -98,14 +99,16 @@ func cmdUpdateApply() {
 	fmt.Printf("\n📝 Release Notes:\n%s\n", truncateNotes(release.Body, 300))
 
 	// Confirm
-	fmt.Print("\nDo you want to update? [y/N]: ")
-	reader := bufio.NewReader(os.Stdin)
-	confirm, _ := reader.ReadString('\n')
-	confirm = strings.TrimSpace(strings.ToLower(confirm))
+	if !autoConfirm {
+		fmt.Print("\nDo you want to update? [y/N]: ")
+		reader := bufio.NewReader(os.Stdin)
+		confirm, _ := reader.ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
 
-	if confirm != "y" && confirm != "yes" {
-		fmt.Println("Canceled.")
-		return
+		if confirm != "y" && confirm != "yes" {
+			fmt.Println("Canceled.")
+			return
+		}
 	}
 
 	// Resolve executable path BEFORE update (after update, os.Executable
@@ -172,7 +175,7 @@ Usage: magabot update <command>
 
 Commands:
   check       Check for available updates
-  apply       Download and install update
+  apply [-y]  Download and install update (--yes/-y to skip prompt)
   rollback    Restore previous version
   help        Show this help
 

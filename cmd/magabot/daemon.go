@@ -25,6 +25,7 @@ import (
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/session"
 	"github.com/kusa/magabot/internal/storage"
+	"github.com/kusa/magabot/internal/updater"
 	"github.com/kusa/magabot/internal/util"
 	"github.com/kusa/magabot/internal/version"
 	"github.com/kusandriadi/allm-go"
@@ -235,6 +236,7 @@ func runDaemon() {
 	// Initialize bot handlers
 	adminHandler := bot.NewAdminHandler(cfg, configDir)
 	memoryHandler := bot.NewMemoryHandler(cfg.Paths.MemoryDir)
+	confirmMgr := bot.NewConfirmationManager()
 
 	// Initialize session manager
 	maxHistory := cfg.Session.MaxHistory
@@ -314,7 +316,20 @@ func runDaemon() {
 
 		// Handle bot commands
 		if strings.HasPrefix(msg.Text, "/") {
-			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler, sessionMgr, logger)
+			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler, sessionMgr, confirmMgr, logger)
+		}
+
+		// Handle pending confirmation (y/n)
+		if confirmMgr.HasPending(msg.Platform, msg.ChatID) {
+			lower := strings.ToLower(strings.TrimSpace(msg.Text))
+			if lower == "y" || lower == "yes" {
+				resp, _ := confirmMgr.Confirm(msg.Platform, msg.ChatID, msg.UserID)
+				return resp, nil
+			}
+			if lower == "n" || lower == "no" {
+				resp, _ := confirmMgr.Cancel(msg.Platform, msg.ChatID, msg.UserID)
+				return resp, nil
+			}
 		}
 
 		// Handle agent session commands (:new, :send, :quit, :status)
@@ -533,7 +548,7 @@ func runDaemon() {
 }
 
 // handleCommand handles bot commands
-func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store, cfg *config.Config, adminH *bot.AdminHandler, memoryH *bot.MemoryHandler, sessionH *bot.SessionHandler, sessionMgr *session.Manager, logger *slog.Logger) (string, error) {
+func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store, cfg *config.Config, adminH *bot.AdminHandler, memoryH *bot.MemoryHandler, sessionH *bot.SessionHandler, sessionMgr *session.Manager, confirmMgr *bot.ConfirmationManager, logger *slog.Logger) (string, error) {
 	parts := strings.Fields(msg.Text)
 	if len(parts) == 0 {
 		return "", nil
@@ -547,6 +562,18 @@ func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.St
 	args := parts[1:]
 
 	switch cmd {
+	case "/yes", "/confirm":
+		if resp, handled := confirmMgr.Confirm(msg.Platform, msg.ChatID, msg.UserID); handled {
+			return resp, nil
+		}
+		return "No pending action to confirm.", nil
+
+	case "/no", "/cancel":
+		if resp, handled := confirmMgr.Cancel(msg.Platform, msg.ChatID, msg.UserID); handled {
+			return resp, nil
+		}
+		return "No pending action to cancel.", nil
+
 	case "/start":
 		welcome := `👋 *Halo! Saya Magabot* — AI chatbot pribadi kamu.
 
@@ -887,6 +914,47 @@ _Reset: /effort reset_`, current), nil
 
 	case "/task":
 		return sessionH.HandleCommand(msg.UserID, msg.Platform, msg.ChatID, args)
+
+	case "/update":
+		if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {
+			return "🔒 Admin access required.", nil
+		}
+
+		u := updater.New(updater.Config{
+			RepoOwner:      repoOwner,
+			RepoName:       repoName,
+			CurrentVersion: version.Short(),
+			BinaryName:     "magabot",
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		release, hasUpdate, err := u.CheckUpdate(ctx)
+		if err != nil {
+			return fmt.Sprintf("❌ Update check failed: %v", err), nil
+		}
+		if !hasUpdate {
+			return fmt.Sprintf("✅ Already up to date! (v%s)", version.Short()), nil
+		}
+
+		prompt := confirmMgr.Request(
+			msg.Platform, msg.ChatID, msg.UserID,
+			fmt.Sprintf("🔄 *Update Available*\n\n📦 %s → %s\n\n📝 %s",
+				version.Short(), release.TagName,
+				truncateNotes(release.Body, 200)),
+			5*time.Minute,
+			func() (string, error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+				if err := u.Update(ctx, release); err != nil {
+					return "", fmt.Errorf("update failed: %w", err)
+				}
+				adminH.ScheduleRestart(3, nil)
+				return fmt.Sprintf("✅ Updated to %s! Restarting in 3s...", release.TagName), nil
+			},
+		)
+		return prompt, nil
 
 	default:
 		return "❓ Unknown command. Try /help", nil
