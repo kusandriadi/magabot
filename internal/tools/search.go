@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +15,13 @@ import (
 )
 
 const braveSearchURL = "https://api.search.brave.com/res/v1/web/search"
+
+// searchResult holds a single search result from any source.
+type searchResult struct {
+	Title       string
+	URL         string
+	Description string
+}
 
 // Search tool - Brave API primary, DuckDuckGo fallback
 type Search struct {
@@ -99,9 +105,8 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 	if err != nil {
 		return "", fmt.Errorf("search request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return "", fmt.Errorf("read search response: %w", err)
 	}
@@ -110,7 +115,7 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 		return "", fmt.Errorf("Brave API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result struct {
+	var raw struct {
 		Web struct {
 			Results []struct {
 				Title       string `json:"title"`
@@ -120,11 +125,16 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 		} `json:"web"`
 	}
 
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := json.Unmarshal(body, &raw); err != nil {
 		return "", fmt.Errorf("parse response: %w", err)
 	}
 
-	return s.formatResults(query, result.Web.Results, "Brave"), nil
+	results := make([]searchResult, len(raw.Web.Results))
+	for i, r := range raw.Web.Results {
+		results[i] = searchResult{Title: r.Title, URL: r.URL, Description: r.Description}
+	}
+
+	return formatSearchResults(query, results, "Brave"), nil
 }
 
 // duckDuckGoSearch scrapes DuckDuckGo HTML (no API key needed!)
@@ -135,22 +145,12 @@ func (s *Search) duckDuckGoSearch(ctx context.Context, query string, count int) 
 	)
 	c.SetRequestTimeout(30 * time.Second)
 
-	var results []struct {
-		Title       string
-		URL         string
-		Description string
-	}
+	var results []searchResult
 
-	// DuckDuckGo HTML search results
-	c.OnHTML(".result", func(e *colly.HTMLElement) {
-		if len(results) >= count {
+	appendResult := func(title, rawURL, snippet string) {
+		if len(results) >= count || title == "" || rawURL == "" {
 			return
 		}
-
-		title := strings.TrimSpace(e.ChildText(".result__title"))
-		rawURL := e.ChildAttr(".result__url", "href")
-		snippet := strings.TrimSpace(e.ChildText(".result__snippet"))
-
 		// Extract actual URL from DuckDuckGo redirect
 		actualURL := rawURL
 		if strings.Contains(rawURL, "uddg=") {
@@ -160,42 +160,25 @@ func (s *Search) duckDuckGoSearch(ctx context.Context, query string, count int) 
 				}
 			}
 		}
+		results = append(results, searchResult{Title: title, URL: actualURL, Description: snippet})
+	}
 
-		if title != "" && actualURL != "" {
-			results = append(results, struct {
-				Title       string
-				URL         string
-				Description string
-			}{title, actualURL, snippet})
-		}
+	// DuckDuckGo HTML search results
+	c.OnHTML(".result", func(e *colly.HTMLElement) {
+		appendResult(
+			strings.TrimSpace(e.ChildText(".result__title")),
+			e.ChildAttr(".result__url", "href"),
+			strings.TrimSpace(e.ChildText(".result__snippet")),
+		)
 	})
 
 	// Alternative selector for newer DDG layout
 	c.OnHTML(".result__body", func(e *colly.HTMLElement) {
-		if len(results) >= count {
-			return
-		}
-
-		title := strings.TrimSpace(e.ChildText("a.result__a"))
-		rawURL := e.ChildAttr("a.result__a", "href")
-		snippet := strings.TrimSpace(e.ChildText(".result__snippet"))
-
-		actualURL := rawURL
-		if strings.Contains(rawURL, "uddg=") {
-			if u, err := url.Parse(rawURL); err == nil {
-				if uddg := u.Query().Get("uddg"); uddg != "" {
-					actualURL = uddg
-				}
-			}
-		}
-
-		if title != "" && actualURL != "" {
-			results = append(results, struct {
-				Title       string
-				URL         string
-				Description string
-			}{title, actualURL, snippet})
-		}
+		appendResult(
+			strings.TrimSpace(e.ChildText("a.result__a")),
+			e.ChildAttr("a.result__a", "href"),
+			strings.TrimSpace(e.ChildText(".result__snippet")),
+		)
 	})
 
 	searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(query))
@@ -209,23 +192,11 @@ func (s *Search) duckDuckGoSearch(ctx context.Context, query string, count int) 
 		return fmt.Sprintf("🔍 No results found for: %s", query), nil
 	}
 
-	// Convert to interface for formatResults
-	interfaceResults := make([]struct {
-		Title       string
-		URL         string
-		Description string
-	}, len(results))
-	copy(interfaceResults, results)
-
-	return s.formatResultsGeneric(query, interfaceResults, "DuckDuckGo"), nil
+	return formatSearchResults(query, results, "DuckDuckGo"), nil
 }
 
-// formatResults formats Brave search results
-func (s *Search) formatResults(query string, results []struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Description string `json:"description"`
-}, source string) string {
+// formatSearchResults formats search results from any source.
+func formatSearchResults(query string, results []searchResult, source string) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("🔍 **Search: %s** (via %s)\n\n", query, source))
 
@@ -233,36 +204,7 @@ func (s *Search) formatResults(query string, results []struct {
 		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
 		sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
 		if r.Description != "" {
-			desc := r.Description
-			if len(desc) > 200 {
-				desc = desc[:200] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("   %s\n", desc))
-		}
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
-}
-
-// formatResultsGeneric formats generic search results
-func (s *Search) formatResultsGeneric(query string, results []struct {
-	Title       string
-	URL         string
-	Description string
-}, source string) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🔍 **Search: %s** (via %s)\n\n", query, source))
-
-	for i, r := range results {
-		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
-		sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
-		if r.Description != "" {
-			desc := r.Description
-			if len(desc) > 200 {
-				desc = desc[:200] + "..."
-			}
-			sb.WriteString(fmt.Sprintf("   %s\n", desc))
+			sb.WriteString(fmt.Sprintf("   %s\n", util.Truncate(r.Description, 200)))
 		}
 		sb.WriteString("\n")
 	}

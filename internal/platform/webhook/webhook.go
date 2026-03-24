@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kusa/magabot/internal/platform"
 	"github.com/kusa/magabot/internal/router"
 )
 
@@ -160,9 +161,8 @@ func (ft *failureTracker) clearFailures(key string) {
 
 // Server represents a webhook server
 type Server struct {
+	platform.Base
 	server         *http.Server
-	handler        router.MessageHandler
-	handlerMu      sync.RWMutex
 	logger         *slog.Logger
 	config         *Config
 	done           chan struct{}
@@ -309,12 +309,7 @@ func (s *Server) Send(chatID, message string) error {
 	return fmt.Errorf("webhook platform is receive-only")
 }
 
-// SetHandler sets the message handler
-func (s *Server) SetHandler(h router.MessageHandler) {
-	s.handlerMu.Lock()
-	s.handler = h
-	s.handlerMu.Unlock()
-}
+// SetHandler is provided by platform.Base.
 
 // cleanupNonces removes old nonces periodically
 func (s *Server) cleanupNonces() {
@@ -503,11 +498,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("webhook received", "user_id", userID, "ip", clientIP, "request_id", requestID)
 
 	// Process
-	s.handlerMu.RLock()
-	handler := s.handler
-	s.handlerMu.RUnlock()
-
-	if handler != nil {
+	if handler := s.GetHandler(); handler != nil {
 		response, err := handler(r.Context(), msg)
 		if err != nil {
 			s.logger.Warn("handler error", "error", err, "request_id", requestID)

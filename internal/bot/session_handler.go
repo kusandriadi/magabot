@@ -81,19 +81,7 @@ func (h *SessionHandler) listSessions(userID string) (string, error) {
 	sb.WriteString(fmt.Sprintf("📋 *Active Sessions* (%d)\n\n", len(sessions)))
 
 	for _, s := range sessions {
-		icon := "🔄"
-		switch s.Status {
-		case session.StatusComplete:
-			icon = "✅"
-		case session.StatusFailed:
-			icon = "❌"
-		case session.StatusPending:
-			icon = "⏳"
-		case session.StatusCanceled:
-			icon = "🚫"
-		}
-
-		sb.WriteString(fmt.Sprintf("%s `%s` [%s]\n", icon, s.ID[:12], s.Type))
+		sb.WriteString(fmt.Sprintf("%s `%s` [%s]\n", s.Status.Icon(), s.ID[:12], s.Type))
 		if s.Task != "" {
 			sb.WriteString(fmt.Sprintf("   📋 %s\n", util.Truncate(s.Task, 50)))
 		}
@@ -124,20 +112,7 @@ func (h *SessionHandler) sessionStatus(args []string) (string, error) {
 // formatSessionStatus formats session details
 func (h *SessionHandler) formatSessionStatus(s *session.Session) string {
 	var sb strings.Builder
-
-	icon := "🔄"
-	switch s.Status {
-	case session.StatusComplete:
-		icon = "✅"
-	case session.StatusFailed:
-		icon = "❌"
-	case session.StatusPending:
-		icon = "⏳"
-	case session.StatusCanceled:
-		icon = "🚫"
-	}
-
-	sb.WriteString(fmt.Sprintf("%s *Session Status*\n\n", icon))
+	sb.WriteString(fmt.Sprintf("%s *Session Status*\n\n", s.Status.Icon()))
 	sb.WriteString(fmt.Sprintf("ID: `%s`\n", s.ID))
 	sb.WriteString(fmt.Sprintf("Type: %s\n", s.Type))
 	sb.WriteString(fmt.Sprintf("Status: %s\n", s.Status))

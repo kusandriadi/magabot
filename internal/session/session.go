@@ -23,6 +23,22 @@ const (
 	StatusCanceled Status = "canceled"
 )
 
+// Icon returns an emoji icon representing the status.
+func (s Status) Icon() string {
+	switch s {
+	case StatusComplete:
+		return "✅"
+	case StatusFailed:
+		return "❌"
+	case StatusPending:
+		return "⏳"
+	case StatusCanceled:
+		return "🚫"
+	default:
+		return "🔄"
+	}
+}
+
 // Session represents a chat session or sub-task
 type Session struct {
 	ID          string                 `json:"id"`

@@ -14,6 +14,7 @@ import (
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/storage"
 	"github.com/kusa/magabot/internal/version"
+	"github.com/mdp/qrterminal/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -300,6 +301,39 @@ func cmdGenKey() {
 	key := security.GenerateKey()
 	fmt.Printf("Generated key: %s\n", key)
 	fmt.Println("Add this to your config.yaml under security.encryption_key")
+}
+
+// cmdQR displays the WhatsApp QR code for pairing
+func cmdQR() {
+	qrFile := filepath.Join(dataDir, "platform", "whatsapp", "qr.txt")
+	data, err := os.ReadFile(qrFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("❌ No QR code available.")
+			fmt.Println()
+			if !isRunning() {
+				fmt.Println("   Magabot is not running. Start it first: magabot start")
+			} else {
+				fmt.Println("   WhatsApp may already be paired, or not enabled.")
+				fmt.Println("   Run 'magabot status' to check.")
+			}
+			return
+		}
+		fmt.Fprintf(os.Stderr, "❌ Failed to read QR code: %v\n", err)
+		os.Exit(1)
+	}
+
+	code := strings.TrimSpace(string(data))
+	if code == "" {
+		fmt.Println("❌ QR code file is empty")
+		return
+	}
+
+	fmt.Println("📱 Scan this QR code with WhatsApp:")
+	fmt.Println()
+	qrterminal.GenerateHalfBlock(code, qrterminal.L, os.Stdout)
+	fmt.Println()
+	fmt.Println("   Open WhatsApp → Settings → Linked Devices → Link a Device")
 }
 
 // Helper functions

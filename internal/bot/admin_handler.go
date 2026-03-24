@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // AdminHandler handles admin commands from chat
@@ -118,16 +119,7 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 		}
 	}
 
-	groupIcon := "✅"
-	if !allowGroups {
-		groupIcon = "❌"
-	}
-	dmIcon := "✅"
-	if !allowDMs {
-		dmIcon = "❌"
-	}
-
-	sb.WriteString(fmt.Sprintf("Groups: %s | DMs: %s\n", groupIcon, dmIcon))
+	sb.WriteString(fmt.Sprintf("Groups: %s | DMs: %s\n", util.BoolIcon(allowGroups), util.BoolIcon(allowDMs)))
 	sb.WriteString(fmt.Sprintf("Admins: %d | Users: %d | Chats: %d\n", len(admins), len(users), len(chats)))
 
 	if isPlatformAdmin && len(admins) > 0 {

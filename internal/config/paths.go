@@ -49,6 +49,12 @@ func (c *Config) GetMainLogPath() string {
 	return filepath.Join(c.Paths.LogsDir, "magabot.log")
 }
 
+// GetPlatformDir returns the data directory for a specific platform.
+// e.g. GetPlatformDir("whatsapp") → "<dataDir>/platform/whatsapp"
+func (c *Config) GetPlatformDir(platform string) string {
+	return filepath.Join(c.Paths.DataDir, "platform", platform)
+}
+
 // GetBackupDir returns the backup directory path
 func (c *Config) GetBackupDir() string {
 	if c.Storage.Backup.Path != "" {

@@ -142,12 +142,7 @@ func (h *HeartbeatHandler) listChecks() string {
 	sb.WriteString("💓 *Configured Checks*\n\n")
 
 	for name, check := range checks {
-		icon := "✅"
-		if !check.Enabled {
-			icon = "❌"
-		}
-
-		sb.WriteString(fmt.Sprintf("%s %s - %v\n", icon, name, check.Interval))
+		sb.WriteString(fmt.Sprintf("%s %s - %v\n", util.BoolIcon(check.Enabled), name, check.Interval))
 		if check.Description != "" {
 			sb.WriteString(fmt.Sprintf("   %s\n", check.Description))
 		}

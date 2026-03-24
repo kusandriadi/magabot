@@ -152,7 +152,6 @@ type SlackConfig struct {
 // WhatsAppConfig for WhatsApp platform
 type WhatsAppConfig struct {
 	Enabled      bool     `yaml:"enabled"`
-	DBPath       string   `yaml:"db_path"` // SQLite database for whatsmeow session
 	Admins       []string `yaml:"admins"`
 	AllowedUsers []string `yaml:"allowed_users"`
 	AllowedChats []string `yaml:"allowed_chats"`

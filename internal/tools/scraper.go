@@ -10,6 +10,7 @@ import (
 
 	"github.com/gocolly/colly/v2"
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Scraper tool using Colly for web scraping
@@ -217,7 +218,7 @@ func (s *Scraper) scrapeLinks(ctx context.Context, targetURL, selector string) (
 		for i := 0; i < limit; i++ {
 			l := links[i]
 			if l.Text != "" {
-				sb.WriteString(fmt.Sprintf("• [%s](%s)\n", truncate(l.Text, 50), l.URL))
+				sb.WriteString(fmt.Sprintf("• [%s](%s)\n", util.Truncate(l.Text, 50), l.URL))
 			} else {
 				sb.WriteString(fmt.Sprintf("• %s\n", l.URL))
 			}
@@ -374,7 +375,7 @@ func (s *Scraper) DuckDuckGoSearch(ctx context.Context, query string, count int)
 			sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
 			sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
 			if r.Snippet != "" {
-				sb.WriteString(fmt.Sprintf("   %s\n", truncate(r.Snippet, 150)))
+				sb.WriteString(fmt.Sprintf("   %s\n", util.Truncate(r.Snippet, 150)))
 			}
 			sb.WriteString("\n")
 		}

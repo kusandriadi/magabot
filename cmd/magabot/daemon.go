@@ -491,7 +491,7 @@ func runDaemon() {
 	if cfg.Platforms.Telegram != nil && cfg.Platforms.Telegram.Enabled {
 		tg, err := telegram.New(&telegram.Config{
 			Token:        cfg.Platforms.Telegram.BotToken,
-			DownloadsDir: cfg.Paths.DownloadsDir,
+			DownloadsDir: filepath.Join(cfg.GetPlatformDir("telegram"), "downloads"),
 			Logger:       logger.With("platform", "telegram"),
 		})
 		if err != nil {
@@ -516,8 +516,8 @@ func runDaemon() {
 
 	if cfg.Platforms.WhatsApp != nil && cfg.Platforms.WhatsApp.Enabled {
 		wa, err := whatsapp.New(&whatsapp.Config{
-			DBPath: cfg.Platforms.WhatsApp.DBPath,
-			Logger: logger.With("platform", "whatsapp"),
+			DataDir: cfg.GetPlatformDir("whatsapp"),
+			Logger:  logger.With("platform", "whatsapp"),
 		})
 		if err != nil {
 			logger.Error("init whatsapp failed", "error", err)

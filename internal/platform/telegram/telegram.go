@@ -13,15 +13,15 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/kusa/magabot/internal/platform"
 	"github.com/kusa/magabot/internal/router"
 	"github.com/kusa/magabot/internal/util"
 )
 
 // Bot represents a Telegram bot
 type Bot struct {
+	platform.Base
 	api          *tgbotapi.BotAPI
-	handler      router.MessageHandler
-	handlerMu    sync.RWMutex
 	logger       *slog.Logger
 	downloadsDir string
 	updates      tgbotapi.UpdatesChannel
@@ -102,12 +102,7 @@ func (b *Bot) Send(chatID, message string) error {
 	return err
 }
 
-// SetHandler sets the message handler
-func (b *Bot) SetHandler(h router.MessageHandler) {
-	b.handlerMu.Lock()
-	b.handler = h
-	b.handlerMu.Unlock()
-}
+// SetHandler is provided by platform.Base.
 
 // processUpdates processes incoming updates
 func (b *Bot) processUpdates(ctx context.Context) {
@@ -229,47 +224,29 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		}
 	}
 
-	b.handlerMu.RLock()
-	handler := b.handler
-	b.handlerMu.RUnlock()
-
+	handler := b.GetHandler()
 	if handler == nil {
 		return
 	}
 
 	// Set up streaming callback — send new messages progressively (no editing)
-	var (
-		lastSend    time.Time
-		lastSentLen int // length of text already sent in previous messages
-		streamed    bool
-	)
-	const streamSendInterval = 2 * time.Second // throttle between sends
+	st := util.NewStreamTracker(2 * time.Second)
 
 	routerMsg.StreamCallback = func(text string) {
-		now := time.Now()
-
-		// Throttle sends
-		if now.Sub(lastSend) < streamSendInterval {
+		newPortion, ok := st.ShouldSend(text)
+		if !ok {
 			return
 		}
 
-		// Only send the new portion since last send
-		currentText := text[lastSentLen:]
-		if currentText == "" {
-			return
-		}
-
-		reply := tgbotapi.NewMessage(msg.Chat.ID, currentText)
-		if lastSentLen == 0 {
+		reply := tgbotapi.NewMessage(msg.Chat.ID, newPortion)
+		if st.IsFirstChunk() {
 			reply.ReplyToMessageID = msg.MessageID
 		}
 		if _, err := b.api.Send(reply); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
-		lastSentLen = len(text)
-		lastSend = now
-		streamed = true
+		st.MarkSent(len(text))
 	}
 
 	// Start periodic typing indicator (Telegram typing expires after ~5s)
@@ -308,20 +285,18 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 	}
 
 	// Send the remaining text not yet delivered during streaming
-	finalText := response
-	if lastSentLen > 0 && lastSentLen < len(response) {
-		finalText = response[lastSentLen:]
-	} else if lastSentLen >= len(response) {
-		return // everything was already sent during streaming
+	finalText, shouldSend := st.FinalText(response)
+	if !shouldSend {
+		return
 	}
 
 	reply := tgbotapi.NewMessage(msg.Chat.ID, finalText)
 	reply.ParseMode = "Markdown"
-	if !streamed {
+	if !st.Streamed() {
 		reply.ReplyToMessageID = msg.MessageID
 	}
 	if _, err := b.api.Send(reply); err != nil {
-		if streamed {
+		if st.Streamed() {
 			// Markdown parse may fail on partial chunk — retry without
 			reply.ParseMode = ""
 			if _, err := b.api.Send(reply); err != nil {

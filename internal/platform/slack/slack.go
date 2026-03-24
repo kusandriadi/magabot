@@ -8,7 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kusa/magabot/internal/platform"
 	"github.com/kusa/magabot/internal/router"
+	"github.com/kusa/magabot/internal/util"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
@@ -16,13 +18,12 @@ import (
 
 // Bot represents a Slack bot
 type Bot struct {
-	api       *slack.Client
-	socket    *socketmode.Client
-	handler   router.MessageHandler
-	handlerMu sync.RWMutex
-	logger    *slog.Logger
-	done      chan struct{}
-	wg        sync.WaitGroup
+	platform.Base
+	api    *slack.Client
+	socket *socketmode.Client
+	logger *slog.Logger
+	done   chan struct{}
+	wg     sync.WaitGroup
 }
 
 // Config for Slack bot
@@ -84,12 +85,7 @@ func (b *Bot) Send(chatID, message string) error {
 	return err
 }
 
-// SetHandler sets the message handler
-func (b *Bot) SetHandler(h router.MessageHandler) {
-	b.handlerMu.Lock()
-	b.handler = h
-	b.handlerMu.Unlock()
-}
+// SetHandler is provided by platform.Base.
 
 // processEvents processes socket mode events
 func (b *Bot) processEvents(ctx context.Context) {
@@ -142,10 +138,7 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 
 // handleMessage handles an incoming message
 func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
-	b.handlerMu.RLock()
-	handler := b.handler
-	b.handlerMu.RUnlock()
-
+	handler := b.GetHandler()
 	if handler == nil {
 		return
 	}
@@ -192,13 +185,6 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		}
 	}
 
-	// Set up streaming callback — send new messages progressively (no editing)
-	var (
-		lastSend    time.Time
-		lastSentLen int // length of text already sent in previous messages
-	)
-	const streamSendInterval = 2 * time.Second // throttle between sends
-
 	// Add typing indicator reaction (Slack doesn't support bot typing events)
 	typingRef := slack.ItemRef{
 		Channel:   ev.Channel,
@@ -209,29 +195,23 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		_ = b.api.RemoveReaction("hourglass_flowing_sand", typingRef)
 	}()
 
+	// Set up streaming callback — send new messages progressively (no editing)
+	st := util.NewStreamTracker(2 * time.Second)
+
 	msg.StreamCallback = func(text string) {
-		now := time.Now()
-
-		// Throttle sends
-		if now.Sub(lastSend) < streamSendInterval {
-			return
-		}
-
-		// Only send the new portion since last send
-		currentText := text[lastSentLen:]
-		if currentText == "" {
+		newPortion, ok := st.ShouldSend(text)
+		if !ok {
 			return
 		}
 
 		if _, _, err := b.api.PostMessage(ev.Channel,
-			slack.MsgOptionText(currentText, false),
+			slack.MsgOptionText(newPortion, false),
 			slack.MsgOptionTS(ev.TimeStamp),
 		); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
-		lastSentLen = len(text)
-		lastSend = now
+		st.MarkSent(len(text))
 	}
 
 	response, err := handler(ctx, msg)
@@ -245,11 +225,9 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 	}
 
 	// Send the remaining text not yet delivered during streaming
-	finalText := response
-	if lastSentLen > 0 && lastSentLen < len(response) {
-		finalText = response[lastSentLen:]
-	} else if lastSentLen >= len(response) {
-		return // everything was already sent during streaming
+	finalText, shouldSend := st.FinalText(response)
+	if !shouldSend {
+		return
 	}
 
 	if _, _, err := b.api.PostMessage(ev.Channel,
@@ -262,10 +240,7 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 
 // handleSlashCommand handles a slash command
 func (b *Bot) handleSlashCommand(ctx context.Context, cmd *slack.SlashCommand) {
-	b.handlerMu.RLock()
-	handler := b.handler
-	b.handlerMu.RUnlock()
-
+	handler := b.GetHandler()
 	if handler == nil {
 		return
 	}

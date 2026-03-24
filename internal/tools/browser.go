@@ -11,6 +11,7 @@ import (
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Browser tool using Rod for full browser automation
@@ -208,7 +209,7 @@ func (b *Browser) getLinks(ctx context.Context, targetURL, selector string) (str
 	for i := 0; i < limit; i++ {
 		l := links[i]
 		if l.Text != "" {
-			sb.WriteString(fmt.Sprintf("• %s: %s\n", truncate(l.Text, 50), l.URL))
+			sb.WriteString(fmt.Sprintf("• %s: %s\n", util.Truncate(l.Text, 50), l.URL))
 		} else {
 			sb.WriteString(fmt.Sprintf("• %s\n", l.URL))
 		}
@@ -371,7 +372,7 @@ func (b *Browser) Search(ctx context.Context, query string, count int) (string, 
 		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
 		sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
 		if r.Snippet != "" {
-			sb.WriteString(fmt.Sprintf("   %s\n", truncate(r.Snippet, 150)))
+			sb.WriteString(fmt.Sprintf("   %s\n", util.Truncate(r.Snippet, 150)))
 		}
 		sb.WriteString("\n")
 	}

@@ -76,6 +76,8 @@ func main() {
 		cmdSkill()
 	case "cron":
 		cmdCron()
+	case "qr":
+		cmdQR()
 	case "config":
 		cmdConfig()
 	case "update":
@@ -98,6 +100,7 @@ Commands:
   restart     Restart magabot daemon
   status      Show magabot status
   log         View logs (tail -f)
+  qr          Show WhatsApp QR code for pairing
   init        Quick setup (auto-detects env vars, zero prompts)
   setup       Interactive setup wizard (detailed configuration)
   reset       Reset config (keep platform connections)

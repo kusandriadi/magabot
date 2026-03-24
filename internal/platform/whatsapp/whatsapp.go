@@ -11,7 +11,6 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -20,41 +19,43 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/kusa/magabot/internal/platform"
 	"github.com/kusa/magabot/internal/router"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // Bot represents a WhatsApp bot using whatsmeow
 type Bot struct {
-	client    *whatsmeow.Client
+	platform.Base
+	client  *whatsmeow.Client
 	container *sqlstore.Container
-	handler   router.MessageHandler
-	handlerMu sync.RWMutex
-	logger    *slog.Logger
-	dbPath    string
-	done      chan struct{}
-	mu        sync.RWMutex // protects client
-	wg        sync.WaitGroup
+	logger  *slog.Logger
+	dataDir string // platform-specific data dir (e.g. data/platform/whatsapp)
+	done    chan struct{}
+	mu      sync.RWMutex // protects client
+	wg      sync.WaitGroup
 }
 
 // Config for WhatsApp bot
 type Config struct {
-	DBPath string // Path to SQLite database for whatsmeow session
-	Logger *slog.Logger
+	DataDir string // Platform data directory (DB + QR file live here)
+	Logger  *slog.Logger
 }
 
 // New creates a new WhatsApp bot
 func New(cfg *Config) (*Bot, error) {
-	dbPath := cfg.DBPath
-	if dbPath == "" {
+	dataDir := cfg.DataDir
+	if dataDir == "" {
 		home, _ := os.UserHomeDir()
-		dbPath = filepath.Join(home, ".magabot", "whatsapp.db")
+		dataDir = filepath.Join(home, ".magabot", "data", "platform", "whatsapp")
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
-		return nil, fmt.Errorf("create db dir: %w", err)
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return nil, fmt.Errorf("create data dir: %w", err)
 	}
 
+	dbPath := filepath.Join(dataDir, "whatsapp.db")
 	dbURI := fmt.Sprintf("file:%s?_foreign_keys=on", dbPath)
 	container, err := sqlstore.New(context.Background(), "sqlite3", dbURI, waLog.Noop)
 	if err != nil {
@@ -64,7 +65,7 @@ func New(cfg *Config) (*Bot, error) {
 	return &Bot{
 		container: container,
 		logger:    cfg.Logger,
-		dbPath:    dbPath,
+		dataDir:   dataDir,
 		done:      make(chan struct{}),
 	}, nil
 }
@@ -106,12 +107,20 @@ func (b *Bot) Start(ctx context.Context) error {
 			for evt := range qrChan {
 				switch evt.Event {
 				case "code":
-					b.logger.Info("scan QR code to link WhatsApp device")
-					qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stderr)
+					b.logger.Info("scan QR code to link WhatsApp device, run 'magabot qr' to display")
+					// Save QR code to file so CLI can display it without restart
+					qrFile := filepath.Join(b.dataDir, "qr.txt")
+					_ = os.WriteFile(qrFile, []byte(evt.Code), 0600)
 				case "success":
 					b.logger.Info("WhatsApp pairing successful")
+					// Clean up QR file
+					qrFile := filepath.Join(b.dataDir, "qr.txt")
+					_ = os.Remove(qrFile)
 				case "timeout":
 					b.logger.Warn("QR code expired, reconnect to get a new one")
+					// Clean up expired QR file
+					qrFile := filepath.Join(b.dataDir, "qr.txt")
+					_ = os.Remove(qrFile)
 				}
 			}
 		}()
@@ -122,7 +131,7 @@ func (b *Bot) Start(ctx context.Context) error {
 		}
 	}
 
-	b.logger.Info("whatsapp client started", "db", b.dbPath)
+	b.logger.Info("whatsapp client started", "data_dir", b.dataDir)
 	return nil
 }
 
@@ -163,12 +172,7 @@ func (b *Bot) Send(chatID, message string) error {
 	return err
 }
 
-// SetHandler sets the message handler
-func (b *Bot) SetHandler(h router.MessageHandler) {
-	b.handlerMu.Lock()
-	b.handler = h
-	b.handlerMu.Unlock()
-}
+// SetHandler is provided by platform.Base.
 
 // IsConnected returns connection status
 func (b *Bot) IsConnected() bool {
@@ -194,10 +198,7 @@ func (b *Bot) eventHandler(evt interface{}) {
 
 // handleMessage processes an incoming WhatsApp message
 func (b *Bot) handleMessage(evt *events.Message) {
-	b.handlerMu.RLock()
-	handler := b.handler
-	b.handlerMu.RUnlock()
-
+	handler := b.GetHandler()
 	if handler == nil {
 		return
 	}
@@ -245,40 +246,26 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 
 	// Set up streaming callback — send new messages progressively (no editing)
-	var (
-		lastSend    time.Time
-		lastSentLen int // length of text already sent in previous messages
-		streamed    bool
-	)
-	const streamSendInterval = 3 * time.Second // throttle between sends
+	st := util.NewStreamTracker(3 * time.Second)
 
 	jid := evt.Info.Chat
 	msg.StreamCallback = func(text string) {
 		if client == nil || !client.IsConnected() {
 			return
 		}
-		now := time.Now()
 
-		// Throttle sends
-		if now.Sub(lastSend) < streamSendInterval {
-			return
-		}
-
-		// Only send the new portion since last send
-		currentText := text[lastSentLen:]
-		if currentText == "" {
+		newPortion, ok := st.ShouldSend(text)
+		if !ok {
 			return
 		}
 
 		if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
-			Conversation: proto.String(currentText),
+			Conversation: proto.String(newPortion),
 		}); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
-		lastSentLen = len(text)
-		lastSend = now
-		streamed = true
+		st.MarkSent(len(text))
 	}
 
 	response, err := handler(ctx, msg)
@@ -297,14 +284,12 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 
 	// Send the remaining text not yet delivered during streaming
-	finalText := response
-	if lastSentLen > 0 && lastSentLen < len(response) {
-		finalText = response[lastSentLen:]
-	} else if lastSentLen >= len(response) {
-		return // everything was already sent during streaming
+	finalText, shouldSend := st.FinalText(response)
+	if !shouldSend {
+		return
 	}
 
-	if streamed {
+	if st.Streamed() {
 		// Send remainder as new message
 		if client != nil && client.IsConnected() {
 			if _, err := client.SendMessage(ctx, jid, &waE2E.Message{

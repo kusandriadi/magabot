@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/cron"
+	"github.com/kusa/magabot/internal/util"
 )
 
 // CronHandler handles cron-related bot commands
@@ -64,11 +65,6 @@ func (h *CronHandler) listJobs(args []string) (string, error) {
 		}
 		count++
 
-		status := "✅"
-		if !job.Enabled {
-			status = "❌"
-		}
-
 		channels := make([]string, len(job.Channels))
 		for i, ch := range job.Channels {
 			channels[i] = ch.Type
@@ -79,7 +75,7 @@ func (h *CronHandler) listJobs(args []string) (string, error) {
 			lastRun = job.LastRunAt.Format("01/02 15:04")
 		}
 
-		sb.WriteString(fmt.Sprintf("%s `%s` *%s*\n", status, job.ID, job.Name))
+		sb.WriteString(fmt.Sprintf("%s `%s` *%s*\n", util.BoolIcon(job.Enabled), job.ID, job.Name))
 		sb.WriteString(fmt.Sprintf("   📅 `%s`\n", job.Schedule))
 		sb.WriteString(fmt.Sprintf("   📨 %s | ⏱️ %s\n\n", strings.Join(channels, ", "), lastRun))
 	}
@@ -304,9 +300,9 @@ func (h *CronHandler) showJob(args []string) (string, error) {
 		return fmt.Sprintf("❌ Job not found: %s", jobID), nil
 	}
 
-	status := "✅ Enabled"
+	status := util.BoolIcon(job.Enabled) + " Enabled"
 	if !job.Enabled {
-		status = "❌ Disabled"
+		status = util.BoolIcon(job.Enabled) + " Disabled"
 	}
 
 	var sb strings.Builder

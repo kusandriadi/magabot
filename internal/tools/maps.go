@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -85,9 +84,8 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return "", fmt.Errorf("read search response: %w", err)
 	}
@@ -127,7 +125,7 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	sb.WriteString(fmt.Sprintf("📍 **Places found for: %s**\n\n", query))
 
 	for i, r := range results {
-		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, truncate(r.DisplayName, 80)))
+		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, util.Truncate(r.DisplayName, 80)))
 
 		// Type info
 		if r.Type != "" {
@@ -139,7 +137,7 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 			sb.WriteString(fmt.Sprintf("   📞 %s\n", r.Extratags.Phone))
 		}
 		if r.Extratags.Website != "" {
-			sb.WriteString(fmt.Sprintf("   🌐 %s\n", truncate(r.Extratags.Website, 50)))
+			sb.WriteString(fmt.Sprintf("   🌐 %s\n", util.Truncate(r.Extratags.Website, 50)))
 		}
 		if r.Extratags.Opening != "" {
 			sb.WriteString(fmt.Sprintf("   🕐 %s\n", r.Extratags.Opening))
@@ -177,9 +175,8 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return "", fmt.Errorf("read reverse geocode response: %w", err)
 	}
@@ -220,9 +217,3 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 	return sb.String(), nil
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}

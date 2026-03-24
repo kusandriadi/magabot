@@ -4,7 +4,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -80,9 +79,8 @@ func (w *Weather) Execute(ctx context.Context, params map[string]string) (string
 	if err != nil {
 		return "", fmt.Errorf("weather request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return "", fmt.Errorf("read weather response: %w", err)
 	}
@@ -115,9 +113,8 @@ func (w *Weather) GetForecast(ctx context.Context, location string, days int) (s
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return "", fmt.Errorf("read forecast response: %w", err)
 	}
