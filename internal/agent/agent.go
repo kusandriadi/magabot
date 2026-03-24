@@ -42,6 +42,7 @@ type Config struct {
 	Shortcuts      map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
 	DiscoverDepth  int               // auto-discover search depth (default 3)
 	GetCLISettings CLISettings       // optional: returns current model+effort for Claude CLI
+	PlanDelegate   bool              // plan first, then delegate to subagents
 }
 
 // Session represents an active agent session tied to a chat.
@@ -301,9 +302,19 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 	var allOutput []string
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+		var attemptCtx context.Context
+		var cancel context.CancelFunc
+		var idle *time.Timer
 
-		args := buildArgs(sess, message, media, m.config.GetCLISettings)
+		if streaming {
+			// Idle-based timeout: resets every time Claude sends output.
+			attemptCtx, cancel = context.WithCancel(ctx)
+			idle = time.AfterFunc(timeout, cancel)
+		} else {
+			attemptCtx, cancel = context.WithTimeout(ctx, timeout)
+		}
+
+		args := buildArgs(sess, message, media, m.config.GetCLISettings, m.config.PlanDelegate)
 		if streaming {
 			for i, arg := range args {
 				if arg == "--output-format" && i+1 < len(args) {
@@ -334,10 +345,12 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 			var pipe io.ReadCloser
 			pipe, err = cmd.StdoutPipe()
 			if err != nil {
+				idle.Stop()
 				cancel()
 				return "", fmt.Errorf("stdout pipe: %w", err)
 			}
 			if err = cmd.Start(); err != nil {
+				idle.Stop()
 				cancel()
 				return "", fmt.Errorf("start agent: %w", err)
 			}
@@ -345,7 +358,8 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 			if templates == nil {
 				templates = DefaultTemplates
 			}
-			partial = m.readStreamEvents(pipe, onProgress, templates)
+			heartbeat := func() { idle.Reset(timeout) }
+			partial = m.readStreamEvents(pipe, onProgress, heartbeat, templates)
 			err = cmd.Wait()
 		} else {
 			var stdout bytes.Buffer
@@ -356,6 +370,9 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 		// Save timeout state BEFORE cancel — cancel() always sets Err() non-nil
 		timedOut := attemptCtx.Err() != nil
 		cancel()
+		if idle != nil {
+			idle.Stop()
+		}
 
 		// Always increment so next attempt/call uses --continue
 		sess.mu.Lock()
@@ -416,8 +433,35 @@ func (s *Session) GetMsgCount() int {
 	return s.MsgCount
 }
 
+// planDelegatePrompt instructs Claude to plan first, then delegate to subagents.
+const planDelegatePrompt = `Decide whether a task needs planning:
+
+This workflow is ONLY for code/engineering tasks that modify the codebase.
+DO plan: multi-file changes, refactors, new features, architecture changes, anything that touches 3+ files or requires understanding multiple parts of the codebase.
+SKIP plan (just do it): non-coding requests (travel, writing, general questions, etc.), single-file fixes, simple bugs, one-liner changes, explanations, code lookups.
+
+For tasks that need planning, follow this workflow:
+
+PHASE 1 — PLAN (do this now, then STOP):
+1. Analyze the codebase to understand what needs to change. Use subagents to explore in parallel when multiple areas need investigation; do it yourself for smaller scopes.
+2. Synthesize findings into a concise numbered plan.
+3. Output the plan and STOP. Do NOT proceed to implementation yet. End your response asking for confirmation with a (y/n) hint, in the same language the user is using.
+
+PHASE 2 — USER CONFIRMATION:
+Based on the user's intent (in whatever language they use):
+- Confirms → proceed to Phase 3.
+- Declines with feedback → revise the plan accordingly, output the updated plan, and ask for confirmation again.
+- Wants to stop/cancel entirely → acknowledge and end. Do not continue.
+
+PHASE 3 — IMPLEMENT (only after user confirms):
+1. Implement the plan. Use subagents for independent steps that can run in parallel; do sequential/dependent steps yourself.
+2. After implementation, build/test to confirm everything works.
+
+When to use subagents: independent work that can run in parallel (e.g. editing unrelated files, exploring separate packages, running different checks).
+When NOT to use subagents: sequential/dependent changes, small scope (1-2 files), or when order matters.`
+
 // buildArgs constructs CLI arguments for the given agent and message.
-func buildArgs(sess *Session, message string, media []string, getCLI CLISettings) []string {
+func buildArgs(sess *Session, message string, media []string, getCLI CLISettings, planDelegate bool) []string {
 	// Prepend file references so the agent can read them
 	if len(media) > 0 {
 		var parts []string
@@ -437,6 +481,9 @@ func buildArgs(sess *Session, message string, media []string, getCLI CLISettings
 		args := []string{"-p", message, "--output-format", "text", "--dangerously-skip-permissions"}
 		if count > 0 {
 			args = append(args, "--continue")
+		}
+		if planDelegate && count == 0 {
+			args = append(args, "--append-system-prompt", planDelegatePrompt)
 		}
 		// Apply current model/effort from /model and /effort commands
 		if getCLI != nil {
@@ -517,7 +564,9 @@ var DefaultTemplates = map[string]string{
 
 // readStreamEvents reads Claude's stream-json output, sends progress notifications
 // for tool-use events, and returns the final result text.
-func (m *Manager) readStreamEvents(r io.Reader, onProgress func(string), templates map[string]string) string {
+// When heartbeat is non-nil it is called on every parsed event so the caller
+// can reset an idle timer.
+func (m *Manager) readStreamEvents(r io.Reader, onProgress func(string), heartbeat func(), templates map[string]string) string {
 	scanner := bufio.NewScanner(r)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, maxOutputBytes)
@@ -525,12 +574,16 @@ func (m *Manager) readStreamEvents(r io.Reader, onProgress func(string), templat
 	var result string
 	var textContent strings.Builder
 	var lastNotify time.Time
-	const notifyInterval = 3 * time.Second
+	var lastMsg string
+	const notifyInterval = 30 * time.Second
 
 	for scanner.Scan() {
 		var evt streamEvent
 		if err := json.Unmarshal(scanner.Bytes(), &evt); err != nil {
 			continue
+		}
+		if heartbeat != nil {
+			heartbeat()
 		}
 
 		switch evt.Type {
@@ -542,8 +595,12 @@ func (m *Manager) readStreamEvents(r io.Reader, onProgress func(string), templat
 				switch block.Type {
 				case "tool_use":
 					if time.Since(lastNotify) >= notifyInterval {
-						onProgress(formatToolUse(block.Name, block.Input, templates))
-						lastNotify = time.Now()
+						msg := formatToolUse(block.Name, block.Input, templates)
+						if msg != lastMsg {
+							onProgress(msg)
+							lastNotify = time.Now()
+							lastMsg = msg
+						}
 					}
 				case "text":
 					textContent.WriteString(block.Text)

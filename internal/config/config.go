@@ -360,6 +360,7 @@ type AgentConfig struct {
 	MaxRetries    int               `yaml:"max_retries"`    // auto-retry on timeout, default 2
 	Shortcuts     map[string]string `yaml:"shortcuts"`      // directory shortcuts, e.g. "myproject": "~/code/myproject"
 	DiscoverDepth int               `yaml:"discover_depth"` // auto-discover search depth (default 3)
+	PlanDelegate  bool              `yaml:"plan_delegate"`  // plan first, then delegate to subagents
 }
 
 // HooksFile is the top-level structure for config-hooks.yml

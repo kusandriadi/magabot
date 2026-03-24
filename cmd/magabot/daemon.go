@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kusa/magabot/internal/agent"
@@ -274,6 +275,7 @@ func runDaemon() {
 		MaxRetries:    cfg.Agent.MaxRetries,
 		Shortcuts:     cfg.Agent.Shortcuts,
 		DiscoverDepth: cfg.Agent.DiscoverDepth,
+		PlanDelegate:  cfg.Agent.PlanDelegate,
 		GetCLISettings: func() (string, string) {
 			model := llmRouter.GetModel()
 			var effort string
@@ -1476,10 +1478,22 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	}
 	templates := sess.Templates
 
-	// Send periodic status updates so user knows agent is still working
+	// Wrap notify to track last send time so ticker can coordinate.
+	var progressMu sync.Mutex
+	var lastProgressAt time.Time
+
+	wrappedNotify := func(text string) {
+		progressMu.Lock()
+		lastProgressAt = time.Now()
+		progressMu.Unlock()
+		notify(text)
+	}
+
+	// Send periodic status updates so user knows agent is still working.
+	// Only fires if no tool-use notification was sent recently.
 	statusDone := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
 		start := time.Now()
 		for {
@@ -1489,6 +1503,12 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				progressMu.Lock()
+				recentNotify := time.Since(lastProgressAt) < 90*time.Second
+				progressMu.Unlock()
+				if recentNotify {
+					continue // tool notification was sent recently, skip
+				}
 				elapsed := time.Since(start).Truncate(time.Second)
 				t := templates["still_working"]
 				if t == "" {
@@ -1499,7 +1519,7 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		}
 	}()
 
-	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, notify)
+	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify)
 	close(statusDone)
 	if err != nil {
 		if output != "" {
