@@ -696,6 +696,10 @@ logging:
   file: "%s"
   redact_messages: true
 
+# Session settings
+session:
+  max_history: 200
+
 # LLM Providers
 llm:
   default: "%s"
@@ -704,7 +708,8 @@ llm:
     You are a helpful AI assistant. Be concise and friendly.
   
   max_input_length: 10000
-  timeout: 60
+  timeout: 120
+  max_context_chars: 250000
   rate_limit: 10
   
   anthropic:
@@ -714,13 +719,19 @@ llm:
     model: "claude-sonnet-4-6"
     max_tokens: 4096
     temperature: 0.7
-  
+    agent:
+      timeout: 300
+      max_retries: 2
+
   openai:
     enabled: %t
     api_key: "%s"
     model: "gpt-4o"
     max_tokens: 4096
     temperature: 0.7
+    agent:
+      timeout: 300
+      max_retries: 2
   
   gemini:
     enabled: %t

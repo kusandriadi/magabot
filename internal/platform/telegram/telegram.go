@@ -237,44 +237,39 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
-	// Set up streaming callback for progressive message editing
+	// Set up streaming callback — send new messages progressively (no editing)
 	var (
-		sentMsgID int
-		lastEdit  time.Time
-		lastText  string
+		lastSend    time.Time
+		lastSentLen int // length of text already sent in previous messages
+		streamed    bool
 	)
-	const streamEditInterval = 1500 * time.Millisecond
+	const streamSendInterval = 2 * time.Second // throttle between sends
 
 	routerMsg.StreamCallback = func(text string) {
-		if text == lastText {
-			return
-		}
-		lastText = text
 		now := time.Now()
 
-		if sentMsgID == 0 {
-			// First chunk — send new message (no Markdown to avoid partial parse errors)
-			reply := tgbotapi.NewMessage(msg.Chat.ID, text)
-			reply.ReplyToMessageID = msg.MessageID
-			sent, err := b.api.Send(reply)
-			if err != nil {
-				b.logger.Debug("stream: send initial failed", "error", err)
-				return
-			}
-			sentMsgID = sent.MessageID
-			lastEdit = now
+		// Throttle sends
+		if now.Sub(lastSend) < streamSendInterval {
 			return
 		}
 
-		// Throttle edits to avoid Telegram rate limits
-		if now.Sub(lastEdit) < streamEditInterval {
+		// Only send the new portion since last send
+		currentText := text[lastSentLen:]
+		if currentText == "" {
 			return
 		}
-		edit := tgbotapi.NewEditMessageText(msg.Chat.ID, sentMsgID, text)
-		if _, err := b.api.Send(edit); err != nil {
-			b.logger.Debug("stream: edit failed", "error", err)
+
+		reply := tgbotapi.NewMessage(msg.Chat.ID, currentText)
+		if lastSentLen == 0 {
+			reply.ReplyToMessageID = msg.MessageID
 		}
-		lastEdit = now
+		if _, err := b.api.Send(reply); err != nil {
+			b.logger.Debug("stream: send failed", "error", err)
+			return
+		}
+		lastSentLen = len(text)
+		lastSend = now
+		streamed = true
 	}
 
 	// Send typing indicator
@@ -293,23 +288,27 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
-	if sentMsgID != 0 {
-		// Streaming happened — do final edit with Markdown
-		edit := tgbotapi.NewEditMessageText(msg.Chat.ID, sentMsgID, response)
-		edit.ParseMode = "Markdown"
-		if _, err := b.api.Send(edit); err != nil {
-			// Markdown parse failed — retry without parse mode
-			edit.ParseMode = ""
-			if _, err := b.api.Send(edit); err != nil {
-				b.logger.Error("stream: final edit failed", "error", err)
-			}
-		}
-	} else {
-		// No streaming (command, agent, etc.) — send as before
-		reply := tgbotapi.NewMessage(msg.Chat.ID, response)
-		reply.ParseMode = "Markdown"
+	// Send the remaining text not yet delivered during streaming
+	finalText := response
+	if lastSentLen > 0 && lastSentLen < len(response) {
+		finalText = response[lastSentLen:]
+	} else if lastSentLen >= len(response) {
+		return // everything was already sent during streaming
+	}
+
+	reply := tgbotapi.NewMessage(msg.Chat.ID, finalText)
+	reply.ParseMode = "Markdown"
+	if !streamed {
 		reply.ReplyToMessageID = msg.MessageID
-		if _, err := b.api.Send(reply); err != nil {
+	}
+	if _, err := b.api.Send(reply); err != nil {
+		if streamed {
+			// Markdown parse may fail on partial chunk — retry without
+			reply.ParseMode = ""
+			if _, err := b.api.Send(reply); err != nil {
+				b.logger.Error("stream: send final failed", "error", err)
+			}
+		} else {
 			b.logger.Error("send failed", "error", err)
 		}
 	}

@@ -244,47 +244,41 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 	}
 
-	// Set up streaming callback for progressive message editing
+	// Set up streaming callback — send new messages progressively (no editing)
 	var (
-		sentMsgID types.MessageID
-		lastEdit  time.Time
-		lastText  string
+		lastSend    time.Time
+		lastSentLen int // length of text already sent in previous messages
+		streamed    bool
 	)
-	const streamEditInterval = 3 * time.Second // WhatsApp edits are heavier; throttle more
+	const streamSendInterval = 3 * time.Second // throttle between sends
 
 	jid := evt.Info.Chat
 	msg.StreamCallback = func(text string) {
-		if text == lastText || client == nil || !client.IsConnected() {
+		if client == nil || !client.IsConnected() {
 			return
 		}
-		lastText = text
 		now := time.Now()
 
-		if sentMsgID == "" {
-			// First chunk — send new message, capture ID for editing
-			resp, err := client.SendMessage(ctx, jid, &waE2E.Message{
-				Conversation: proto.String(text),
-			})
-			if err != nil {
-				b.logger.Debug("stream: send initial failed", "error", err)
-				return
-			}
-			sentMsgID = resp.ID
-			lastEdit = now
+		// Throttle sends
+		if now.Sub(lastSend) < streamSendInterval {
 			return
 		}
 
-		// Throttle edits
-		if now.Sub(lastEdit) < streamEditInterval {
+		// Only send the new portion since last send
+		currentText := text[lastSentLen:]
+		if currentText == "" {
 			return
 		}
-		editMsg := client.BuildEdit(jid, sentMsgID, &waE2E.Message{
-			Conversation: proto.String(text),
-		})
-		if _, err := client.SendMessage(ctx, jid, editMsg); err != nil {
-			b.logger.Debug("stream: edit failed", "error", err)
+
+		if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
+			Conversation: proto.String(currentText),
+		}); err != nil {
+			b.logger.Debug("stream: send failed", "error", err)
+			return
 		}
-		lastEdit = now
+		lastSentLen = len(text)
+		lastSend = now
+		streamed = true
 	}
 
 	response, err := handler(ctx, msg)
@@ -302,13 +296,22 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		return
 	}
 
-	if sentMsgID != "" {
-		// Streaming happened — do final edit with complete text
-		editMsg := client.BuildEdit(jid, sentMsgID, &waE2E.Message{
-			Conversation: proto.String(response),
-		})
-		if _, err := client.SendMessage(ctx, jid, editMsg); err != nil {
-			b.logger.Error("stream: final edit failed", "error", err)
+	// Send the remaining text not yet delivered during streaming
+	finalText := response
+	if lastSentLen > 0 && lastSentLen < len(response) {
+		finalText = response[lastSentLen:]
+	} else if lastSentLen >= len(response) {
+		return // everything was already sent during streaming
+	}
+
+	if streamed {
+		// Send remainder as new message
+		if client != nil && client.IsConnected() {
+			if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
+				Conversation: proto.String(finalText),
+			}); err != nil {
+				b.logger.Error("stream: send final failed", "error", err)
+			}
 		}
 	} else {
 		// No streaming (command, agent, etc.) — send as before

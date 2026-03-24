@@ -60,25 +60,27 @@ var (
 
 // Router manages LLM clients
 type Router struct {
-	clients       map[string]*allm.Client
-	mainName      string
-	systemPrompt  string
-	maxInput      int
-	timeout       time.Duration
-	rateLimiter   *rateLimiter
-	logger        *slog.Logger
-	mu            sync.RWMutex
-	promptCaching bool
+	clients        map[string]*allm.Client
+	mainName       string
+	systemPrompt   string
+	maxInput       int
+	maxContextChars int
+	timeout        time.Duration
+	rateLimiter    *rateLimiter
+	logger         *slog.Logger
+	mu             sync.RWMutex
+	promptCaching  bool
 }
 
 // Config for LLM router
 type Config struct {
-	Main         string
-	SystemPrompt string
-	MaxInput     int
-	Timeout      time.Duration
-	RateLimit    int // requests per minute per user
-	Logger       *slog.Logger
+	Main            string
+	SystemPrompt    string
+	MaxInput        int
+	MaxContextChars int           // max total chars sent to LLM; 0 = default 250000
+	Timeout         time.Duration
+	RateLimit       int // requests per minute per user
+	Logger          *slog.Logger
 }
 
 // NewRouter creates a new LLM router
@@ -86,8 +88,11 @@ func NewRouter(cfg *Config) *Router {
 	if cfg.MaxInput == 0 {
 		cfg.MaxInput = 10000
 	}
+	if cfg.MaxContextChars == 0 {
+		cfg.MaxContextChars = defaultMaxContextChars
+	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 60 * time.Second
+		cfg.Timeout = 120 * time.Second
 	}
 	if cfg.RateLimit == 0 {
 		cfg.RateLimit = 10
@@ -99,13 +104,14 @@ func NewRouter(cfg *Config) *Router {
 	}
 
 	return &Router{
-		clients:      make(map[string]*allm.Client),
-		mainName:     cfg.Main,
-		systemPrompt: cfg.SystemPrompt,
-		maxInput:     cfg.MaxInput,
-		timeout:      cfg.Timeout,
-		rateLimiter:  newRateLimiter(cfg.RateLimit),
-		logger:       logger,
+		clients:         make(map[string]*allm.Client),
+		mainName:        cfg.Main,
+		systemPrompt:    cfg.SystemPrompt,
+		maxInput:        cfg.MaxInput,
+		maxContextChars: cfg.MaxContextChars,
+		timeout:         cfg.Timeout,
+		rateLimiter:     newRateLimiter(cfg.RateLimit),
+		logger:          logger,
 	}
 }
 
@@ -210,12 +216,28 @@ func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, 
 	return resp, nil
 }
 
+// defaultMaxContextChars is the safety limit for total conversation context.
+// ~62k tokens — fits comfortably in Claude (200k) and GPT-4o (128k).
+const defaultMaxContextChars = 250_000
+
 // buildMessages converts user messages to allm messages with system prompt
 func (r *Router) buildMessages(messages []Message) []allm.Message {
 	r.mu.RLock()
 	systemPrompt := r.systemPrompt
 	promptCaching := r.promptCaching
 	r.mu.RUnlock()
+
+	// Trim conversation history to prevent context overflow.
+	// Drops oldest messages first, always keeps the last message (current user input).
+	origLen := len(messages)
+	messages = trimHistory(messages, len(systemPrompt), r.maxContextChars)
+	if len(messages) < origLen {
+		r.logger.Info("trimmed conversation history",
+			"original_messages", origLen,
+			"kept_messages", len(messages),
+			"dropped", origLen-len(messages),
+		)
+	}
 
 	result := make([]allm.Message, 0, len(messages)+1)
 
@@ -232,6 +254,25 @@ func (r *Router) buildMessages(messages []Message) []allm.Message {
 	result = append(result, messages...)
 
 	return result
+}
+
+// trimHistory removes oldest messages when total content exceeds maxChars.
+// Always preserves the last message (the current user input).
+func trimHistory(messages []Message, systemPromptLen, maxChars int) []Message {
+	total := systemPromptLen
+	for _, m := range messages {
+		total += len(m.Content)
+	}
+	if total <= maxChars {
+		return messages
+	}
+
+	// Drop oldest messages until under limit; always keep last (current user message)
+	for len(messages) > 1 && total > maxChars {
+		total -= len(messages[0].Content)
+		messages = messages[1:]
+	}
+	return messages
 }
 
 // StreamChat streams a chat response with idle timeout.

@@ -73,6 +73,10 @@ logging:
   file: "data/magabot.log"
   redact_messages: true
 
+# Session settings
+session:
+  max_history: 200  # max messages per session (user + assistant combined)
+
 # LLM Configuration
 llm:
   main: "anthropic"
@@ -82,8 +86,9 @@ llm:
     Jawab dengan singkat dan jelas dalam bahasa Indonesia.
   
   max_input_length: 10000
-  timeout: 60
-  rate_limit: 10  # requests per minute per user
+  timeout: 120              # seconds; idle timeout per chunk during streaming
+  max_context_chars: 250000 # max total chars sent to LLM; trims oldest messages if exceeded
+  rate_limit: 10            # requests per minute per user
   
   # Anthropic (Claude)
   # Two modes:
@@ -104,7 +109,10 @@ llm:
     model: "claude-sonnet-4-6"
     max_tokens: 4096
     temperature: 0.7
-  
+    agent:
+      timeout: 300      # seconds per attempt
+      max_retries: 2    # auto-retry on timeout
+
   # OpenAI (GPT)
   openai:
     enabled: false
@@ -112,6 +120,9 @@ llm:
     model: "gpt-4o"
     max_tokens: 4096
     temperature: 0.7
+    agent:
+      timeout: 300
+      max_retries: 2
   
   # Google Gemini
   gemini:

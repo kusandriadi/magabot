@@ -132,12 +132,13 @@ func runDaemon() {
 
 	// Initialize LLM router
 	llmCfg := &llm.Config{
-		Main:         cfg.LLM.Main,
-		SystemPrompt: cfg.LLM.SystemPrompt,
-		MaxInput:     cfg.LLM.MaxInputLength,
-		Timeout:      time.Duration(cfg.LLM.Timeout) * time.Second,
-		RateLimit:    cfg.LLM.RateLimit,
-		Logger:       logger.With("component", "llm"),
+		Main:            cfg.LLM.Main,
+		SystemPrompt:    cfg.LLM.SystemPrompt,
+		MaxInput:        cfg.LLM.MaxInputLength,
+		MaxContextChars: cfg.LLM.MaxContextChars,
+		Timeout:         time.Duration(cfg.LLM.Timeout) * time.Second,
+		RateLimit:       cfg.LLM.RateLimit,
+		Logger:          logger.With("component", "llm"),
 	}
 	llmRouter := llm.NewRouter(llmCfg)
 
@@ -248,7 +249,7 @@ func runDaemon() {
 	// Initialize session manager
 	maxHistory := cfg.Session.MaxHistory
 	if maxHistory <= 0 {
-		maxHistory = 50
+		maxHistory = 200
 	}
 
 	// Initialize message router

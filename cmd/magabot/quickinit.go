@@ -216,12 +216,17 @@ func buildInitConfig(cfg *envConfig) string {
 	b.WriteString("    messages_per_minute: 30\n")
 	b.WriteString("    commands_per_minute: 10\n\n")
 
+	// Session
+	b.WriteString("session:\n")
+	b.WriteString("  max_history: 200\n\n")
+
 	// LLM
 	b.WriteString("llm:\n")
 	fmt.Fprintf(&b, "  default: \"%s\"\n", cfg.defaultProvider())
 	b.WriteString("  system_prompt: \"You are a helpful AI assistant. Be concise and friendly.\"\n")
 	b.WriteString("  max_input_length: 10000\n")
-	b.WriteString("  timeout: 60\n")
+	b.WriteString("  timeout: 120\n")
+	b.WriteString("  max_context_chars: 250000\n")
 	b.WriteString("  rate_limit: 10\n\n")
 
 	if cfg.AnthropicKey != "" || cfg.ClaudeCodeAuthToken != "" {
@@ -233,7 +238,10 @@ func buildInitConfig(cfg *envConfig) string {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
 		}
 		b.WriteString("    model: \"claude-sonnet-4-6\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    agent:\n")
+		b.WriteString("      timeout: 300\n")
+		b.WriteString("      max_retries: 2\n\n")
 	}
 
 	if cfg.OpenAIKey != "" {
@@ -241,7 +249,10 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.OpenAIKey)
 		b.WriteString("    model: \"gpt-4o\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    agent:\n")
+		b.WriteString("      timeout: 300\n")
+		b.WriteString("      max_retries: 2\n\n")
 	}
 
 	if cfg.GeminiKey != "" {
@@ -249,7 +260,10 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.GeminiKey)
 		b.WriteString("    model: \"gemini-2.0-flash\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    agent:\n")
+		b.WriteString("      timeout: 300\n")
+		b.WriteString("      max_retries: 2\n\n")
 	}
 
 	if cfg.DeepSeekKey != "" {
@@ -257,7 +271,10 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.DeepSeekKey)
 		b.WriteString("    model: \"deepseek-chat\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    agent:\n")
+		b.WriteString("      timeout: 300\n")
+		b.WriteString("      max_retries: 2\n\n")
 	}
 
 	if cfg.GLMKey != "" {
@@ -265,7 +282,10 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.GLMKey)
 		b.WriteString("    model: \"glm-4\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    agent:\n")
+		b.WriteString("      timeout: 300\n")
+		b.WriteString("      max_retries: 2\n\n")
 	}
 
 	if cfg.LocalEnabled {
@@ -281,7 +301,10 @@ func buildInitConfig(cfg *envConfig) string {
 			model = "llama3"
 		}
 		fmt.Fprintf(&b, "    model: \"%s\"\n", model)
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    agent:\n")
+		b.WriteString("      timeout: 300\n")
+		b.WriteString("      max_retries: 2\n\n")
 	}
 
 	// Platforms
@@ -312,11 +335,18 @@ func buildInitConfig(cfg *envConfig) string {
 
 	// Storage
 	b.WriteString("storage:\n")
-	fmt.Fprintf(&b, "  database: \"%s/magabot.db\"\n\n", dataDir)
+	fmt.Fprintf(&b, "  database: \"%s/magabot.db\"\n", dataDir)
+	b.WriteString("  history_retention: 90  # days, 0 = forever\n")
+	b.WriteString("  backup:\n")
+	b.WriteString("    enabled: true\n")
+	fmt.Fprintf(&b, "    path: \"%s/backups\"\n", dataDir)
+	b.WriteString("    keep_count: 10\n")
+	b.WriteString("    auto_interval: 24  # hours\n\n")
 
 	// Logging
 	b.WriteString("logging:\n")
 	b.WriteString("  level: \"info\"\n")
+	b.WriteString("  redact_messages: true\n")
 
 	return b.String()
 }

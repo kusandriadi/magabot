@@ -75,7 +75,7 @@ type TaskRunner interface {
 // NewManager creates a new session manager
 func NewManager(notify NotifyFunc, maxHistory int, logger *slog.Logger) *Manager {
 	if maxHistory <= 0 {
-		maxHistory = 50
+		maxHistory = 200
 	}
 	if logger == nil {
 		logger = slog.Default()
