@@ -27,19 +27,21 @@ import (
 // Bot represents a WhatsApp bot using whatsmeow
 type Bot struct {
 	platform.Base
-	client    *whatsmeow.Client
-	container *sqlstore.Container
-	logger    *slog.Logger
-	dataDir   string // platform-specific data dir (e.g. data/platform/whatsapp)
-	done      chan struct{}
-	mu        sync.RWMutex // protects client
-	wg        sync.WaitGroup
+	client        *whatsmeow.Client
+	container     *sqlstore.Container
+	logger        *slog.Logger
+	dataDir       string // platform-specific data dir (e.g. data/platform/whatsapp)
+	onPairFailure func()
+	done          chan struct{}
+	mu            sync.RWMutex // protects client
+	wg            sync.WaitGroup
 }
 
 // Config for WhatsApp bot
 type Config struct {
-	DataDir string // Platform data directory (DB + QR file live here)
-	Logger  *slog.Logger
+	DataDir       string       // Platform data directory (DB + QR file live here)
+	OnPairFailure func()       // Called when QR pairing fails after all retries
+	Logger        *slog.Logger
 }
 
 // New creates a new WhatsApp bot
@@ -65,8 +67,9 @@ func New(cfg *Config) (*Bot, error) {
 	return &Bot{
 		container: container,
 		logger:    cfg.Logger,
-		dataDir:   dataDir,
-		done:      make(chan struct{}),
+		dataDir:       dataDir,
+		onPairFailure: cfg.OnPairFailure,
+		done:          make(chan struct{}),
 	}, nil
 }
 
@@ -141,8 +144,6 @@ func (b *Bot) qrLoop(ctx context.Context) {
 				remaining := maxRetries - attempt - 1
 				if remaining > 0 {
 					b.logger.Info("QR code expired, generating new one...", "retries_left", remaining)
-				} else {
-					b.logger.Warn("QR code expired, no retries left — restart magabot to try again")
 				}
 				_ = os.Remove(qrFile)
 				retry = true
@@ -162,6 +163,18 @@ func (b *Bot) qrLoop(ctx context.Context) {
 			return
 		case <-time.After(2 * time.Second):
 		}
+	}
+
+	// All retries exhausted — disable WhatsApp
+	b.logger.Warn("WhatsApp QR pairing failed after 3 attempts, disabling platform — run 'magabot setup platform' to re-enable")
+	b.mu.RLock()
+	client := b.client
+	b.mu.RUnlock()
+	if client != nil {
+		client.Disconnect()
+	}
+	if b.onPairFailure != nil {
+		b.onPairFailure()
 	}
 }
 

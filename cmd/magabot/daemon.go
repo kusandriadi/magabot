@@ -518,6 +518,14 @@ func runDaemon() {
 		wa, err := whatsapp.New(&whatsapp.Config{
 			DataDir: cfg.GetPlatformDir("whatsapp"),
 			Logger:  logger.With("platform", "whatsapp"),
+			OnPairFailure: func() {
+				cfg.Platforms.WhatsApp.Enabled = false
+				if err := cfg.Save(); err != nil {
+					logger.Error("failed to disable whatsapp in config", "error", err)
+				} else {
+					logger.Warn("whatsapp disabled in config — run 'magabot setup platform' to re-enable")
+				}
+			},
 		})
 		if err != nil {
 			logger.Error("init whatsapp failed", "error", err)
