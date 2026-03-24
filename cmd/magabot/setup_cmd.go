@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/util"
+	"github.com/mdp/qrterminal/v3"
 )
 
 // cmdSetup handles setup commands
@@ -290,9 +292,21 @@ func setupWhatsApp() {
 
 	fmt.Println()
 	fmt.Println("✅ WhatsApp enabled!")
-	fmt.Println("   QR code will appear on first start")
 
-	askRestart(reader)
+	// Remove stale QR file before start/restart
+	qrFile := filepath.Join(cfg.GetPlatformDir("whatsapp"), "qr.txt")
+	_ = os.Remove(qrFile)
+
+	// Auto start/restart daemon
+	fmt.Println()
+	if isRunning() {
+		restartDaemon()
+	} else {
+		cmdStart()
+	}
+
+	// Display QR inline for pairing
+	waitAndShowQR(cfg)
 }
 
 // setupWebhook configures Webhook endpoint
@@ -692,6 +706,94 @@ func saveSecret(key, value string) {
 	if err := mgr.Set(ctx, fullKey, value); err != nil {
 		fmt.Printf("⚠️  Warning: could not save secret: %v\n", err)
 	}
+}
+
+// waitAndShowQR polls for the WhatsApp QR file, displays it inline,
+// and watches for pairing success.
+func waitAndShowQR(cfg *config.Config) {
+	qrFile := filepath.Join(cfg.GetPlatformDir("whatsapp"), "qr.txt")
+
+	fmt.Println()
+	fmt.Println("⏳ Waiting for QR code...")
+
+	// Poll for QR file (daemon needs time to start + connect to WhatsApp)
+	var code string
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(qrFile)
+		if err == nil {
+			c := strings.TrimSpace(string(data))
+			if c != "" {
+				code = c
+				break
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if code == "" {
+		fmt.Println("   No QR code needed — WhatsApp may already be paired.")
+		fmt.Println("   Run 'magabot status' to check.")
+		return
+	}
+
+	showQR(code)
+
+	// Watch for pairing success or QR refresh
+	fmt.Println()
+	fmt.Print("⏳ Waiting for pairing...")
+
+	pairDeadline := time.Now().Add(3 * time.Minute)
+	for time.Now().Before(pairDeadline) {
+		time.Sleep(time.Second)
+
+		data, err := os.ReadFile(qrFile)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				continue
+			}
+			// File deleted — could be pairing success or retry gap.
+			time.Sleep(5 * time.Second)
+			if _, err2 := os.Stat(qrFile); os.IsNotExist(err2) {
+				// Still gone — check if platform was disabled (all retries failed)
+				cfg2, _ := config.Load(configFile)
+				if cfg2 != nil && cfg2.Platforms.WhatsApp != nil && !cfg2.Platforms.WhatsApp.Enabled {
+					fmt.Println()
+					fmt.Println("❌ QR pairing failed after multiple attempts.")
+					fmt.Println("   WhatsApp has been disabled. Run 'magabot setup platform' to try again.")
+					return
+				}
+				fmt.Println()
+				fmt.Println("✅ WhatsApp paired successfully!")
+				return
+			}
+			// File reappeared — QR was refreshed
+			data, _ = os.ReadFile(qrFile)
+		}
+
+		if data != nil {
+			newCode := strings.TrimSpace(string(data))
+			if newCode != "" && newCode != code {
+				code = newCode
+				fmt.Println()
+				fmt.Println("🔄 QR code expired, scan the new one:")
+				showQR(code)
+				fmt.Println()
+				fmt.Print("⏳ Waiting for pairing...")
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("⏱️  Timed out. Run 'magabot qr' if you still need to pair.")
+}
+
+func showQR(code string) {
+	fmt.Println()
+	fmt.Println("📱 Scan this QR code with WhatsApp:")
+	fmt.Println("   Open WhatsApp → Settings → Linked Devices → Link a Device")
+	fmt.Println()
+	qrterminal.GenerateHalfBlock(code, qrterminal.L, os.Stdout)
 }
 
 // askString, askInt, askYesNo are defined in wizard.go
