@@ -305,7 +305,12 @@ func cmdGenKey() {
 
 // cmdQR displays the WhatsApp QR code for pairing
 func cmdQR() {
-	qrFile := filepath.Join(dataDir, "platform", "whatsapp", "qr.txt")
+	// Load config to get the actual data_dir (may differ from default)
+	qrDir := filepath.Join(dataDir, "platform", "whatsapp")
+	if cfg, err := config.Load(configFile); err == nil {
+		qrDir = cfg.GetPlatformDir("whatsapp")
+	}
+	qrFile := filepath.Join(qrDir, "qr.txt")
 	data, err := os.ReadFile(qrFile)
 	if err != nil {
 		if os.IsNotExist(err) {
