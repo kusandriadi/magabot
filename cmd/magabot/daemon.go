@@ -666,8 +666,6 @@ Send any message and I'll reply using AI.
 ⚡ *Commands:*
 • /help — full help
 • /status — bot & provider status
-• /models — list available AI models
-• /providers — active LLM providers
 
 🔧 *Admin:*
 • /restart — restart bot
@@ -689,7 +687,6 @@ Send any message and I'll reply using AI.
 • /prompt - Custom system prompt
 • /fallback - Set fallback model
 • /budget - Set budget limit per request
-• /providers - LLM providers
 • /clear - Clear conversation history
 • /restart - Restart bot
 • /config - Admin configuration
@@ -753,7 +750,7 @@ Send any message and I'll reply using AI.
 
 		return sb.String(), nil
 
-	case "/model", "/models":
+	case "/model":
 		allModels := llmRouter.ListAllModels(context.Background())
 		if len(allModels) == 0 {
 			return "❌ No models available", nil
@@ -964,13 +961,6 @@ _Reset: /effort reset_`, current), nil
 			return fmt.Sprintf("⚠️ History cleared from memory but DB error: %v", err), nil
 		}
 		return "🗑 Conversation history cleared.", nil
-
-	case "/providers":
-		stats := llmRouter.Stats()
-		return fmt.Sprintf("🤖 *LLM Providers*\n\n• Main: %s\n• Available: %v",
-			stats["main"],
-			stats["available"],
-		), nil
 
 	case "/config":
 		if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {
