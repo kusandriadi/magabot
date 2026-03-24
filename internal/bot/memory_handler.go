@@ -241,7 +241,7 @@ func (h *MemoryHandler) showHelp() string {
 *Memory Types:* fact, preference, event, note
 
 *Examples:*
-• /memory add Nama saya Kus
+• /memory add My name is Kus
 • /memory search trading
 • /memory list preference
 • /memory delete abc123`

@@ -69,10 +69,14 @@ func TestMemoryRemember(t *testing.T) {
 		content      string
 		expectedType string
 	}{
+		{"My name is Budi", "fact"},
+		{"I prefer coffee over tea", "preference"},
+		{"Yesterday I went to the mall", "event"},
+		{"Random note here", "note"},
+		// Indonesian input should also work
 		{"Nama saya Budi", "fact"},
 		{"Saya suka kopi", "preference"},
 		{"Kemarin saya pergi ke mall", "event"},
-		{"Random note here", "note"},
 	}
 
 	for _, tt := range tests {

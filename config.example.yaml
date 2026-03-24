@@ -82,8 +82,8 @@ llm:
   main: "anthropic"
   
   system_prompt: |
-    Kamu adalah asisten AI yang helpful dan ramah.
-    Jawab dengan singkat dan jelas dalam bahasa Indonesia.
+    You are a helpful and friendly AI assistant.
+    Reply concisely and clearly. Always respond in the same language the user writes in.
   
   max_input_length: 10000
   timeout: 120              # seconds; idle timeout per chunk during streaming
