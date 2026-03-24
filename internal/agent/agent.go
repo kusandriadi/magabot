@@ -3,8 +3,10 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,13 +44,14 @@ type Config struct {
 
 // Session represents an active agent session tied to a chat.
 type Session struct {
-	mu       sync.Mutex
-	Agent    string // agent type: claude, codex, gemini
-	Dir      string // working directory (resolved absolute path)
-	Platform string
-	ChatID   string
-	UserID   string
-	MsgCount int // tracks messages sent (for --continue)
+	mu        sync.Mutex
+	Agent     string            // agent type: claude, codex, gemini
+	Dir       string            // working directory (resolved absolute path)
+	Platform  string
+	ChatID    string
+	UserID    string
+	MsgCount  int               // tracks messages sent (for --continue)
+	Templates map[string]string // progress message templates in user's language
 }
 
 // Manager manages agent sessions across chats.
@@ -211,9 +214,12 @@ func (m *Manager) CloseSession(platform, chatID string) {
 // Execute runs a message through the agent CLI and returns the output.
 // On timeout, it automatically retries with --continue up to MaxRetries times,
 // accumulating partial output across attempts.
-func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string) (string, error) {
+// When onProgress is non-nil and the agent is Claude, stdout is streamed as
+// NDJSON events so tool-use progress can be forwarded to the user in real time.
+func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string)) (string, error) {
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	maxRetries := m.config.MaxRetries
+	streaming := onProgress != nil && sess.Agent == AgentClaude
 
 	var allOutput []string
 
@@ -221,29 +227,60 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 		attemptCtx, cancel := context.WithTimeout(ctx, timeout)
 
 		args := buildArgs(sess, message, media, m.config.GetCLISettings)
+		if streaming {
+			for i, arg := range args {
+				if arg == "--output-format" && i+1 < len(args) {
+					args[i+1] = "stream-json"
+					break
+				}
+			}
+		}
 		bin := agentInfo[sess.Agent]
 
 		m.logger.Debug("executing agent",
 			"agent", sess.Agent, "dir", sess.Dir,
 			"attempt", attempt, "msg_count", sess.MsgCount,
+			"streaming", streaming,
 		)
 
 		cmd := exec.CommandContext(attemptCtx, bin, args...)
 		cmd.Dir = sess.Dir
 
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &limitedWriter{w: &stdout, n: maxOutputBytes}
+		var stderr bytes.Buffer
 		cmd.Stderr = &limitedWriter{w: &stderr, n: maxOutputBytes}
 
-		err := cmd.Run()
+		var partial string
+		var err error
+
+		if streaming {
+			var pipe io.ReadCloser
+			pipe, err = cmd.StdoutPipe()
+			if err != nil {
+				cancel()
+				return "", fmt.Errorf("stdout pipe: %w", err)
+			}
+			if err = cmd.Start(); err != nil {
+				cancel()
+				return "", fmt.Errorf("start agent: %w", err)
+			}
+			templates := sess.Templates
+			if templates == nil {
+				templates = DefaultTemplates
+			}
+			partial = m.readStreamEvents(pipe, onProgress, templates)
+			err = cmd.Wait()
+		} else {
+			var stdout bytes.Buffer
+			cmd.Stdout = &limitedWriter{w: &stdout, n: maxOutputBytes}
+			err = cmd.Run()
+			partial = strings.TrimSpace(StripANSI(stdout.String()))
+		}
 		cancel()
 
 		// Always increment so next attempt/call uses --continue
 		sess.mu.Lock()
 		sess.MsgCount++
 		sess.mu.Unlock()
-
-		partial := strings.TrimSpace(StripANSI(stdout.String()))
 		if partial != "" {
 			allOutput = append(allOutput, partial)
 		}
@@ -362,4 +399,158 @@ func (lw *limitedWriter) Write(p []byte) (int, error) {
 	n, err := lw.w.Write(p)
 	lw.n -= int64(n)
 	return n, err
+}
+
+// --- Claude stream-json event parsing ---
+
+// streamEvent represents a parsed event from Claude's stream-json output.
+type streamEvent struct {
+	Type    string         `json:"type"`
+	Message *streamMessage `json:"message,omitempty"`
+	Result  string         `json:"result,omitempty"`
+}
+
+type streamMessage struct {
+	Content []contentBlock `json:"content"`
+}
+
+type contentBlock struct {
+	Type  string          `json:"type"`
+	Text  string          `json:"text,omitempty"`
+	Name  string          `json:"name,omitempty"`
+	Input json.RawMessage `json:"input,omitempty"`
+}
+
+// DefaultTemplates provides English fallback progress messages.
+// Keys use placeholders: {file}, {pattern}, {command}, {description}, {elapsed}.
+var DefaultTemplates = map[string]string{
+	"read_file":     "Let me take a look at {file}",
+	"edit_file":     "I found something to fix in {file}, updating it now",
+	"write_file":    "Creating a new file: {file}",
+	"search_files":  "Looking for files matching {pattern}",
+	"search_code":   "Searching the codebase for '{pattern}'",
+	"run_command":   "Running a command: {command}",
+	"run_described": "Hold on, I need to {description}",
+	"generic":       "Hold on, I'm analyzing something",
+	"still_working": "Still working on it, been {elapsed} so far",
+}
+
+// readStreamEvents reads Claude's stream-json output, sends progress notifications
+// for tool-use events, and returns the final result text.
+func (m *Manager) readStreamEvents(r io.Reader, onProgress func(string), templates map[string]string) string {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, maxOutputBytes)
+
+	var result string
+	var textContent strings.Builder
+	var lastNotify time.Time
+	const notifyInterval = 3 * time.Second
+
+	for scanner.Scan() {
+		var evt streamEvent
+		if err := json.Unmarshal(scanner.Bytes(), &evt); err != nil {
+			continue
+		}
+
+		switch evt.Type {
+		case "assistant":
+			if evt.Message == nil {
+				continue
+			}
+			for _, block := range evt.Message.Content {
+				switch block.Type {
+				case "tool_use":
+					if time.Since(lastNotify) >= notifyInterval {
+						onProgress(formatToolUse(block.Name, block.Input, templates))
+						lastNotify = time.Now()
+					}
+				case "text":
+					textContent.WriteString(block.Text)
+				}
+			}
+		case "result":
+			result = evt.Result
+		}
+	}
+
+	if result != "" {
+		return strings.TrimSpace(result)
+	}
+	return strings.TrimSpace(textContent.String())
+}
+
+// tpl returns a template value, falling back to DefaultTemplates.
+func tpl(templates map[string]string, key string) string {
+	if v, ok := templates[key]; ok && v != "" {
+		return v
+	}
+	return DefaultTemplates[key]
+}
+
+// formatToolUse formats a tool-use event using the given templates.
+func formatToolUse(name string, input json.RawMessage, templates map[string]string) string {
+	switch name {
+	case "Read":
+		var p struct {
+			FilePath string `json:"file_path"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.FilePath != "" {
+			return strings.ReplaceAll(tpl(templates, "read_file"), "{file}", filepath.Base(p.FilePath))
+		}
+	case "Edit":
+		var p struct {
+			FilePath string `json:"file_path"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.FilePath != "" {
+			return strings.ReplaceAll(tpl(templates, "edit_file"), "{file}", filepath.Base(p.FilePath))
+		}
+	case "Write":
+		var p struct {
+			FilePath string `json:"file_path"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.FilePath != "" {
+			return strings.ReplaceAll(tpl(templates, "write_file"), "{file}", filepath.Base(p.FilePath))
+		}
+	case "Bash":
+		var p struct {
+			Command     string `json:"command"`
+			Description string `json:"description"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.Description != "" {
+			desc := p.Description
+			if len(desc) > 80 {
+				desc = desc[:80] + "..."
+			}
+			return strings.ReplaceAll(tpl(templates, "run_described"), "{description}", strings.ToLower(desc))
+		}
+		if p.Command != "" {
+			cmd := p.Command
+			if len(cmd) > 50 {
+				cmd = cmd[:50] + "..."
+			}
+			return strings.ReplaceAll(tpl(templates, "run_command"), "{command}", cmd)
+		}
+	case "Glob":
+		var p struct {
+			Pattern string `json:"pattern"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.Pattern != "" {
+			return strings.ReplaceAll(tpl(templates, "search_files"), "{pattern}", p.Pattern)
+		}
+	case "Grep":
+		var p struct {
+			Pattern string `json:"pattern"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.Pattern != "" {
+			return strings.ReplaceAll(tpl(templates, "search_code"), "{pattern}", p.Pattern)
+		}
+	}
+	return tpl(templates, "generic")
 }

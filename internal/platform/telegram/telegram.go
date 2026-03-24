@@ -272,13 +272,32 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		streamed = true
 	}
 
-	// Send typing indicator
-	action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
-	if _, err := b.api.Send(action); err != nil {
-		b.logger.Debug("send typing failed", "error", err)
-	}
+	// Start periodic typing indicator (Telegram typing expires after ~5s)
+	typingDone := make(chan struct{})
+	go func() {
+		action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
+		if _, err := b.api.Send(action); err != nil {
+			b.logger.Debug("send typing failed", "error", err)
+		}
+		ticker := time.NewTicker(4 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-typingDone:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
+				if _, err := b.api.Send(action); err != nil {
+					b.logger.Debug("send typing failed", "error", err)
+				}
+			}
+		}
+	}()
 
 	response, err := handler(ctx, routerMsg)
+	close(typingDone)
 	if err != nil {
 		b.logger.Warn("handler error", "error", err)
 		return

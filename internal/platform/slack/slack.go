@@ -199,6 +199,16 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 	)
 	const streamSendInterval = 2 * time.Second // throttle between sends
 
+	// Add typing indicator reaction (Slack doesn't support bot typing events)
+	typingRef := slack.ItemRef{
+		Channel:   ev.Channel,
+		Timestamp: ev.TimeStamp,
+	}
+	_ = b.api.AddReaction("hourglass_flowing_sand", typingRef)
+	defer func() {
+		_ = b.api.RemoveReaction("hourglass_flowing_sand", typingRef)
+	}()
+
 	msg.StreamCallback = func(text string) {
 		now := time.Now()
 

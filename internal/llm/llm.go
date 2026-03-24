@@ -190,6 +190,23 @@ func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*
 	return r.chat(ctx, allmMessages)
 }
 
+// QuickChat makes a lightweight LLM call without system prompt or rate limiting.
+// Useful for internal tasks like translation or template generation.
+func (r *Router) QuickChat(ctx context.Context, prompt string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	messages := []allm.Message{
+		{Role: "user", Content: prompt},
+	}
+
+	resp, err := r.chat(ctx, messages)
+	if err != nil {
+		return "", err
+	}
+	return resp.Content, nil
+}
+
 // chat is the internal method that calls the main client
 func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, error) {
 	r.mu.RLock()

@@ -368,7 +368,9 @@ func runDaemon() {
 
 		// Route to active agent session if one exists
 		if agentMgr.HasSession(msg.Platform, msg.ChatID) {
-			return routeToAgent(ctx, msg, agentMgr)
+			return routeToAgent(ctx, msg, agentMgr, func(text string) {
+				_ = rtr.Send(msg.Platform, msg.ChatID, text)
+			}, llmRouter)
 		}
 
 		// Check if first-time user
@@ -1437,7 +1439,7 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 		message := strings.TrimSpace(strings.TrimPrefix(msg.Text, parts[0]))
 		sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
 		ctx := context.Background()
-		output, err := agentMgr.Execute(ctx, sess, message, msg.Media)
+		output, err := agentMgr.Execute(ctx, sess, message, msg.Media, nil)
 		if err != nil {
 			if output != "" {
 				return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
@@ -1469,13 +1471,43 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 }
 
 // routeToAgent sends a regular message to the active agent session.
-func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Manager) (string, error) {
+func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Manager, notify func(string), llmRouter *llm.Router) (string, error) {
 	sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
 	if sess == nil {
 		return "", nil
 	}
 
-	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media)
+	// Generate and cache progress templates in the user's language
+	if sess.Templates == nil {
+		sess.Templates = generateProgressTemplates(ctx, llmRouter, msg.Text)
+	}
+	templates := sess.Templates
+
+	// Send periodic status updates so user knows agent is still working
+	statusDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		start := time.Now()
+		for {
+			select {
+			case <-statusDone:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				elapsed := time.Since(start).Truncate(time.Second)
+				t := templates["still_working"]
+				if t == "" {
+					t = agent.DefaultTemplates["still_working"]
+				}
+				notify(strings.ReplaceAll(t, "{elapsed}", elapsed.String()))
+			}
+		}
+	}()
+
+	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, notify)
+	close(statusDone)
 	if err != nil {
 		if output != "" {
 			return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
@@ -1486,6 +1518,37 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		return "(no output)", nil
 	}
 	return output, nil
+}
+
+// generateProgressTemplates asks the LLM to produce progress message templates
+// in the same language as the user's message. Falls back to English defaults.
+func generateProgressTemplates(ctx context.Context, llmRouter *llm.Router, userMsg string) map[string]string {
+	prompt := fmt.Sprintf(`Based on the user's message below, determine what language they're writing in and generate short, conversational progress update phrases in that SAME language.
+
+User's message: "%s"
+
+Return ONLY a valid JSON object (no markdown, no explanation) with these exact keys. Keep the placeholders exactly as shown:
+{"read_file":"...{file}...","edit_file":"...{file}...","write_file":"...{file}...","search_files":"...{pattern}...","search_code":"...{pattern}...","run_command":"...{command}...","run_described":"...{description}...","generic":"...","still_working":"...{elapsed}..."}
+
+Make them sound natural and conversational, like a colleague giving quick status updates.`, userMsg)
+
+	content, err := llmRouter.QuickChat(ctx, prompt)
+	if err != nil {
+		return agent.DefaultTemplates
+	}
+
+	// Extract JSON from response (LLM may wrap in markdown code blocks)
+	start := strings.Index(content, "{")
+	end := strings.LastIndex(content, "}")
+	if start < 0 || end <= start {
+		return agent.DefaultTemplates
+	}
+
+	var templates map[string]string
+	if err := json.Unmarshal([]byte(content[start:end+1]), &templates); err != nil {
+		return agent.DefaultTemplates
+	}
+	return templates
 }
 
 // mergeHooksConfig loads hooks from config-hooks.yml and merges with inline config hooks.
