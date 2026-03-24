@@ -39,8 +39,8 @@ type Bot struct {
 
 // Config for WhatsApp bot
 type Config struct {
-	DataDir       string       // Platform data directory (DB + QR file live here)
-	OnPairFailure func()       // Called when QR pairing fails after all retries
+	DataDir       string // Platform data directory (DB + QR file live here)
+	OnPairFailure func() // Called when QR pairing fails after all retries
 	Logger        *slog.Logger
 }
 
@@ -65,8 +65,8 @@ func New(cfg *Config) (*Bot, error) {
 	}
 
 	return &Bot{
-		container: container,
-		logger:    cfg.Logger,
+		container:     container,
+		logger:        cfg.Logger,
 		dataDir:       dataDir,
 		onPairFailure: cfg.OnPairFailure,
 		done:          make(chan struct{}),
