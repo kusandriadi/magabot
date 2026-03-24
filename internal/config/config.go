@@ -184,8 +184,8 @@ type LLMConfig struct {
 	Providers          ProvidersConfig `yaml:"providers"`     // Alternative structure
 	SystemPrompt       string          `yaml:"system_prompt"`
 	MaxInputLength     int             `yaml:"max_input_length"`
-	Timeout            int             `yaml:"timeout"`             // seconds; idle timeout per chunk during streaming
-	MaxContextChars    int             `yaml:"max_context_chars"`   // max total chars sent to LLM (trims oldest messages)
+	Timeout            int             `yaml:"timeout"`           // seconds; idle timeout per chunk during streaming
+	MaxContextChars    int             `yaml:"max_context_chars"` // max total chars sent to LLM (trims oldest messages)
 	RateLimit          int             `yaml:"rate_limit"`
 	MaxContextTokens   int             `yaml:"max_context_tokens"`
 	TruncationStrategy string          `yaml:"truncation_strategy"`

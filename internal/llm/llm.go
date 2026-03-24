@@ -60,16 +60,16 @@ var (
 
 // Router manages LLM clients
 type Router struct {
-	clients        map[string]*allm.Client
-	mainName       string
-	systemPrompt   string
-	maxInput       int
+	clients         map[string]*allm.Client
+	mainName        string
+	systemPrompt    string
+	maxInput        int
 	maxContextChars int
-	timeout        time.Duration
-	rateLimiter    *rateLimiter
-	logger         *slog.Logger
-	mu             sync.RWMutex
-	promptCaching  bool
+	timeout         time.Duration
+	rateLimiter     *rateLimiter
+	logger          *slog.Logger
+	mu              sync.RWMutex
+	promptCaching   bool
 }
 
 // Config for LLM router
@@ -77,7 +77,7 @@ type Config struct {
 	Main            string
 	SystemPrompt    string
 	MaxInput        int
-	MaxContextChars int           // max total chars sent to LLM; 0 = default 250000
+	MaxContextChars int // max total chars sent to LLM; 0 = default 250000
 	Timeout         time.Duration
 	RateLimit       int // requests per minute per user
 	Logger          *slog.Logger

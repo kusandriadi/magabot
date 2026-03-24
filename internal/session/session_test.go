@@ -33,8 +33,8 @@ func TestNewManager(t *testing.T) {
 		if mgr == nil {
 			t.Fatal("Manager should not be nil")
 		}
-		if mgr.maxHistory != 50 {
-			t.Errorf("Expected default maxHistory 50, got %d", mgr.maxHistory)
+		if mgr.maxHistory != 200 {
+			t.Errorf("Expected default maxHistory 200, got %d", mgr.maxHistory)
 		}
 	})
 
