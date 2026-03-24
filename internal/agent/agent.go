@@ -352,6 +352,8 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 			err = cmd.Run()
 			partial = strings.TrimSpace(StripANSI(stdout.String()))
 		}
+		// Save timeout state BEFORE cancel — cancel() always sets Err() non-nil
+		timedOut := attemptCtx.Err() != nil
 		cancel()
 
 		// Always increment so next attempt/call uses --continue
@@ -373,7 +375,7 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 		}
 
 		// Non-timeout error — don't retry
-		if attemptCtx.Err() == nil {
+		if !timedOut {
 			errMsg := strings.TrimSpace(stderr.String())
 			if errMsg == "" {
 				errMsg = err.Error()
