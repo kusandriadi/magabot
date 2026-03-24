@@ -45,8 +45,8 @@ type Config struct {
 // Session represents an active agent session tied to a chat.
 type Session struct {
 	mu        sync.Mutex
-	Agent     string            // agent type: claude, codex, gemini
-	Dir       string            // working directory (resolved absolute path)
+	Agent     string // agent type: claude, codex, gemini
+	Dir       string // working directory (resolved absolute path)
 	Platform  string
 	ChatID    string
 	UserID    string
