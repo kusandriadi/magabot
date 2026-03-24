@@ -311,6 +311,7 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 					break
 				}
 			}
+			args = append(args, "--verbose")
 		}
 		bin := agentInfo[sess.Agent]
 
