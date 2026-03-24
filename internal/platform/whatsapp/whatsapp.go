@@ -91,39 +91,9 @@ func (b *Bot) Start(ctx context.Context) error {
 	b.mu.Unlock()
 
 	if client.Store.ID == nil {
-		// New device — need QR code pairing
-		qrChan, err := client.GetQRChannel(ctx)
-		if err != nil {
-			return fmt.Errorf("get QR channel: %w", err)
-		}
-
-		if err := client.Connect(); err != nil {
-			return fmt.Errorf("connect: %w", err)
-		}
-
+		// New device — need QR code pairing (with auto-retry on expiry)
 		b.wg.Add(1)
-		go func() {
-			defer b.wg.Done()
-			for evt := range qrChan {
-				switch evt.Event {
-				case "code":
-					b.logger.Info("scan QR code to link WhatsApp device, run 'magabot qr' to display")
-					// Save QR code to file so CLI can display it without restart
-					qrFile := filepath.Join(b.dataDir, "qr.txt")
-					_ = os.WriteFile(qrFile, []byte(evt.Code), 0600)
-				case "success":
-					b.logger.Info("WhatsApp pairing successful")
-					// Clean up QR file
-					qrFile := filepath.Join(b.dataDir, "qr.txt")
-					_ = os.Remove(qrFile)
-				case "timeout":
-					b.logger.Warn("QR code expired, reconnect to get a new one")
-					// Clean up expired QR file
-					qrFile := filepath.Join(b.dataDir, "qr.txt")
-					_ = os.Remove(qrFile)
-				}
-			}
-		}()
+		go b.qrLoop(ctx)
 	} else {
 		// Already paired
 		if err := client.Connect(); err != nil {
@@ -133,6 +103,66 @@ func (b *Bot) Start(ctx context.Context) error {
 
 	b.logger.Info("whatsapp client started", "data_dir", b.dataDir)
 	return nil
+}
+
+// qrLoop handles QR pairing with automatic retry on expiry (max 3 attempts).
+func (b *Bot) qrLoop(ctx context.Context) {
+	defer b.wg.Done()
+	qrFile := filepath.Join(b.dataDir, "qr.txt")
+	const maxRetries = 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		b.mu.RLock()
+		client := b.client
+		b.mu.RUnlock()
+
+		qrChan, err := client.GetQRChannel(ctx)
+		if err != nil {
+			b.logger.Error("get QR channel failed", "error", err)
+			return
+		}
+
+		if err := client.Connect(); err != nil {
+			b.logger.Error("connect for QR pairing failed", "error", err)
+			return
+		}
+
+		retry := false
+		for evt := range qrChan {
+			switch evt.Event {
+			case "code":
+				b.logger.Info("scan QR code to link WhatsApp device, run 'magabot qr' to display")
+				_ = os.WriteFile(qrFile, []byte(evt.Code), 0600)
+			case "success":
+				b.logger.Info("WhatsApp pairing successful")
+				_ = os.Remove(qrFile)
+				return
+			case "timeout":
+				remaining := maxRetries - attempt - 1
+				if remaining > 0 {
+					b.logger.Info("QR code expired, generating new one...", "retries_left", remaining)
+				} else {
+					b.logger.Warn("QR code expired, no retries left — restart magabot to try again")
+				}
+				_ = os.Remove(qrFile)
+				retry = true
+			}
+		}
+
+		if !retry {
+			return
+		}
+
+		// Disconnect before reconnecting for a fresh QR channel
+		client.Disconnect()
+
+		// Check if shutdown was requested
+		select {
+		case <-b.done:
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 // Stop stops the WhatsApp client
