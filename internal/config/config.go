@@ -68,7 +68,7 @@ type Config struct {
 	Hooks []HookConfig `yaml:"hooks,omitempty"`
 
 	// Agent sessions (coding agents via chat)
-	Agents AgentConfig `yaml:"agents"`
+	Agent AgentConfig `yaml:"agent"`
 
 	// Sub-agent system settings
 	SubAgents SubAgentConfig `yaml:"subagents"`
@@ -357,7 +357,10 @@ type HookConfig struct {
 
 // AgentConfig holds coding agent session settings
 type AgentConfig struct {
-	Main string `yaml:"main"` // "claude", "codex", "gemini"
+	Timeout       int               `yaml:"timeout"`        // seconds per attempt, default 300
+	MaxRetries    int               `yaml:"max_retries"`    // auto-retry on timeout, default 2
+	Shortcuts     map[string]string `yaml:"shortcuts"`      // directory shortcuts, e.g. "myproject": "~/code/myproject"
+	DiscoverDepth int               `yaml:"discover_depth"` // auto-discover search depth (default 3)
 }
 
 // HooksFile is the top-level structure for config-hooks.yml
@@ -529,22 +532,11 @@ func (c *Config) setDefaults() {
 	// (already false by default, set explicitly if needed)
 
 	// Agent defaults
-	if c.Agents.Main == "" {
-		c.Agents.Main = "claude"
+	if c.Agent.Timeout <= 0 {
+		c.Agent.Timeout = 300
 	}
-
-	// Set agent defaults on all LLM providers
-	for _, pc := range []*LLMProviderConfig{
-		&c.LLM.Anthropic, &c.LLM.OpenAI, &c.LLM.Gemini,
-		&c.LLM.GLM, &c.LLM.DeepSeek, &c.LLM.Local,
-		&c.LLM.Kimi, &c.LLM.Qwen, &c.LLM.MiniMax,
-	} {
-		if pc.Agent.Timeout <= 0 {
-			pc.Agent.Timeout = 300
-		}
-		if pc.Agent.MaxRetries <= 0 {
-			pc.Agent.MaxRetries = 2
-		}
+	if c.Agent.MaxRetries <= 0 {
+		c.Agent.MaxRetries = 2
 	}
 
 	// Platform defaults

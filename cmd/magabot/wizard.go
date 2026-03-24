@@ -719,9 +719,6 @@ llm:
     model: "claude-sonnet-4-6"
     max_tokens: 4096
     temperature: 0.7
-    agent:
-      timeout: 300
-      max_retries: 2
 
   openai:
     enabled: %t
@@ -729,9 +726,6 @@ llm:
     model: "gpt-4o"
     max_tokens: 4096
     temperature: 0.7
-    agent:
-      timeout: 300
-      max_retries: 2
   
   gemini:
     enabled: %t
@@ -788,6 +782,12 @@ tools:
   browser:
     enabled: true
     headless: true
+
+# Agent Sessions
+agent:
+  timeout: 300
+  max_retries: 2
+  discover_depth: 3
 `,
 		state.SecretsBackend,
 		state.VaultAddress,

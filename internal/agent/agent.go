@@ -35,11 +35,13 @@ type CLISettings func() (model, effort string)
 
 // Config holds agent manager settings.
 type Config struct {
-	Main           string      // main/primary agent type
-	Timeout        int         // execution timeout in seconds
-	MaxRetries     int         // auto-retry on timeout (0 = no retry)
-	AllowedDirs    []string    // directories users may target (empty = user home only)
-	GetCLISettings CLISettings // optional: returns current model+effort for Claude CLI
+	Main           string            // main/primary agent type
+	Timeout        int               // execution timeout in seconds
+	MaxRetries     int               // auto-retry on timeout (0 = no retry)
+	AllowedDirs    []string          // directories users may target (empty = user home only)
+	Shortcuts      map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
+	DiscoverDepth  int               // auto-discover search depth (default 3)
+	GetCLISettings CLISettings       // optional: returns current model+effort for Claude CLI
 }
 
 // Session represents an active agent session tied to a chat.
@@ -184,6 +186,81 @@ func (m *Manager) validateDir(absDir string) error {
 	}
 
 	return fmt.Errorf("directory %q is not under an allowed path", absDir)
+}
+
+// ResolveDir resolves a directory shortcut or name to an absolute path.
+// Resolution order:
+//  1. "home" or "~" → user's home directory
+//  2. "~/path" → expand tilde
+//  3. Configured shortcuts
+//  4. Auto-discover: search ~/<name> and ~/*/<name> for a matching directory
+//  5. Return as-is (let NewSession validate)
+func (m *Manager) ResolveDir(name string) (string, error) {
+	home, homeErr := os.UserHomeDir()
+
+	// 1. Built-in "home" / "~"
+	if name == "home" || name == "~" {
+		if homeErr != nil {
+			return "", fmt.Errorf("cannot determine home directory: %w", homeErr)
+		}
+		return home, nil
+	}
+
+	// 2. Expand ~/path
+	if strings.HasPrefix(name, "~/") {
+		if homeErr != nil {
+			return "", fmt.Errorf("cannot determine home directory: %w", homeErr)
+		}
+		return filepath.Join(home, name[2:]), nil
+	}
+
+	// 3. Config shortcuts
+	if m.config.Shortcuts != nil {
+		if path, ok := m.config.Shortcuts[name]; ok {
+			if strings.HasPrefix(path, "~/") && homeErr == nil {
+				path = filepath.Join(home, path[2:])
+			}
+			return path, nil
+		}
+	}
+
+	// 4. Auto-discover simple names (no path separator)
+	if !strings.Contains(name, string(filepath.Separator)) && homeErr == nil {
+		// Check ~/name
+		direct := filepath.Join(home, name)
+		if info, err := os.Stat(direct); err == nil && info.IsDir() {
+			return direct, nil
+		}
+
+		// Search ~/*/name, ~/*/*/name, ... up to configured depth
+		depth := m.config.DiscoverDepth
+		if depth <= 0 {
+			depth = 3
+		}
+		var dirs []string
+		for level := 1; level <= depth; level++ {
+			pattern := home
+			for i := 0; i < level; i++ {
+				pattern = filepath.Join(pattern, "*")
+			}
+			pattern = filepath.Join(pattern, name)
+			matches, _ := filepath.Glob(pattern)
+			for _, match := range matches {
+				if info, err := os.Stat(match); err == nil && info.IsDir() {
+					dirs = append(dirs, match)
+				}
+			}
+		}
+		if len(dirs) == 1 {
+			return dirs[0], nil
+		}
+		if len(dirs) > 1 {
+			return "", fmt.Errorf("multiple matches for %q:\n• %s\nUse the full path or configure a shortcut", name, strings.Join(dirs, "\n• "))
+		}
+	}
+
+	// 5. Return as-is
+	return name, nil
 }
 
 // GetSession returns the active session for a chat, or nil if none.

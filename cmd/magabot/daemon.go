@@ -268,32 +268,12 @@ func runDaemon() {
 	hooksMgr := hooks.NewManager(mergeHooksConfig(cfg, logger), logger.With("component", "hooks"))
 	rtr.SetHooks(hooksMgr)
 
-	// Initialize agent session manager — read agent settings from active LLM provider
-	agentCfg := cfg.LLM.Anthropic.Agent // default to anthropic
-	if main := cfg.LLM.Main; main != "" {
-		switch main {
-		case "openai":
-			agentCfg = cfg.LLM.OpenAI.Agent
-		case "gemini":
-			agentCfg = cfg.LLM.Gemini.Agent
-		case "glm":
-			agentCfg = cfg.LLM.GLM.Agent
-		case "deepseek":
-			agentCfg = cfg.LLM.DeepSeek.Agent
-		case "local":
-			agentCfg = cfg.LLM.Local.Agent
-		case "kimi":
-			agentCfg = cfg.LLM.Kimi.Agent
-		case "qwen":
-			agentCfg = cfg.LLM.Qwen.Agent
-		case "minimax":
-			agentCfg = cfg.LLM.MiniMax.Agent
-		}
-	}
+	// Initialize agent session manager
 	agentMgr := agent.NewManager(agent.Config{
-		Main:       cfg.Agents.Main,
-		Timeout:    agentCfg.Timeout,
-		MaxRetries: agentCfg.MaxRetries,
+		Timeout:       cfg.Agent.Timeout,
+		MaxRetries:    cfg.Agent.MaxRetries,
+		Shortcuts:     cfg.Agent.Shortcuts,
+		DiscoverDepth: cfg.Agent.DiscoverDepth,
 		GetCLISettings: func() (string, string) {
 			model := llmRouter.GetModel()
 			var effort string
@@ -708,7 +688,7 @@ Send any message and I'll reply using AI.
 • /help - This help
 
 *Agent Sessions:*
-• :new [agent] <dir> - Start coding agent (claude/codex/gemini)
+• :new [agent] <dir> - Start coding agent (supports shortcuts: home, ~, project names)
 • :send <message> - Send message to active agent
 • :quit - Close agent session
 • :status - Show agent session info`, nil
@@ -1422,7 +1402,12 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 			}
 		}
 
-		sess, err := agentMgr.NewSession(msg.Platform, msg.ChatID, msg.UserID, agentType, dir)
+		resolved, resolveErr := agentMgr.ResolveDir(dir)
+		if resolveErr != nil {
+			return resolveErr.Error(), nil
+		}
+
+		sess, err := agentMgr.NewSession(msg.Platform, msg.ChatID, msg.UserID, agentType, resolved)
 		if err != nil {
 			return fmt.Sprintf("Failed to start agent session: %v", err), nil
 		}
