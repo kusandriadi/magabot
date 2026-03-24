@@ -27,13 +27,13 @@ import (
 // Bot represents a WhatsApp bot using whatsmeow
 type Bot struct {
 	platform.Base
-	client  *whatsmeow.Client
+	client    *whatsmeow.Client
 	container *sqlstore.Container
-	logger  *slog.Logger
-	dataDir string // platform-specific data dir (e.g. data/platform/whatsapp)
-	done    chan struct{}
-	mu      sync.RWMutex // protects client
-	wg      sync.WaitGroup
+	logger    *slog.Logger
+	dataDir   string // platform-specific data dir (e.g. data/platform/whatsapp)
+	done      chan struct{}
+	mu        sync.RWMutex // protects client
+	wg        sync.WaitGroup
 }
 
 // Config for WhatsApp bot

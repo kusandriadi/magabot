@@ -105,6 +105,7 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 	if err != nil {
 		return "", fmt.Errorf("search request failed: %w", err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {

@@ -84,6 +84,7 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	if err != nil {
 		return "", err
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
@@ -175,6 +176,7 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 	if err != nil {
 		return "", err
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
@@ -216,4 +218,3 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 
 	return sb.String(), nil
 }
-
