@@ -325,7 +325,7 @@ type StorageConfig struct {
 
 // PathsConfig holds directory paths
 type PathsConfig struct {
-	DataDir      string `yaml:"data_dir"`      // Base data directory (default: ~/data/magabot)
+	DataDir      string `yaml:"data_dir"`      // Base data directory (default: ~/.magabot/data)
 	LogsDir      string `yaml:"logs_dir"`      // Logs directory (default: data_dir/logs)
 	MemoryDir    string `yaml:"memory_dir"`    // Memory/RAG directory (default: data_dir/memory)
 	CacheDir     string `yaml:"cache_dir"`     // Cache directory (default: data_dir/cache)
@@ -495,7 +495,7 @@ func (c *Config) setDefaults() {
 
 	// Paths defaults
 	if c.Paths.DataDir == "" {
-		c.Paths.DataDir = filepath.Join(home, "data", "magabot")
+		c.Paths.DataDir = filepath.Join(home, ".magabot", "data")
 	}
 	// Expand ~ in paths
 	c.Paths.DataDir = expandPath(c.Paths.DataDir)

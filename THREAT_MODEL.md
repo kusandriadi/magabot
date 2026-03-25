@@ -42,7 +42,7 @@ Magabot is a self-hosted multi-platform chatbot with LLM integration. This docum
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │                 FILE SYSTEM                           │  │
 │  │  ~/.magabot/config.yaml (0600)                        │  │
-│  │  ~/data/magabot/db/magabot.db (0600)                 │  │
+│  │  ~/.magabot/data/db/magabot.db (0600)                │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
