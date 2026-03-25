@@ -168,7 +168,6 @@ Send these in any connected platform:
 | Command | Description |
 |---------|-------------|
 | `:new [agent] <dir>` | Start a coding agent (claude/codex/gemini) |
-| `:send <message>` | Send message to active agent |
 | `:status` | Show agent session info |
 | `:quit` | Close agent session |
 

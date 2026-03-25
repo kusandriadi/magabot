@@ -181,7 +181,7 @@ type WebhookConfig struct {
 type LLMConfig struct {
 	Main               string          `yaml:"main"`          // Main/primary provider
 	MainProvider       string          `yaml:"main_provider"` // Alias for main
-	Providers          ProvidersConfig `yaml:"providers"`     // Alternative structure
+	Providers          ProvidersConfig `yaml:"providers,omitempty"` // Alternative structure
 	SystemPrompt       string          `yaml:"system_prompt"`
 	MaxInputLength     int             `yaml:"max_input_length"`
 	Timeout            int             `yaml:"timeout"`           // seconds; idle timeout per chunk during streaming
@@ -192,15 +192,16 @@ type LLMConfig struct {
 	PromptCaching      bool            `yaml:"prompt_caching"`
 
 	// Direct provider configs (preferred structure)
-	Anthropic LLMProviderConfig `yaml:"anthropic"`
-	OpenAI    LLMProviderConfig `yaml:"openai"`
-	Gemini    LLMProviderConfig `yaml:"gemini"`
-	GLM       LLMProviderConfig `yaml:"glm"`
-	DeepSeek  LLMProviderConfig `yaml:"deepseek"`
-	Local     LLMProviderConfig `yaml:"local"` // Self-hosted (Ollama, vLLM, llama.cpp, etc.)
-	Kimi      LLMProviderConfig `yaml:"kimi"`
-	Qwen      LLMProviderConfig `yaml:"qwen"`
-	MiniMax   LLMProviderConfig `yaml:"minimax"`
+	// omitempty: disabled providers are pruned on save so only active ones appear in YAML
+	Anthropic LLMProviderConfig `yaml:"anthropic,omitempty"`
+	OpenAI    LLMProviderConfig `yaml:"openai,omitempty"`
+	Gemini    LLMProviderConfig `yaml:"gemini,omitempty"`
+	GLM       LLMProviderConfig `yaml:"glm,omitempty"`
+	DeepSeek  LLMProviderConfig `yaml:"deepseek,omitempty"`
+	Local     LLMProviderConfig `yaml:"local,omitempty"` // Self-hosted (Ollama, vLLM, llama.cpp, etc.)
+	Kimi      LLMProviderConfig `yaml:"kimi,omitempty"`
+	Qwen      LLMProviderConfig `yaml:"qwen,omitempty"`
+	MiniMax   LLMProviderConfig `yaml:"minimax,omitempty"`
 }
 
 // LLMProviderConfig holds config for a single LLM provider
@@ -610,12 +611,24 @@ func expandPath(path string) string {
 	return path
 }
 
-// Save writes config to file
+// Save writes config to file.
+// Disabled LLM providers and platforms are pruned so only active entries
+// appear in the YAML file. The live in-memory config is not modified.
 func (c *Config) Save() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.LastUpdated = time.Now()
+
+	// Temporarily prune disabled entries for clean serialization.
+	// Restore originals after marshaling so the live config is unchanged.
+	origLLM := c.LLM
+	origPlatforms := c.Platforms
+	c.pruneDisabledForSave()
+	defer func() {
+		c.LLM = origLLM
+		c.Platforms = origPlatforms
+	}()
 
 	data, err := yaml.Marshal(c)
 	if err != nil {
@@ -639,6 +652,84 @@ func (c *Config) Save() error {
 	}
 
 	return nil
+}
+
+// pruneDisabledForSave zeros disabled LLM providers and nils disabled platform
+// pointers so that omitempty causes them to be omitted from the YAML output.
+// Must be called while holding mu. Caller must restore original values after marshaling.
+func (c *Config) pruneDisabledForSave() {
+	// Zero out disabled LLM providers (omitempty skips zero-valued structs)
+	z := LLMProviderConfig{}
+	if !c.LLM.Anthropic.Enabled {
+		c.LLM.Anthropic = z
+	}
+	if !c.LLM.OpenAI.Enabled {
+		c.LLM.OpenAI = z
+	}
+	if !c.LLM.Gemini.Enabled {
+		c.LLM.Gemini = z
+	}
+	if !c.LLM.GLM.Enabled {
+		c.LLM.GLM = z
+	}
+	if !c.LLM.DeepSeek.Enabled {
+		c.LLM.DeepSeek = z
+	}
+	if !c.LLM.Local.Enabled {
+		c.LLM.Local = z
+	}
+	if !c.LLM.Kimi.Enabled {
+		c.LLM.Kimi = z
+	}
+	if !c.LLM.Qwen.Enabled {
+		c.LLM.Qwen = z
+	}
+	if !c.LLM.MiniMax.Enabled {
+		c.LLM.MiniMax = z
+	}
+
+	// Also prune the alternative Providers structure
+	if c.LLM.Providers.Anthropic != nil && !c.LLM.Providers.Anthropic.Enabled {
+		c.LLM.Providers.Anthropic = nil
+	}
+	if c.LLM.Providers.OpenAI != nil && !c.LLM.Providers.OpenAI.Enabled {
+		c.LLM.Providers.OpenAI = nil
+	}
+	if c.LLM.Providers.Gemini != nil && !c.LLM.Providers.Gemini.Enabled {
+		c.LLM.Providers.Gemini = nil
+	}
+	if c.LLM.Providers.GLM != nil && !c.LLM.Providers.GLM.Enabled {
+		c.LLM.Providers.GLM = nil
+	}
+	if c.LLM.Providers.DeepSeek != nil && !c.LLM.Providers.DeepSeek.Enabled {
+		c.LLM.Providers.DeepSeek = nil
+	}
+	if c.LLM.Providers.Kimi != nil && !c.LLM.Providers.Kimi.Enabled {
+		c.LLM.Providers.Kimi = nil
+	}
+	if c.LLM.Providers.Qwen != nil && !c.LLM.Providers.Qwen.Enabled {
+		c.LLM.Providers.Qwen = nil
+	}
+	if c.LLM.Providers.MiniMax != nil && !c.LLM.Providers.MiniMax.Enabled {
+		c.LLM.Providers.MiniMax = nil
+	}
+
+	// Nil out disabled platforms (already pointers with omitempty)
+	if c.Platforms.Telegram != nil && !c.Platforms.Telegram.Enabled {
+		c.Platforms.Telegram = nil
+	}
+	if c.Platforms.Discord != nil && !c.Platforms.Discord.Enabled {
+		c.Platforms.Discord = nil
+	}
+	if c.Platforms.Slack != nil && !c.Platforms.Slack.Enabled {
+		c.Platforms.Slack = nil
+	}
+	if c.Platforms.WhatsApp != nil && !c.Platforms.WhatsApp.Enabled {
+		c.Platforms.WhatsApp = nil
+	}
+	if c.Platforms.Webhook != nil && !c.Platforms.Webhook.Enabled {
+		c.Platforms.Webhook = nil
+	}
 }
 
 // SaveBy saves config with updater info

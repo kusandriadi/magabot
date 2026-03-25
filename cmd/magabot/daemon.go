@@ -55,6 +55,11 @@ func runDaemon() {
 		os.Exit(1)
 	}
 
+	// Prune disabled providers/platforms from config file
+	if err := cfg.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not prune config: %v\n", err)
+	}
+
 	// Setup logger
 	logLevel := slog.LevelInfo
 	switch cfg.Logging.Level {
