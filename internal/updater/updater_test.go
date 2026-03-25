@@ -292,4 +292,3 @@ func TestNew_CustomConfig(t *testing.T) {
 		t.Errorf("expected RepoOwner 'owner', got %q", u.config.RepoOwner)
 	}
 }
-

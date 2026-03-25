@@ -509,4 +509,3 @@ func FormatReleaseInfo(release *Release, hasUpdate bool) string {
 		release.HTMLURL,
 	)
 }
-
