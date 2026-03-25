@@ -343,7 +343,7 @@ func runDaemon() {
 			}
 		}
 
-		// Handle agent session commands (:new, :send, :quit, :status)
+		// Handle agent session commands (:new, :quit, :status)
 		if strings.HasPrefix(msg.Text, ":") {
 			return handleAgentCommand(msg, agentMgr, cfg)
 		}
@@ -421,14 +421,14 @@ func runDaemon() {
 			welcomePrefix = "👋 *Welcome!* This is our first conversation.\nType /help to see all features.\n\n"
 		}
 
-		// Send to LLM — use streaming if platform supports it, else blocking
-		var respContent string
-		if msg.StreamCallback != nil {
-			ch, err := llmRouter.StreamChat(ctx, msg.UserID, messages)
-			if err != nil {
-				return llm.FormatError(err), nil
-			}
+		// Send to LLM (streaming)
+		ch, err := llmRouter.StreamChat(ctx, msg.UserID, messages)
+		if err != nil {
+			return llm.FormatError(err), nil
+		}
 
+		var respContent string
+		{
 			var content strings.Builder
 			var thinking bool
 			for chunk := range ch {
@@ -452,17 +452,6 @@ func runDaemon() {
 				}
 			}
 			respContent = content.String()
-		} else {
-			resp, err := llmRouter.Chat(ctx, msg.UserID, messages)
-			if err != nil {
-				return llm.FormatError(err), nil
-			}
-			respContent = resp.Content
-			logger.Debug("llm response",
-				"provider", resp.Provider,
-				"model", resp.Model,
-				"latency", resp.Latency,
-			)
 		}
 
 		if respContent == "" {
@@ -696,7 +685,6 @@ Send any message and I'll reply using AI.
 
 *Agent Sessions:*
 • :new [agent] <dir> - Start coding agent (supports shortcuts: home, ~, project names)
-• :send <message> - Send message to active agent
 • :quit - Close agent session
 • :status - Show agent session info`, nil
 
@@ -1414,28 +1402,6 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 
 		return fmt.Sprintf("Agent session started: %s in %s\nSend messages to interact. Use :quit to end.", sess.Agent, sess.Dir), nil
 
-	case ":send":
-		if !agentMgr.HasSession(msg.Platform, msg.ChatID) {
-			return "No active agent session. Use :new to start one.", nil
-		}
-		if len(parts) < 2 {
-			return "Usage: :send <message>", nil
-		}
-		message := strings.TrimSpace(strings.TrimPrefix(msg.Text, parts[0]))
-		sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
-		ctx := context.Background()
-		output, err := agentMgr.Execute(ctx, sess, message, msg.Media, nil)
-		if err != nil {
-			if output != "" {
-				return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
-			}
-			return fmt.Sprintf("Agent error: %v", err), nil
-		}
-		if output == "" {
-			return "(no output)", nil
-		}
-		return output, nil
-
 	case ":quit", ":exit", ":close":
 		if !agentMgr.HasSession(msg.Platform, msg.ChatID) {
 			return "No active agent session.", nil
@@ -1451,7 +1417,7 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 		return fmt.Sprintf("Agent: %s\nDirectory: %s\nMessages: %d", sess.Agent, sess.Dir, sess.GetMsgCount()), nil
 
 	default:
-		return fmt.Sprintf("Unknown agent command: %s\nAvailable: :new, :send, :quit, :status", cmd), nil
+		return fmt.Sprintf("Unknown agent command: %s\nAvailable: :new, :quit, :status", cmd), nil
 	}
 }
 

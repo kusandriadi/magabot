@@ -108,31 +108,6 @@ func TestRouter_Complete(t *testing.T) {
 	}
 }
 
-func TestRouter_Chat(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "Response"}),
-	)
-
-	router := NewRouter(&Config{Main: "test"})
-	router.Register("test", allm.New(mock))
-
-	messages := []Message{
-		{Role: "user", Content: "First message"},
-		{Role: "assistant", Content: "First response"},
-		{Role: "user", Content: "Second message"},
-	}
-
-	ctx := context.Background()
-	resp, err := router.Chat(ctx, "user1", messages)
-	if err != nil {
-		t.Fatalf("Chat failed: %v", err)
-	}
-
-	if resp.Content != "Response" {
-		t.Errorf("Content = %q, want %q", resp.Content, "Response")
-	}
-}
-
 func TestRouter_RateLimit(t *testing.T) {
 	mock := allmtest.NewMockProvider("test",
 		allmtest.WithResponse(&allm.Response{Content: "OK"}),
@@ -264,52 +239,6 @@ func TestRouter_Stats(t *testing.T) {
 	providers := router.Providers()
 	if len(providers) != 2 {
 		t.Errorf("Providers count = %d, want 2", len(providers))
-	}
-}
-
-func TestRouter_ChatWithImages(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "I see the image"}),
-	)
-
-	router := NewRouter(&Config{Main: "test", MaxInput: 10000})
-	router.Register("test", allm.New(mock))
-
-	messages := []Message{
-		{
-			Role:    "user",
-			Content: "What's in this image?",
-			Images: []Image{
-				{MimeType: "image/jpeg", Data: []byte("fake image data")},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	resp, err := router.Chat(ctx, "user1", messages)
-	if err != nil {
-		t.Fatalf("Chat failed: %v", err)
-	}
-
-	if resp.Content != "I see the image" {
-		t.Errorf("Content = %q, want %q", resp.Content, "I see the image")
-	}
-
-	// Verify images were passed through
-	req := mock.LastRequest()
-	if req == nil {
-		t.Fatal("No request captured")
-	}
-
-	// Should have system prompt + user message = 2 messages (if system prompt empty, just 1)
-	// Since we didn't set system prompt, should be 1 message
-	if len(req.Messages) == 0 {
-		t.Fatal("No messages in request")
-	}
-
-	lastMsg := req.Messages[len(req.Messages)-1]
-	if len(lastMsg.Images) != 1 {
-		t.Errorf("Images count = %d, want 1", len(lastMsg.Images))
 	}
 }
 
@@ -525,37 +454,6 @@ func TestRouter_SetSystemPrompt(t *testing.T) {
 	}
 	if req.Messages[0].Content != "You are a helpful bot." {
 		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, "You are a helpful bot.")
-	}
-}
-
-func TestRouter_ImageTooLarge(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "OK"}),
-	)
-
-	router := NewRouter(&Config{Main: "test", MaxInput: 10000})
-	router.Register("test", allm.New(mock, allm.WithMaxInputLen(50*1024*1024)))
-
-	// Create a very large image (> 20MB, allm-go's MaxImageSize)
-	largeData := make([]byte, 21*1024*1024)
-
-	messages := []Message{
-		{
-			Role:    "user",
-			Content: "test",
-			Images: []Image{
-				{MimeType: "image/jpeg", Data: largeData},
-			},
-		},
-	}
-
-	ctx := context.Background()
-	_, err := router.Chat(ctx, "user1", messages)
-	if err == nil {
-		t.Fatal("Expected error for too-large image")
-	}
-	if !strings.Contains(err.Error(), "exceeds maximum size") {
-		t.Errorf("Error should mention 'exceeds maximum size', got: %v", err)
 	}
 }
 

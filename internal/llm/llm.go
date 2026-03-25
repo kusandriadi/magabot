@@ -167,29 +167,6 @@ func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, 
 	return r.chat(ctx, allmMessages)
 }
 
-// Chat sends a multi-turn conversation
-func (r *Router) Chat(ctx context.Context, userID string, messages []Message) (*Response, error) {
-	if !r.rateLimiter.allow(userID) {
-		r.logger.Warn("rate limit exceeded", "user", util.MaskSecret(userID))
-		return nil, ErrRateLimited
-	}
-
-	// Copy messages to avoid mutating caller's slice during sanitization
-	sanitized := make([]Message, len(messages))
-	copy(sanitized, messages)
-	for i := range sanitized {
-		sanitized[i].Content = allm.SanitizeInput(sanitized[i].Content)
-	}
-
-	allmMessages := r.buildMessages(sanitized)
-
-	// Apply timeout
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	return r.chat(ctx, allmMessages)
-}
-
 // QuickChat makes a lightweight LLM call without system prompt or rate limiting.
 // Useful for internal tasks like translation or template generation.
 func (r *Router) QuickChat(ctx context.Context, prompt string) (string, error) {
