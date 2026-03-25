@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -326,7 +325,7 @@ func (c *Client) doEmbedRequest(ctx context.Context, path string, reqBody interf
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	body, err := util.ReadHTTPBody(resp, maxResponseSize)
 	if err != nil {
 		return fmt.Errorf("read response: %w", err)
 	}

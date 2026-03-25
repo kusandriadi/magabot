@@ -69,7 +69,7 @@ func (w *Weather) Execute(ctx context.Context, params map[string]string) (string
 		url.PathEscape(location),
 		url.PathEscape(wttrFormat))
 
-	resp, err := util.DoGET(ctx, w.client, u, map[string]string{"User-Agent": "Magabot/1.0"})
+	resp, err := util.DoGET(ctx, w.client, u, map[string]string{"User-Agent": util.DefaultUserAgent})
 	if err != nil {
 		return "", fmt.Errorf("weather request failed: %w", err)
 	}
@@ -94,7 +94,7 @@ func (w *Weather) GetForecast(ctx context.Context, location string, days int) (s
 	// wttr.in text forecast
 	u := fmt.Sprintf("https://wttr.in/%s?format=4&lang=id", url.PathEscape(location))
 
-	resp, err := util.DoGET(ctx, w.client, u, map[string]string{"User-Agent": "Magabot/1.0"})
+	resp, err := util.DoGET(ctx, w.client, u, map[string]string{"User-Agent": util.DefaultUserAgent})
 	if err != nil {
 		return "", err
 	}

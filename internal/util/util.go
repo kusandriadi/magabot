@@ -4,6 +4,7 @@ package util
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"os"
 	"regexp"
@@ -76,6 +77,19 @@ func RandomToken(length int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// ReadPID reads a PID file and returns the integer PID.
+func ReadPID(pidFile string) (int, error) {
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read PID file: %w", err)
+	}
+	var pid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid); err != nil {
+		return 0, fmt.Errorf("invalid PID: %w", err)
+	}
+	return pid, nil
 }
 
 // SanitizeInput removes potentially dangerous characters

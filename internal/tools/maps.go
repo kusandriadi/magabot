@@ -74,7 +74,7 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	q.Set("extratags", "1")
 	u.RawQuery = q.Encode()
 
-	resp, err := util.DoGET(ctx, m.client, u.String(), map[string]string{"User-Agent": "Magabot/1.0 (https://github.com/kusa/magabot)"})
+	resp, err := util.DoGET(ctx, m.client, u.String(), map[string]string{"User-Agent": util.DefaultUserAgent})
 	if err != nil {
 		return "", err
 	}
@@ -157,18 +157,15 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 	u := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?lat=%s&lon=%s&format=json&addressdetails=1",
 		url.QueryEscape(lat), url.QueryEscape(lon))
 
-	resp, err := util.DoGET(ctx, m.client, u, map[string]string{"User-Agent": "Magabot/1.0 (https://github.com/kusa/magabot)"})
+	resp, err := util.DoGET(ctx, m.client, u, map[string]string{"User-Agent": util.DefaultUserAgent})
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := util.ReadHTTPBody(resp, 0)
+	body, err := util.ReadHTTPResponse(resp, "Nominatim API")
 	if err != nil {
-		return "", fmt.Errorf("read reverse geocode response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Nominatim API error: %s", string(body))
+		return "", err
 	}
 
 	var result struct {

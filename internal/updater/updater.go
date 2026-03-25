@@ -370,7 +370,7 @@ func (u *Updater) verifyChecksum(ctx context.Context, checksumAsset *Asset, asse
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return err
 	}

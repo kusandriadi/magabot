@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -216,7 +215,7 @@ func (m *OAuthManager) refreshOpenAIToken(creds *OAuthCredentials) (*OAuthCreden
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1*1024*1024))
+	body, err := util.ReadHTTPBody(resp, 0)
 	if err != nil {
 		return nil, fmt.Errorf("read refresh response: %w", err)
 	}

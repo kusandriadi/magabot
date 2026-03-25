@@ -1428,11 +1428,13 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		return "", nil
 	}
 
-	// Generate and cache progress templates in the user's language
-	if sess.Templates == nil {
-		sess.Templates = generateProgressTemplates(ctx, llmRouter, msg.Text)
-	}
+	// Use cached templates if available; otherwise start with English defaults.
+	// After the first response, we detect the language from the response text
+	// and cache templates for subsequent messages.
 	templates := sess.Templates
+	if templates == nil {
+		templates = agent.DefaultTemplates
+	}
 
 	// Wrap notify to track last send time so ticker can coordinate.
 	var progressMu sync.Mutex
@@ -1477,6 +1479,17 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 
 	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify)
 	close(statusDone)
+
+	// After the first response, detect language from the response and cache
+	// templates for subsequent messages (non-blocking).
+	if sess.Templates == nil && output != "" {
+		go func() {
+			tplCtx, tplCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer tplCancel()
+			sess.Templates = generateProgressTemplates(tplCtx, llmRouter, output)
+		}()
+	}
+
 	if err != nil {
 		if output != "" {
 			return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil

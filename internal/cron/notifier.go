@@ -1,11 +1,9 @@
 package cron
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -110,31 +108,19 @@ func (n *Notifier) sendSlack(ctx context.Context, channel, message string) error
 		"text":    message,
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+n.config.SlackToken)
-
-	resp, err := n.httpClient.Do(req)
+	body, err := util.DoPostJSON(ctx, n.httpClient, apiURL, payload, map[string]string{
+		"Authorization": "Bearer " + n.config.SlackToken,
+	})
 	if err != nil {
 		return fmt.Errorf("slack request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		OK    bool   `json:"ok"`
 		Error string `json:"error"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("slack response parse error: %w", err)
 	}
 
@@ -208,35 +194,18 @@ func (n *Notifier) sendWebhook(ctx context.Context, webhookURL, message string) 
 
 // postJSON sends a JSON POST request. Optional headers are applied to the request.
 func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}, headers ...map[string]string) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
+	var merged map[string]string
 	for _, h := range headers {
-		for k, v := range h {
-			req.Header.Set(k, v)
+		if merged == nil {
+			merged = h
+		} else {
+			for k, v := range h {
+				merged[k] = v
+			}
 		}
 	}
-
-	resp, err := n.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return nil
+	_, err := util.DoPostJSON(ctx, n.httpClient, url, payload, merged)
+	return err
 }
 
 // TestChannel sends a test message to verify configuration
