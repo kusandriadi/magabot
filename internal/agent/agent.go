@@ -437,25 +437,44 @@ func (s *Session) GetMsgCount() int {
 const planDelegatePrompt = `Decide whether a task needs planning:
 
 This workflow is ONLY for code/engineering tasks that modify the codebase.
-DO plan: multi-file changes, refactors, new features, architecture changes, anything that touches 3+ files or requires understanding multiple parts of the codebase.
-SKIP plan (just do it): non-coding requests (travel, writing, general questions, etc.), single-file fixes, simple bugs, one-liner changes, explanations, code lookups.
+
+DO plan (default for any non-trivial change):
+- Multi-file changes, refactors, new features, architecture changes
+- Tasks that require codebase investigation or analysis (e.g. "find X and fix it", "deduplicate", "optimize")
+- Anything where you need to read/explore before knowing the full scope
+- Any change where listing affected files upfront would help the user decide
+
+SKIP plan (just do it directly):
+- Non-coding requests (travel, writing, general questions, conversation)
+- Truly trivial changes: typo fixes, single-line edits where scope is already obvious
+- Explanations, code lookups, questions about the code
+- User explicitly says "just do it" or "no need to plan"
+
+When in doubt, plan. It is always better to show a plan and have the user say "just do it" than to make changes without agreement.
 
 For tasks that need planning, follow this workflow:
 
 PHASE 1 — PLAN (do this now, then STOP):
 1. Analyze the codebase to understand what needs to change. Use subagents to explore in parallel when multiple areas need investigation; do it yourself for smaller scopes.
-2. Synthesize findings into a concise numbered plan.
-3. Output the plan and STOP. Do NOT proceed to implementation yet. End your response asking for confirmation with a (y/n) hint, in the same language the user is using.
+2. Produce a plan with:
+   - Summary of what you found (the problem/opportunity)
+   - Numbered list of changes, each with the file path and what will change
+   - Any trade-offs or alternatives you considered
+3. Output the plan and STOP. Do NOT write, edit, or create any files yet. End your response asking for confirmation with a (y/n) hint, in the same language the user is using.
+
+CRITICAL: Do not touch any code during Phase 1. No edits, no writes, no file creation. Planning means research and presenting a proposal only.
 
 PHASE 2 — USER CONFIRMATION:
 Based on the user's intent (in whatever language they use):
 - Confirms → proceed to Phase 3.
-- Declines with feedback → revise the plan accordingly, output the updated plan, and ask for confirmation again.
-- Wants to stop/cancel entirely → acknowledge and end. Do not continue.
+- Confirms with modifications → adjust accordingly and proceed.
+- Declines with feedback → revise the plan, output the updated plan, and ask for confirmation again.
+- Wants to stop/cancel → acknowledge and end. Do not continue.
 
 PHASE 3 — IMPLEMENT (only after user confirms):
-1. Implement the plan. Use subagents for independent steps that can run in parallel; do sequential/dependent steps yourself.
+1. Implement the confirmed plan. Use subagents for independent steps that can run in parallel; do sequential/dependent steps yourself.
 2. After implementation, build/test to confirm everything works.
+3. Give a brief summary of what was done.
 
 When to use subagents: independent work that can run in parallel (e.g. editing unrelated files, exploring separate packages, running different checks).
 When NOT to use subagents: sequential/dependent changes, small scope (1-2 files), or when order matters.`

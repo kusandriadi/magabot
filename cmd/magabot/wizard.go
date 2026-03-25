@@ -785,6 +785,7 @@ tools:
 
 # Agent Sessions
 agent:
+  plan_delegate: true
   timeout: 300
   max_retries: 2
   discover_depth: 3

@@ -89,34 +89,12 @@ func (n *Notifier) sendWhatsApp(ctx context.Context, phone, message string) erro
 		"message": message,
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", n.config.WhatsAppAPIURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
+	var headers map[string]string
 	if n.config.WhatsAppAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+n.config.WhatsAppAPIKey)
+		headers = map[string]string{"Authorization": "Bearer " + n.config.WhatsAppAPIKey}
 	}
 
-	resp, err := n.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("whatsapp request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("whatsapp error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return nil
+	return n.postJSON(ctx, n.config.WhatsAppAPIURL, payload, headers)
 }
 
 // sendSlack sends a message via Slack API
@@ -208,31 +186,9 @@ func (n *Notifier) sendDiscordBot(ctx context.Context, channelID, message string
 		"content": message,
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bot "+n.config.DiscordToken)
-
-	resp, err := n.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("discord request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("discord error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return nil
+	return n.postJSON(ctx, apiURL, payload, map[string]string{
+		"Authorization": "Bot " + n.config.DiscordToken,
+	})
 }
 
 // sendWebhook sends a POST request to a custom webhook
@@ -250,8 +206,8 @@ func (n *Notifier) sendWebhook(ctx context.Context, webhookURL, message string) 
 	return n.postJSON(ctx, webhookURL, payload)
 }
 
-// postJSON sends a JSON POST request
-func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}) error {
+// postJSON sends a JSON POST request. Optional headers are applied to the request.
+func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}, headers ...map[string]string) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
@@ -263,6 +219,11 @@ func (n *Notifier) postJSON(ctx context.Context, url string, payload interface{}
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	for _, h := range headers {
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := n.httpClient.Do(req)
 	if err != nil {

@@ -147,41 +147,4 @@ func TestIsAllowedOpenMode(t *testing.T) {
 	}
 }
 
-func TestContains(t *testing.T) {
-	slice := []string{"a", "b", "c"}
-
-	if !contains(slice, "b") {
-		t.Error("Should find 'b'")
-	}
-	if contains(slice, "d") {
-		t.Error("Should not find 'd'")
-	}
-}
-
-func TestRemove(t *testing.T) {
-	slice := []string{"a", "b", "c"}
-	result := remove(slice, "b")
-
-	if len(result) != 2 {
-		t.Errorf("Expected 2 elements, got %d", len(result))
-	}
-	if contains(result, "b") {
-		t.Error("Should not contain 'b'")
-	}
-}
-
-func TestAddUnique(t *testing.T) {
-	slice := []string{"a", "b"}
-
-	// Add new
-	result := addUnique(slice, "c")
-	if len(result) != 3 {
-		t.Errorf("Expected 3 elements, got %d", len(result))
-	}
-
-	// Add duplicate
-	result2 := addUnique(slice, "a")
-	if len(result2) != 2 {
-		t.Errorf("Expected 2 elements (no duplicate), got %d", len(result2))
-	}
-}
+// Tests for Contains/Remove/AddUnique live in internal/util/util_test.go

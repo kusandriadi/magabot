@@ -86,12 +86,9 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := util.ReadHTTPBody(resp, 0)
+	body, err := util.ReadHTTPResponse(resp, "Nominatim API")
 	if err != nil {
-		return "", fmt.Errorf("read search response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Nominatim API error: %s", string(body))
+		return "", err
 	}
 
 	var results []struct {

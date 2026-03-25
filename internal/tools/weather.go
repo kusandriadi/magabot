@@ -81,15 +81,11 @@ func (w *Weather) Execute(ctx context.Context, params map[string]string) (string
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := util.ReadHTTPBody(resp, 0)
+	body, err := util.ReadHTTPResponse(resp, "weather API")
 	if err != nil {
-		return "", fmt.Errorf("read weather response: %w", err)
+		return "", err
 	}
 	result := string(body)
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("weather API error: %s", result)
-	}
 
 	// Check for error responses
 	if strings.Contains(result, "Unknown location") {

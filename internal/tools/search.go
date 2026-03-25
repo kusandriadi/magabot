@@ -107,13 +107,9 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := util.ReadHTTPBody(resp, 0)
+	body, err := util.ReadHTTPResponse(resp, "Brave API")
 	if err != nil {
-		return "", fmt.Errorf("read search response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Brave API error %d: %s", resp.StatusCode, string(body))
+		return "", err
 	}
 
 	var raw struct {

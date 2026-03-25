@@ -275,7 +275,7 @@ func runDaemon() {
 		MaxRetries:    cfg.Agent.MaxRetries,
 		Shortcuts:     cfg.Agent.Shortcuts,
 		DiscoverDepth: cfg.Agent.DiscoverDepth,
-		PlanDelegate:  cfg.Agent.PlanDelegate,
+		PlanDelegate:  cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
 		GetCLISettings: func() (string, string) {
 			model := llmRouter.GetModel()
 			var effort string

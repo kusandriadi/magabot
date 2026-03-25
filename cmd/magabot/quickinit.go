@@ -327,6 +327,7 @@ func buildInitConfig(cfg *envConfig) string {
 
 	// Agent Sessions
 	b.WriteString("agent:\n")
+	b.WriteString("  plan_delegate: true\n")
 	b.WriteString("  timeout: 300\n")
 	b.WriteString("  max_retries: 2\n")
 	b.WriteString("  discover_depth: 3\n\n")

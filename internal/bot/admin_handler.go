@@ -84,39 +84,12 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 	var admins, users, chats []string
 	var allowGroups, allowDMs bool
 
-	switch platform {
-	case "telegram":
-		if h.cfg.Platforms.Telegram != nil {
-			admins = h.cfg.Platforms.Telegram.Admins
-			users = h.cfg.Platforms.Telegram.AllowedUsers
-			chats = h.cfg.Platforms.Telegram.AllowedChats
-			allowGroups = h.cfg.Platforms.Telegram.AllowGroups
-			allowDMs = h.cfg.Platforms.Telegram.AllowDMs
-		}
-	case "discord":
-		if h.cfg.Platforms.Discord != nil {
-			admins = h.cfg.Platforms.Discord.Admins
-			users = h.cfg.Platforms.Discord.AllowedUsers
-			chats = h.cfg.Platforms.Discord.AllowedChats
-			allowGroups = h.cfg.Platforms.Discord.AllowGroups
-			allowDMs = h.cfg.Platforms.Discord.AllowDMs
-		}
-	case "slack":
-		if h.cfg.Platforms.Slack != nil {
-			admins = h.cfg.Platforms.Slack.Admins
-			users = h.cfg.Platforms.Slack.AllowedUsers
-			chats = h.cfg.Platforms.Slack.AllowedChats
-			allowGroups = h.cfg.Platforms.Slack.AllowGroups
-			allowDMs = h.cfg.Platforms.Slack.AllowDMs
-		}
-	case "whatsapp":
-		if h.cfg.Platforms.WhatsApp != nil {
-			admins = h.cfg.Platforms.WhatsApp.Admins
-			users = h.cfg.Platforms.WhatsApp.AllowedUsers
-			chats = h.cfg.Platforms.WhatsApp.AllowedChats
-			allowGroups = h.cfg.Platforms.WhatsApp.AllowGroups
-			allowDMs = h.cfg.Platforms.WhatsApp.AllowDMs
-		}
+	if pa := h.cfg.GetPlatformAccess(platform); pa != nil {
+		admins = pa.Admins
+		users = pa.AllowedUsers
+		chats = pa.AllowedChats
+		allowGroups = pa.AllowGroups
+		allowDMs = pa.AllowDMs
 	}
 
 	sb.WriteString(fmt.Sprintf("Groups: %s | DMs: %s\n", util.BoolIcon(allowGroups), util.BoolIcon(allowDMs)))

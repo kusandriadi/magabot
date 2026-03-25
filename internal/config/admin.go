@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/kusa/magabot/internal/util"
 )
 
 // AdminAction represents a config change action
@@ -15,6 +17,18 @@ type AdminAction struct {
 	Success     bool
 	Message     string
 	NeedRestart bool
+}
+
+// completeAction saves config and returns a success result, or a failure result on save error.
+func (c *Config) completeAction(result AdminAction, requesterID, msg string) AdminAction {
+	if err := c.SaveBy(requesterID); err != nil {
+		result.Message = fmt.Sprintf("Failed to save: %v", err)
+		return result
+	}
+	result.Success = true
+	result.NeedRestart = true
+	result.Message = msg
+	return result
 }
 
 // AddPlatformAdmin adds a platform admin (requires platform admin)
@@ -47,18 +61,10 @@ func (c *Config) AddPlatformAdmin(platform, requesterID, newAdminID string) Admi
 		result.Message = fmt.Sprintf("Unknown platform: %s", platform)
 		return result
 	}
-	*admins = addUnique(*admins, newAdminID)
+	*admins = util.AddUnique(*admins, newAdminID)
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Added %s admin: %s", platform, newAdminID)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Added %s admin: %s", platform, newAdminID))
 }
 
 // RemovePlatformAdmin removes a platform admin
@@ -77,19 +83,11 @@ func (c *Config) RemovePlatformAdmin(platform, requesterID, adminID string) Admi
 		return result
 	}
 	if admins := c.platformAdmins(platform); admins != nil {
-		*admins = remove(*admins, adminID)
+		*admins = util.Remove(*admins, adminID)
 	}
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Removed %s admin: %s", platform, adminID)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Removed %s admin: %s", platform, adminID))
 }
 
 // AllowUser adds a user to the platform allowlist
@@ -108,19 +106,11 @@ func (c *Config) AllowUser(platform, requesterID, userID string) AdminAction {
 		return result
 	}
 	if users := c.platformAllowedUsers(platform); users != nil {
-		*users = addUnique(*users, userID)
+		*users = util.AddUnique(*users, userID)
 	}
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Allowed user: %s", userID)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Allowed user: %s", userID))
 }
 
 // RemoveUser removes a user from the allowlist
@@ -145,19 +135,11 @@ func (c *Config) RemoveUser(platform, requesterID, userID string) AdminAction {
 		return result
 	}
 	if users := c.platformAllowedUsers(platform); users != nil {
-		*users = remove(*users, userID)
+		*users = util.Remove(*users, userID)
 	}
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Removed user: %s", userID)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Removed user: %s", userID))
 }
 
 // AllowChat adds a chat/group to the allowlist
@@ -176,19 +158,11 @@ func (c *Config) AllowChat(platform, requesterID, chatID string) AdminAction {
 		return result
 	}
 	if chats := c.platformAllowedChats(platform); chats != nil {
-		*chats = addUnique(*chats, chatID)
+		*chats = util.AddUnique(*chats, chatID)
 	}
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Allowed chat: %s", chatID)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Allowed chat: %s", chatID))
 }
 
 // RemoveChat removes a chat from the allowlist
@@ -207,19 +181,11 @@ func (c *Config) RemoveChat(platform, requesterID, chatID string) AdminAction {
 		return result
 	}
 	if chats := c.platformAllowedChats(platform); chats != nil {
-		*chats = remove(*chats, chatID)
+		*chats = util.Remove(*chats, chatID)
 	}
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Removed chat: %s", chatID)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Removed chat: %s", chatID))
 }
 
 // SetAccessMode sets the global access mode
@@ -245,15 +211,7 @@ func (c *Config) SetAccessMode(platform, requesterID, mode string) AdminAction {
 	c.Access.Mode = mode
 	c.mu.Unlock()
 
-	if err := c.SaveBy(requesterID); err != nil {
-		result.Message = fmt.Sprintf("Failed to save: %v", err)
-		return result
-	}
-
-	result.Success = true
-	result.NeedRestart = true
-	result.Message = fmt.Sprintf("Access mode set to: %s", mode)
-	return result
+	return c.completeAction(result, requesterID, fmt.Sprintf("Access mode set to: %s", mode))
 }
 
 // PromoteFirstAdmin promotes a user to platform admin if no admins exist yet.
@@ -277,71 +235,40 @@ func (c *Config) PromoteFirstAdmin(platform, userID string) bool {
 	return true
 }
 
-// platformAdmins returns a pointer to the platform's Admins slice, or nil if unknown
+// platformAccessPtrs returns pointers to the platform's access slices (caller must hold mu).
+func (c *Config) platformAccessPtrs(platform string) (admins, users, chats *[]string) {
+	switch platform {
+	case "telegram":
+		if p := c.Platforms.Telegram; p != nil {
+			return &p.Admins, &p.AllowedUsers, &p.AllowedChats
+		}
+	case "discord":
+		if p := c.Platforms.Discord; p != nil {
+			return &p.Admins, &p.AllowedUsers, &p.AllowedChats
+		}
+	case "slack":
+		if p := c.Platforms.Slack; p != nil {
+			return &p.Admins, &p.AllowedUsers, &p.AllowedChats
+		}
+	case "whatsapp":
+		if p := c.Platforms.WhatsApp; p != nil {
+			return &p.Admins, &p.AllowedUsers, &p.AllowedChats
+		}
+	}
+	return nil, nil, nil
+}
+
 func (c *Config) platformAdmins(platform string) *[]string {
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			return &c.Platforms.Telegram.Admins
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			return &c.Platforms.Discord.Admins
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			return &c.Platforms.Slack.Admins
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			return &c.Platforms.WhatsApp.Admins
-		}
-	}
-	return nil
+	admins, _, _ := c.platformAccessPtrs(platform)
+	return admins
 }
 
-// platformAllowedUsers returns a pointer to the platform's AllowedUsers slice, or nil
 func (c *Config) platformAllowedUsers(platform string) *[]string {
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			return &c.Platforms.Telegram.AllowedUsers
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			return &c.Platforms.Discord.AllowedUsers
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			return &c.Platforms.Slack.AllowedUsers
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			return &c.Platforms.WhatsApp.AllowedUsers
-		}
-	}
-	return nil
+	_, users, _ := c.platformAccessPtrs(platform)
+	return users
 }
 
-// platformAllowedChats returns a pointer to the platform's AllowedChats slice, or nil
 func (c *Config) platformAllowedChats(platform string) *[]string {
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			return &c.Platforms.Telegram.AllowedChats
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			return &c.Platforms.Discord.AllowedChats
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			return &c.Platforms.Slack.AllowedChats
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			return &c.Platforms.WhatsApp.AllowedChats
-		}
-	}
-	return nil
+	_, _, chats := c.platformAccessPtrs(platform)
+	return chats
 }

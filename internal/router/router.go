@@ -214,30 +214,7 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 	}
 
 	// Log incoming message (encrypted if vault available, plaintext otherwise)
-	var contentToStore string
-	if r.vault != nil {
-		encrypted, encErr := r.vault.Encrypt([]byte(msg.Text))
-		if encErr != nil {
-			r.logger.Error("encrypt message failed", "error", encErr, "direction", "in")
-		} else {
-			contentToStore = encrypted
-		}
-	} else {
-		contentToStore = msg.Text
-	}
-	if contentToStore != "" {
-		if err := r.store.SaveMessage(&storage.Message{
-			Platform:  msg.Platform,
-			ChatID:    msg.ChatID,
-			UserID:    hashedUser,
-			Username:  msg.Username,
-			Content:   contentToStore,
-			Timestamp: msg.Timestamp,
-			Direction: "in",
-		}); err != nil {
-			r.logger.Error("save message failed", "error", err, "direction", "in")
-		}
-	}
+	r.encryptAndStore(msg.Platform, msg.ChatID, hashedUser, msg.Username, msg.Text, msg.Timestamp, "in")
 
 	// Fire pre_message hook (can block or modify the message text)
 	r.mu.RLock()
@@ -301,29 +278,7 @@ func (r *Router) handleMessage(ctx context.Context, msg *Message) (string, error
 
 	// Log outgoing message
 	if response != "" {
-		var responseToStore string
-		if r.vault != nil {
-			encrypted, encErr := r.vault.Encrypt([]byte(response))
-			if encErr != nil {
-				r.logger.Error("encrypt message failed", "error", encErr, "direction", "out")
-			} else {
-				responseToStore = encrypted
-			}
-		} else {
-			responseToStore = response
-		}
-		if responseToStore != "" {
-			if err := r.store.SaveMessage(&storage.Message{
-				Platform:  msg.Platform,
-				ChatID:    msg.ChatID,
-				UserID:    "bot",
-				Content:   responseToStore,
-				Timestamp: time.Now(),
-				Direction: "out",
-			}); err != nil {
-				r.logger.Error("save message failed", "error", err, "direction", "out")
-			}
-		}
+		r.encryptAndStore(msg.Platform, msg.ChatID, "bot", "", response, time.Now(), "out")
 	}
 
 	return response, nil
@@ -340,6 +295,34 @@ func (r *Router) Send(platform, chatID, message string) error {
 	}
 
 	return p.Send(chatID, message)
+}
+
+// encryptAndStore encrypts content (if vault available) and saves a message to the store.
+func (r *Router) encryptAndStore(platform, chatID, userID, username, content string, ts time.Time, direction string) {
+	var toStore string
+	if r.vault != nil {
+		encrypted, err := r.vault.Encrypt([]byte(content))
+		if err != nil {
+			r.logger.Error("encrypt message failed", "error", err, "direction", direction)
+		} else {
+			toStore = encrypted
+		}
+	} else {
+		toStore = content
+	}
+	if toStore != "" {
+		if err := r.store.SaveMessage(&storage.Message{
+			Platform:  platform,
+			ChatID:    chatID,
+			UserID:    userID,
+			Username:  username,
+			Content:   toStore,
+			Timestamp: ts,
+			Direction: direction,
+		}); err != nil {
+			r.logger.Error("save message failed", "error", err, "direction", direction)
+		}
+	}
 }
 
 // Platforms returns list of registered platforms

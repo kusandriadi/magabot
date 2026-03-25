@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kusa/magabot/internal/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -360,7 +361,7 @@ type AgentConfig struct {
 	MaxRetries    int               `yaml:"max_retries"`    // auto-retry on timeout, default 2
 	Shortcuts     map[string]string `yaml:"shortcuts"`      // directory shortcuts, e.g. "myproject": "~/code/myproject"
 	DiscoverDepth int               `yaml:"discover_depth"` // auto-discover search depth (default 3)
-	PlanDelegate  bool              `yaml:"plan_delegate"`  // plan first, then delegate to subagents
+	PlanDelegate  *bool             `yaml:"plan_delegate"`  // plan first, then delegate to subagents (default: true)
 }
 
 // HooksFile is the top-level structure for config-hooks.yml
@@ -538,6 +539,10 @@ func (c *Config) setDefaults() {
 	if c.Agent.MaxRetries <= 0 {
 		c.Agent.MaxRetries = 2
 	}
+	if c.Agent.PlanDelegate == nil {
+		t := true
+		c.Agent.PlanDelegate = &t
+	}
 
 	// Platform defaults
 	if c.Platforms.Telegram != nil {
@@ -651,25 +656,8 @@ func (c *Config) IsPlatformAdmin(platform, userID string) bool {
 
 // isPlatformAdmin is the lock-free internal version (caller must hold mu)
 func (c *Config) isPlatformAdmin(platform, userID string) bool {
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			return contains(c.Platforms.Telegram.Admins, userID)
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			return contains(c.Platforms.Discord.Admins, userID)
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			return contains(c.Platforms.Slack.Admins, userID)
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			return contains(c.Platforms.WhatsApp.Admins, userID)
-		}
-	}
-	return false
+	pa := c.getPlatformAccess(platform)
+	return pa != nil && util.Contains(pa.Admins, userID)
 }
 
 // IsAllowed checks if user/chat is allowed on a platform
@@ -688,49 +676,15 @@ func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
 		return true
 	}
 
-	var pa *platformAccess
-	switch platform {
-	case "telegram":
-		if c.Platforms.Telegram != nil {
-			pa = &platformAccess{
-				Enabled: c.Platforms.Telegram.Enabled, Admins: c.Platforms.Telegram.Admins,
-				AllowedUsers: c.Platforms.Telegram.AllowedUsers, AllowedChats: c.Platforms.Telegram.AllowedChats,
-				AllowGroups: c.Platforms.Telegram.AllowGroups, AllowDMs: c.Platforms.Telegram.AllowDMs,
-			}
-		}
-	case "discord":
-		if c.Platforms.Discord != nil {
-			pa = &platformAccess{
-				Enabled: c.Platforms.Discord.Enabled, Admins: c.Platforms.Discord.Admins,
-				AllowedUsers: c.Platforms.Discord.AllowedUsers, AllowedChats: c.Platforms.Discord.AllowedChats,
-				AllowGroups: c.Platforms.Discord.AllowGroups, AllowDMs: c.Platforms.Discord.AllowDMs,
-			}
-		}
-	case "slack":
-		if c.Platforms.Slack != nil {
-			pa = &platformAccess{
-				Enabled: c.Platforms.Slack.Enabled, Admins: c.Platforms.Slack.Admins,
-				AllowedUsers: c.Platforms.Slack.AllowedUsers, AllowedChats: c.Platforms.Slack.AllowedChats,
-				AllowGroups: c.Platforms.Slack.AllowGroups, AllowDMs: c.Platforms.Slack.AllowDMs,
-			}
-		}
-	case "whatsapp":
-		if c.Platforms.WhatsApp != nil {
-			pa = &platformAccess{
-				Enabled: c.Platforms.WhatsApp.Enabled, Admins: c.Platforms.WhatsApp.Admins,
-				AllowedUsers: c.Platforms.WhatsApp.AllowedUsers, AllowedChats: c.Platforms.WhatsApp.AllowedChats,
-				AllowGroups: c.Platforms.WhatsApp.AllowGroups, AllowDMs: c.Platforms.WhatsApp.AllowDMs,
-			}
-		}
-	}
+	pa := c.getPlatformAccess(platform)
 	if pa == nil {
 		return false
 	}
 	return c.isAllowedPlatform(pa, userID, chatID, isGroup)
 }
 
-// platformAccess holds the common access control fields for any platform
-type platformAccess struct {
+// PlatformAccess holds the common access control fields for any platform.
+type PlatformAccess struct {
 	Enabled      bool
 	Admins       []string
 	AllowedUsers []string
@@ -739,7 +693,65 @@ type platformAccess struct {
 	AllowDMs     bool
 }
 
-func (c *Config) isAllowedPlatform(pa *platformAccess, userID, chatID string, isGroup bool) bool {
+// GetPlatformAccess returns a read-only snapshot of access fields for a platform (thread-safe).
+func (c *Config) GetPlatformAccess(platform string) *PlatformAccess {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.getPlatformAccess(platform)
+}
+
+// getPlatformAccess returns access fields for a platform (caller must hold mu).
+func (c *Config) getPlatformAccess(platform string) *PlatformAccess {
+	switch platform {
+	case "telegram":
+		if c.Platforms.Telegram != nil {
+			return &PlatformAccess{
+				Enabled:      c.Platforms.Telegram.Enabled,
+				Admins:       c.Platforms.Telegram.Admins,
+				AllowedUsers: c.Platforms.Telegram.AllowedUsers,
+				AllowedChats: c.Platforms.Telegram.AllowedChats,
+				AllowGroups:  c.Platforms.Telegram.AllowGroups,
+				AllowDMs:     c.Platforms.Telegram.AllowDMs,
+			}
+		}
+	case "discord":
+		if c.Platforms.Discord != nil {
+			return &PlatformAccess{
+				Enabled:      c.Platforms.Discord.Enabled,
+				Admins:       c.Platforms.Discord.Admins,
+				AllowedUsers: c.Platforms.Discord.AllowedUsers,
+				AllowedChats: c.Platforms.Discord.AllowedChats,
+				AllowGroups:  c.Platforms.Discord.AllowGroups,
+				AllowDMs:     c.Platforms.Discord.AllowDMs,
+			}
+		}
+	case "slack":
+		if c.Platforms.Slack != nil {
+			return &PlatformAccess{
+				Enabled:      c.Platforms.Slack.Enabled,
+				Admins:       c.Platforms.Slack.Admins,
+				AllowedUsers: c.Platforms.Slack.AllowedUsers,
+				AllowedChats: c.Platforms.Slack.AllowedChats,
+				AllowGroups:  c.Platforms.Slack.AllowGroups,
+				AllowDMs:     c.Platforms.Slack.AllowDMs,
+			}
+		}
+	case "whatsapp":
+		if c.Platforms.WhatsApp != nil {
+			return &PlatformAccess{
+				Enabled:      c.Platforms.WhatsApp.Enabled,
+				Admins:       c.Platforms.WhatsApp.Admins,
+				AllowedUsers: c.Platforms.WhatsApp.AllowedUsers,
+				AllowedChats: c.Platforms.WhatsApp.AllowedChats,
+				AllowGroups:  c.Platforms.WhatsApp.AllowGroups,
+				AllowDMs:     c.Platforms.WhatsApp.AllowDMs,
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Config) isAllowedPlatform(pa *PlatformAccess, userID, chatID string, isGroup bool) bool {
 	if !pa.Enabled {
 		return false
 	}
@@ -749,44 +761,18 @@ func (c *Config) isAllowedPlatform(pa *platformAccess, userID, chatID string, is
 	if !isGroup && !pa.AllowDMs {
 		return false
 	}
-	if contains(pa.Admins, userID) {
+	if util.Contains(pa.Admins, userID) {
 		return true
 	}
-	userOK := contains(pa.AllowedUsers, userID)
+	userOK := util.Contains(pa.AllowedUsers, userID)
 	if len(pa.AllowedUsers) == 0 {
 		userOK = c.Access.Mode != "allowlist"
 	}
-	chatOK := !isGroup || contains(pa.AllowedChats, chatID)
+	chatOK := !isGroup || util.Contains(pa.AllowedChats, chatID)
 	if isGroup && len(pa.AllowedChats) == 0 {
 		chatOK = c.Access.Mode != "allowlist"
 	}
 	return userOK && chatOK
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
-func remove(slice []string, item string) []string {
-	result := make([]string, 0, len(slice))
-	for _, s := range slice {
-		if s != item {
-			result = append(result, s)
-		}
-	}
-	return result
-}
-
-func addUnique(slice []string, item string) []string {
-	if !contains(slice, item) {
-		return append(slice, item)
-	}
-	return slice
 }
 
 // LoadHooksFile reads hooks from a separate YAML file.
