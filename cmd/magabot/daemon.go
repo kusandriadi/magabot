@@ -426,8 +426,25 @@ func runDaemon() {
 			welcomePrefix = "👋 *Welcome!* This is our first conversation.\nType /help to see all features.\n\n"
 		}
 
+		// Build system prompt from active persona + platform formatting rules
+		var systemPromptOverride string
+		if len(cfg.Personas.List) > 0 {
+			personaName, _ := sessionMgr.GetContext(sess, "persona").(string)
+			persona := cfg.GetPersona(personaName)
+			if persona == nil {
+				persona = cfg.GetDefaultPersona()
+			}
+			if persona != nil {
+				systemPromptOverride = llm.BuildSystemPrompt(persona.SystemPrompt, msg.Platform)
+			}
+		}
+		if systemPromptOverride == "" {
+			// No personas configured — use llm.system_prompt with platform-aware formatting
+			systemPromptOverride = llm.BuildSystemPrompt(cfg.LLM.SystemPrompt, msg.Platform)
+		}
+
 		// Send to LLM (streaming)
-		ch, err := llmRouter.StreamChat(ctx, msg.UserID, messages)
+		ch, err := llmRouter.StreamChat(ctx, msg.UserID, messages, systemPromptOverride)
 		if err != nil {
 			return llm.FormatError(err), nil
 		}
@@ -673,16 +690,17 @@ Send any message and I'll reply using AI.
  3. /model — Current model & switch
  4. /effort — Set effort level (low/medium/high/max)
  5. /prompt — Custom system prompt
- 6. /fallback — Set fallback model
- 7. /budget — Budget limit per request
- 8. /clear — Clear conversation history
- 9. /help — This help
+ 6. /persona — Switch AI persona
+ 7. /fallback — Set fallback model
+ 8. /budget — Budget limit per request
+ 9. /clear — Clear conversation history
+10. /help — This help
 
 🔧 Admin:
-10. /restart — Restart bot
-11. /config — Configuration
-12. /memory — Memory management
-13. /task — Background tasks
+11. /restart — Restart bot
+12. /config — Configuration
+13. /memory — Memory management
+14. /task — Background tasks
 
 🤖 Agent Sessions:
 • :new [agent] <dir> — Start coding agent
@@ -947,6 +965,57 @@ Send any message and I'll reply using AI.
 			return fmt.Sprintf("⚠️ History cleared from memory but DB error: %v", err), nil
 		}
 		return "🗑 Conversation history cleared.", nil
+
+	case "/persona":
+		if len(cfg.Personas.List) == 0 {
+			return "No personas configured. Add a `personas` section to config.yaml.", nil
+		}
+		sess := sessionMgr.GetOrCreate(msg.Platform, msg.ChatID, msg.UserID)
+
+		if len(args) == 0 {
+			// Show current persona and list available
+			currentName, _ := sessionMgr.GetContext(sess, "persona").(string)
+			if currentName == "" {
+				if p := cfg.GetDefaultPersona(); p != nil {
+					currentName = p.Name
+				}
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("🎭 Active persona: %s\n\n", currentName))
+			sb.WriteString("Available personas:\n")
+			for i, p := range cfg.Personas.List {
+				marker := "  "
+				if p.Name == currentName {
+					marker = "▸ "
+				}
+				sb.WriteString(fmt.Sprintf("%s%d. %s — %s\n", marker, i+1, p.Name, p.Description))
+			}
+			sb.WriteString("\nSwitch: /persona <name>")
+			return sb.String(), nil
+		}
+
+		// Switch persona
+		name := strings.ToLower(args[0])
+		persona := cfg.GetPersona(name)
+		if persona == nil {
+			var names []string
+			for _, p := range cfg.Personas.List {
+				names = append(names, p.Name)
+			}
+			return fmt.Sprintf("Unknown persona %q. Available: %s", name, strings.Join(names, ", ")), nil
+		}
+
+		sessionMgr.SetContext(sess, "persona", persona.Name)
+
+		// Clear conversation history when switching persona
+		sessionMgr.ClearMessages(sess)
+		sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
+		_ = store.ClearConversationHistory(sessionKey)
+
+		if persona.FirstMessage != "" {
+			return fmt.Sprintf("🎭 Switched to %s\n\n%s", persona.Name, persona.FirstMessage), nil
+		}
+		return fmt.Sprintf("🎭 Switched to %s", persona.Name), nil
 
 	case "/config":
 		if !cfg.IsPlatformAdmin(msg.Platform, msg.UserID) {

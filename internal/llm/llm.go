@@ -49,16 +49,44 @@ const (
 	ResponseFormatJSON       = allm.ResponseFormatJSON
 	ResponseFormatJSONSchema = allm.ResponseFormatJSONSchema
 
-	systemPromptRules = "\n\nResponse style:\n" +
+	responseStyleRules = "\n\nResponse style:\n" +
 		"- Write naturally and conversationally, like a knowledgeable friend, not a corporate chatbot.\n" +
 		"- Vary your sentence structure. Avoid repetitive patterns or robotic phrasing.\n" +
 		"- Be warm but not overly enthusiastic. Skip filler like \"Great question!\" or \"Sure thing!\".\n" +
-		"- Use simple, everyday language. Avoid jargon unless the user uses it first.\n" +
-		"\nFormatting rules (for chat responses only, not for generating file content):\n" +
+		"- Use simple, everyday language. Avoid jargon unless the user uses it first."
+
+	defaultFormattingRules = "\n\nFormatting rules (for chat responses only, not for generating file content):\n" +
 		"- Do not use markdown tables. Use plain text or lists instead.\n" +
 		"- Prefer numbered lists over bullet points. Bullet points are allowed but use them sparingly.\n" +
 		"- Emojis are allowed but must be relevant to the text and used neatly, not excessive.\n" +
 		"- You may use horizontal lines (————) as section separators."
+
+	telegramFormattingRules = "\n\nFormatting rules (for Telegram chat):\n" +
+		"- NEVER use markdown headers (# ## ###). Use bold text instead.\n" +
+		"- NEVER use **text** for bold. Telegram does not support double asterisks. Use plain text emphasis or CAPS for emphasis.\n" +
+		"- NEVER use markdown tables. Use numbered lists or bullet points instead.\n" +
+		"- Prefer numbered lists and bullet points for structured information.\n" +
+		"- Emojis are encouraged where relevant — use them to make responses more visual and scannable.\n" +
+		"- You may use horizontal lines (————) as section separators.\n" +
+		"- Keep responses concise and easy to read on mobile screens."
+
+	slackFormattingRules = "\n\nFormatting rules (for Slack chat):\n" +
+		"- Use *bold* for emphasis (single asterisks).\n" +
+		"- Use _italic_ for subtle emphasis.\n" +
+		"- Do not use markdown tables. Use lists instead.\n" +
+		"- Prefer numbered lists and bullet points for structured information.\n" +
+		"- Emojis are allowed but must be relevant to the text and used neatly.\n" +
+		"- You may use horizontal lines (————) as section separators."
+
+	whatsappFormattingRules = "\n\nFormatting rules (for WhatsApp chat):\n" +
+		"- Use *bold* for emphasis (single asterisks).\n" +
+		"- Use _italic_ for subtle emphasis.\n" +
+		"- NEVER use markdown tables. Use numbered lists or bullet points instead.\n" +
+		"- Emojis are encouraged where relevant.\n" +
+		"- Keep responses concise and easy to read on mobile screens."
+
+	// systemPromptRules is kept for backward compatibility in tests.
+	systemPromptRules = responseStyleRules + defaultFormattingRules
 )
 
 var (
@@ -200,12 +228,45 @@ func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, 
 // ~62k tokens — fits comfortably in Claude (200k) and GPT-4o (128k).
 const defaultMaxContextChars = 250_000
 
-// buildMessages converts user messages to allm messages with system prompt
-func (r *Router) buildMessages(messages []Message) []allm.Message {
+// PlatformFormattingRules returns formatting rules tailored to the given platform.
+func PlatformFormattingRules(platform string) string {
+	switch platform {
+	case "telegram":
+		return telegramFormattingRules
+	case "slack":
+		return slackFormattingRules
+	case "whatsapp":
+		return whatsappFormattingRules
+	default:
+		return defaultFormattingRules
+	}
+}
+
+// BuildSystemPrompt constructs a full system prompt by combining a base prompt
+// with response style rules and platform-specific formatting rules.
+func BuildSystemPrompt(basePrompt, platform string) string {
+	if basePrompt == "" {
+		return ""
+	}
+	return basePrompt + responseStyleRules + PlatformFormattingRules(platform)
+}
+
+// buildMessages converts user messages to allm messages with system prompt.
+// If systemPromptOverride is non-empty, it is used as-is instead of the router's
+// default system prompt (the caller is responsible for including formatting rules).
+func (r *Router) buildMessages(messages []Message, systemPromptOverride string) []allm.Message {
 	r.mu.RLock()
 	systemPrompt := r.systemPrompt
 	promptCaching := r.promptCaching
 	r.mu.RUnlock()
+
+	// Use override when provided
+	if systemPromptOverride != "" {
+		systemPrompt = systemPromptOverride
+	} else if systemPrompt != "" {
+		// Append default rules only when using the router's own prompt
+		systemPrompt += systemPromptRules
+	}
 
 	// Trim conversation history to prevent context overflow.
 	// Drops oldest messages first, always keeps the last message (current user input).
@@ -223,7 +284,6 @@ func (r *Router) buildMessages(messages []Message) []allm.Message {
 
 	// Add system prompt if set
 	if systemPrompt != "" {
-		systemPrompt += systemPromptRules
 		sysMsg := allm.Message{Role: "system", Content: systemPrompt}
 		if promptCaching {
 			sysMsg.CacheControl = &allm.CacheControl{Type: "ephemeral"}
@@ -259,7 +319,9 @@ func trimHistory(messages []Message, systemPromptLen, maxChars int) []Message {
 // StreamChat streams a chat response with idle timeout.
 // The timeout resets on each received chunk, so long-running responses
 // (e.g. extended thinking) won't be killed as long as data keeps flowing.
-func (r *Router) StreamChat(ctx context.Context, userID string, messages []Message) (<-chan StreamChunk, error) {
+// An optional systemPromptOverride can be provided; when non-empty it replaces
+// the router's default system prompt for this request only.
+func (r *Router) StreamChat(ctx context.Context, userID string, messages []Message, systemPromptOverride ...string) (<-chan StreamChunk, error) {
 	// Rate limit check
 	if !r.rateLimiter.allow(userID) {
 		r.logger.Warn("rate limit exceeded", "user", util.MaskSecret(userID))
@@ -283,7 +345,11 @@ func (r *Router) StreamChat(ctx context.Context, userID string, messages []Messa
 	}
 
 	// Build allm messages
-	allmMessages := r.buildMessages(sanitized)
+	var override string
+	if len(systemPromptOverride) > 0 {
+		override = systemPromptOverride[0]
+	}
+	allmMessages := r.buildMessages(sanitized, override)
 
 	// Get raw stream from provider (no hard deadline on context)
 	rawCh := client.Stream(ctx, allmMessages)
@@ -340,7 +406,7 @@ func (r *Router) CountTokens(ctx context.Context, messages []Message) (*TokenCou
 		return nil, ErrNoProvider
 	}
 
-	allmMessages := r.buildMessages(messages)
+	allmMessages := r.buildMessages(messages, "")
 	return client.CountTokens(ctx, allmMessages)
 }
 

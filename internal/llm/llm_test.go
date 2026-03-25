@@ -580,7 +580,7 @@ func TestRouter_BuildMessages(t *testing.T) {
 		{Role: "assistant", Content: "Hi!"},
 	}
 
-	result := router.buildMessages(messages)
+	result := router.buildMessages(messages, "")
 
 	// Should have system + 2 messages
 	if len(result) != 3 {
@@ -597,6 +597,27 @@ func TestRouter_BuildMessages(t *testing.T) {
 	}
 }
 
+func TestRouter_BuildMessages_WithOverride(t *testing.T) {
+	router := NewRouter(&Config{
+		SystemPrompt: "You are helpful.",
+	})
+
+	messages := []Message{
+		{Role: "user", Content: "Hello"},
+	}
+
+	override := "You are a customer service agent."
+	result := router.buildMessages(messages, override)
+
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 messages, got %d", len(result))
+	}
+
+	if result[0].Content != override {
+		t.Errorf("System prompt = %q, want %q", result[0].Content, override)
+	}
+}
+
 func TestRouter_BuildMessages_WithCaching(t *testing.T) {
 	router := NewRouter(&Config{
 		SystemPrompt: "You are helpful.",
@@ -607,7 +628,7 @@ func TestRouter_BuildMessages_WithCaching(t *testing.T) {
 		{Role: "user", Content: "Hello"},
 	}
 
-	result := router.buildMessages(messages)
+	result := router.buildMessages(messages, "")
 
 	// Should have system + user message
 	if len(result) != 2 {
@@ -628,7 +649,7 @@ func TestRouter_BuildMessages_NoSystemPrompt(t *testing.T) {
 		{Role: "user", Content: "Hello"},
 	}
 
-	result := router.buildMessages(messages)
+	result := router.buildMessages(messages, "")
 
 	// Should only have user message
 	if len(result) != 1 {
@@ -637,5 +658,45 @@ func TestRouter_BuildMessages_NoSystemPrompt(t *testing.T) {
 
 	if result[0].Role != "user" {
 		t.Errorf("First message role = %q, want user", result[0].Role)
+	}
+}
+
+func TestPlatformFormattingRules(t *testing.T) {
+	tests := []struct {
+		platform string
+		contains string
+	}{
+		{"telegram", "Telegram"},
+		{"slack", "Slack"},
+		{"whatsapp", "WhatsApp"},
+		{"webhook", "Formatting rules"},
+		{"", "Formatting rules"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.platform, func(t *testing.T) {
+			result := PlatformFormattingRules(tt.platform)
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("PlatformFormattingRules(%q) missing %q", tt.platform, tt.contains)
+			}
+		})
+	}
+}
+
+func TestBuildSystemPrompt(t *testing.T) {
+	prompt := BuildSystemPrompt("You are helpful.", "telegram")
+	if !strings.Contains(prompt, "You are helpful.") {
+		t.Error("BuildSystemPrompt missing base prompt")
+	}
+	if !strings.Contains(prompt, "Response style") {
+		t.Error("BuildSystemPrompt missing response style rules")
+	}
+	if !strings.Contains(prompt, "Telegram") {
+		t.Error("BuildSystemPrompt missing telegram formatting rules")
+	}
+}
+
+func TestBuildSystemPrompt_Empty(t *testing.T) {
+	if result := BuildSystemPrompt("", "telegram"); result != "" {
+		t.Errorf("BuildSystemPrompt with empty base should return empty, got %q", result)
 	}
 }

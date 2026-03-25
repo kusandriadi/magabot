@@ -80,6 +80,9 @@ type Config struct {
 	// Embedding/Vector settings
 	Embedding EmbeddingConfig `yaml:"embedding"`
 
+	// Personas
+	Personas PersonasConfig `yaml:"personas"`
+
 	// Metadata
 	Version     string    `yaml:"version"`
 	LastUpdated time.Time `yaml:"last_updated"`
@@ -422,6 +425,21 @@ type EmbeddingConfig struct {
 	// Memory integration
 	AutoEmbed   bool `yaml:"auto_embed"`   // Auto-generate embeddings for memories
 	SearchLimit int  `yaml:"search_limit"` // Default search result limit (default: 10)
+}
+
+// PersonasConfig holds persona settings
+type PersonasConfig struct {
+	Default string    `yaml:"default"`
+	List    []Persona `yaml:"list"`
+}
+
+// Persona defines an AI persona
+type Persona struct {
+	Name         string `yaml:"name"`
+	Description  string `yaml:"description"`
+	Personality  string `yaml:"personality"`
+	SystemPrompt string `yaml:"system_prompt"`
+	FirstMessage string `yaml:"first_message"`
 }
 
 // LocalSecretsConfig holds local file-based secrets settings
@@ -909,6 +927,36 @@ func SaveHooksFile(filePath string, hooks []HookConfig) error {
 		return fmt.Errorf("save hooks file: %w", err)
 	}
 
+	return nil
+}
+
+// GetPersona returns a persona by name, or nil if not found.
+func (c *Config) GetPersona(name string) *Persona {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for i := range c.Personas.List {
+		if c.Personas.List[i].Name == name {
+			return &c.Personas.List[i]
+		}
+	}
+	return nil
+}
+
+// GetDefaultPersona returns the default persona.
+// Falls back to the first persona in the list, or nil if no personas are configured.
+func (c *Config) GetDefaultPersona() *Persona {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.Personas.Default != "" {
+		for i := range c.Personas.List {
+			if c.Personas.List[i].Name == c.Personas.Default {
+				return &c.Personas.List[i]
+			}
+		}
+	}
+	if len(c.Personas.List) > 0 {
+		return &c.Personas.List[0]
+	}
 	return nil
 }
 
