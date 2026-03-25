@@ -84,8 +84,7 @@ func (h *CronHandler) listJobs(args []string) (string, error) {
 		return "📋 No enabled jobs. Use `/cron all` to see disabled jobs.", nil
 	}
 
-	sb.WriteString("---\n")
-	sb.WriteString("Commands: /cron\\_show, /cron\\_enable, /cron\\_disable, /cron\\_run")
+	sb.WriteString("💡 /cron\\_show, /cron\\_enable, /cron\\_disable, /cron\\_run")
 
 	return sb.String(), nil
 }
@@ -98,24 +97,24 @@ func (h *CronHandler) addJob(args []string, defaultChatID string) (string, error
 	if len(args) == 0 {
 		return `📝 *Add Cron Job*
 
-Format:
-/cron_add name | schedule | message | channel:target
+📋 Format:
+` + "`/cron_add name | schedule | message | channel:target`" + `
 
-Example:
+💡 Example:
 ` + "`/cron_add Morning Alert | 0 9 * * 1-5 | Good morning! | telegram:me`" + `
 
-Channels:
-• telegram:CHAT_ID or telegram:me (this chat)
-• whatsapp:PHONE
-• slack:#channel
-• discord:WEBHOOK_URL
-• webhook:URL
+📨 Channels:
+1. telegram:CHAT_ID or telegram:me (this chat)
+2. whatsapp:PHONE
+3. slack:#channel
+4. discord:WEBHOOK_URL
+5. webhook:URL
 
-Schedules:
-• ` + "`0 9 * * 1-5`" + ` - 9am weekdays
-• ` + "`0 */2 * * *`" + ` - every 2 hours
-• ` + "`@hourly`" + ` - every hour
-• ` + "`@daily`" + ` - daily at midnight`, nil
+⏰ Schedules:
+  • ` + "`0 9 * * 1-5`" + ` — 9am weekdays
+  • ` + "`0 */2 * * *`" + ` — every 2 hours
+  • ` + "`@hourly`" + ` — every hour
+  • ` + "`@daily`" + ` — daily at midnight`, nil
 	}
 
 	// Parse pipe-separated format
@@ -169,15 +168,15 @@ func (h *CronHandler) editJob(args []string) (string, error) {
 	if len(args) < 2 {
 		return `📝 *Edit Cron Job*
 
-Format:
-/cron_edit JOB_ID field=value
+📋 Format:
+` + "`/cron_edit JOB_ID field=value`" + `
 
-Fields: name, schedule, message, channel
+🏷️ Fields: name, schedule, message, channel
 
-Examples:
-` + "`/cron_edit abc123 name=New Name`" + `
-` + "`/cron_edit abc123 schedule=0 10 * * *`" + `
-` + "`/cron_edit abc123 message=Hello World!`", nil
+💡 Examples:
+  • ` + "`/cron_edit abc123 name=New Name`" + `
+  • ` + "`/cron_edit abc123 schedule=0 10 * * *`" + `
+  • ` + "`/cron_edit abc123 message=Hello World!`", nil
 	}
 
 	jobID := args[0]
@@ -312,9 +311,9 @@ func (h *CronHandler) showJob(args []string) (string, error) {
 	sb.WriteString(fmt.Sprintf("Schedule: `%s`\n", job.Schedule))
 	sb.WriteString(fmt.Sprintf("Message: %s\n\n", job.Message))
 
-	sb.WriteString("*Channels:*\n")
+	sb.WriteString("📨 Channels:\n")
 	for _, ch := range job.Channels {
-		sb.WriteString(fmt.Sprintf("• %s: `%s`\n", ch.Type, ch.Target))
+		sb.WriteString(fmt.Sprintf("  • %s: `%s`\n", ch.Type, ch.Target))
 	}
 
 	sb.WriteString(fmt.Sprintf("\nCreated: %s\n", job.CreatedAt.Format("2006-01-02 15:04")))
@@ -334,35 +333,35 @@ func (h *CronHandler) showJob(args []string) (string, error) {
 func (h *CronHandler) helpText() string {
 	return `🕐 *Cron Job Commands*
 
-*List & View*
-/cron - List enabled jobs
-/cron all - List all jobs
-/cron_show ID - Show job details
+📋 List & View:
+1. /cron — List enabled jobs
+2. /cron all — List all jobs
+3. /cron_show ID — Show job details
 
-*Create & Manage*
-/cron_add - Add new job
-/cron_edit ID field=value - Edit job
-/cron_delete ID - Delete job
+📝 Create & Manage:
+4. /cron_add — Add new job
+5. /cron_edit ID field=value — Edit job
+6. /cron_delete ID — Delete job
 
-*Control*
-/cron_enable ID - Enable job
-/cron_disable ID - Disable job
-/cron_run ID - Run job now
+⚡ Control:
+7. /cron_enable ID — Enable job
+8. /cron_disable ID — Disable job
+9. /cron_run ID — Run job now
 
-*Add Job Format*
+📋 Add Format:
 ` + "`/cron_add name | schedule | message | channel:target`" + `
 
-*Channels*
-• telegram:CHAT_ID
-• whatsapp:PHONE
-• slack:#channel
-• discord:WEBHOOK
-• webhook:URL
+📨 Channels:
+  • telegram:CHAT_ID
+  • whatsapp:PHONE
+  • slack:#channel
+  • discord:WEBHOOK
+  • webhook:URL
 
-*Schedule Examples*
-• ` + "`0 9 * * 1-5`" + ` - 9am weekdays
-• ` + "`0 */2 * * *`" + ` - every 2 hours
-• ` + "`@hourly`" + ` @daily @weekly`
+⏰ Schedules:
+  • ` + "`0 9 * * 1-5`" + ` — 9am weekdays
+  • ` + "`0 */2 * * *`" + ` — every 2 hours
+  • ` + "`@hourly`" + ` @daily @weekly`
 }
 
 // NextRuns returns next scheduled run times

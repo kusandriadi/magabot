@@ -645,27 +645,21 @@ func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.St
 	case "/start":
 		welcome := `👋 *Hi! I'm Magabot* — your personal AI chatbot.
 
-💬 *How to Use:*
-Send any message and I'll reply using AI.
+💬 Send any message and I'll reply using AI.
 
-🎯 *What I Can Do:*
-• 💬 Chat — ask anything, multi-turn conversation
-• 📷 Image — send a photo, I'll analyze it (vision)
-• 🎤 Voice — send a voice message, I'll transcribe & reply
-• 📄 Document — send a PDF/file, I'll read & analyze it
-• 🎨 Generate — ask me to create an image (DALL-E)
-• 🔊 TTS — I can reply with voice messages
-• 💭 Thinking — deep reasoning for complex questions
+🎯 What I can do:
+1. 💬 Chat — ask anything, multi-turn conversation
+2. 📷 Image — send a photo, I'll analyze it (vision)
+3. 🎤 Voice — send a voice message, I'll transcribe & reply
+4. 📄 Document — send a PDF/file, I'll read & analyze it
+5. 🎨 Generate — ask me to create an image (DALL-E)
+6. 🔊 TTS — I can reply with voice messages
+7. 💭 Thinking — deep reasoning for complex questions
 
-⚡ *Commands:*
-• /help — full help
-• /status — bot & provider status
-
-🔧 *Admin:*
-• /restart — restart bot
-• /config — bot configuration
-• /memory — memory management
-• /task — background tasks`
+⚡ /help — full help
+📊 /status — bot & provider status
+🔧 /config — bot configuration
+🧠 /memory — memory management`
 		return welcome, nil
 
 	case "/help":
@@ -673,25 +667,27 @@ Send any message and I'll reply using AI.
 
 Send any message and I'll reply using AI.
 
-*Commands:*
-• /start - Start
-• /status - Bot status
-• /model - Current model & switch model
-• /effort - Set effort level (low/medium/high/max)
-• /prompt - Custom system prompt
-• /fallback - Set fallback model
-• /budget - Set budget limit per request
-• /clear - Clear conversation history
-• /restart - Restart bot
-• /config - Admin configuration
-• /memory - Memory management
-• /task - Background tasks
-• /help - This help
+💬 Commands:
+ 1. /start — Welcome message
+ 2. /status — Bot status
+ 3. /model — Current model & switch
+ 4. /effort — Set effort level (low/medium/high/max)
+ 5. /prompt — Custom system prompt
+ 6. /fallback — Set fallback model
+ 7. /budget — Budget limit per request
+ 8. /clear — Clear conversation history
+ 9. /help — This help
 
-*Agent Sessions:*
-• :new [agent] <dir> - Start coding agent (supports shortcuts: home, ~, project names)
-• :quit - Close agent session
-• :status - Show agent session info`, nil
+🔧 Admin:
+10. /restart — Restart bot
+11. /config — Configuration
+12. /memory — Memory management
+13. /task — Background tasks
+
+🤖 Agent Sessions:
+• :new [agent] <dir> — Start coding agent
+• :quit — Close session
+• :status — Session info`, nil
 
 	case "/status":
 		stats, err := store.Stats()
@@ -702,43 +698,43 @@ Send any message and I'll reply using AI.
 
 		var sb strings.Builder
 		sb.WriteString("📊 *Magabot Status*\n\n")
-		sb.WriteString("*System:*\n")
-		sb.WriteString(fmt.Sprintf("• OS: %s/%s\n", runtime.GOOS, runtime.GOARCH))
-		sb.WriteString(fmt.Sprintf("• Magabot: v%s\n", version.Short()))
-		sb.WriteString(fmt.Sprintf("• Go: %s\n", runtime.Version()))
+		sb.WriteString("🖥️ System:\n")
+		sb.WriteString(fmt.Sprintf("  • OS: %s/%s\n", runtime.GOOS, runtime.GOARCH))
+		sb.WriteString(fmt.Sprintf("  • Magabot: v%s\n", version.Short()))
+		sb.WriteString(fmt.Sprintf("  • Go: %s\n", runtime.Version()))
 
-		sb.WriteString("\n*LLM:*\n")
-		sb.WriteString(fmt.Sprintf("• Provider: %s\n", llmStats["main"]))
-		sb.WriteString(fmt.Sprintf("• Model: %s\n", llmRouter.GetModel()))
+		sb.WriteString("\n🤖 LLM:\n")
+		sb.WriteString(fmt.Sprintf("  • Provider: %s\n", llmStats["main"]))
+		sb.WriteString(fmt.Sprintf("  • Model: %s\n", llmRouter.GetModel()))
 
 		if cli := llmRouter.CLIProvider(); cli != nil {
 			effort := cli.Effort()
 			if effort == "" {
 				effort = "default"
 			}
-			sb.WriteString(fmt.Sprintf("• Effort: %s\n", effort))
+			sb.WriteString(fmt.Sprintf("  • Effort: %s\n", effort))
 			if fb := cli.FallbackModel(); fb != "" {
-				sb.WriteString(fmt.Sprintf("• Fallback: %s\n", fb))
+				sb.WriteString(fmt.Sprintf("  • Fallback: %s\n", fb))
 			}
 			if budget := cli.MaxBudget(); budget > 0 {
-				sb.WriteString(fmt.Sprintf("• Budget: $%.2f/req\n", budget))
+				sb.WriteString(fmt.Sprintf("  • Budget: $%.2f/req\n", budget))
 			}
 			if prompt := cli.AppendPrompt(); prompt != "" {
 				if len(prompt) > 50 {
 					prompt = prompt[:50] + "..."
 				}
-				sb.WriteString(fmt.Sprintf("• Custom prompt: %s\n", prompt))
+				sb.WriteString(fmt.Sprintf("  • Custom prompt: %s\n", prompt))
 			}
 		}
 
-		sb.WriteString("\n*Platforms:*\n")
+		sb.WriteString("\n📡 Platforms:\n")
 		userCounts, _ := stats["users"].(map[string]int64)
 		if len(userCounts) > 0 {
 			for platform, users := range userCounts {
-				sb.WriteString(fmt.Sprintf("• %s — %d users\n", platform, users))
+				sb.WriteString(fmt.Sprintf("  • %s — %d users\n", platform, users))
 			}
 		} else {
-			sb.WriteString("• _no activity yet_\n")
+			sb.WriteString("  • _no activity yet_\n")
 		}
 
 		return sb.String(), nil
@@ -774,7 +770,7 @@ Send any message and I'll reply using AI.
 					sb.WriteString(fmt.Sprintf(" | fallback: %s", fb))
 				}
 			}
-			sb.WriteString("\n\n*Available models:*\n")
+			sb.WriteString("\n\n📋 Available models:\n")
 			for i, fm := range flat {
 				sb.WriteString(fmt.Sprintf("`%d.` `%s`", i+1, fm.model.ID))
 				if fm.model.Name != "" && fm.model.Name != fm.model.ID {
@@ -829,16 +825,13 @@ Send any message and I'll reply using AI.
 			if current == "" {
 				current = "default"
 			}
-			return fmt.Sprintf(`⚡ *Effort:* `+"`%s`"+`
-
-*Options:*
-`+"`1.`"+` *low* — fast, short answers
-`+"`2.`"+` *medium* — balanced (default)
-`+"`3.`"+` *high* — detailed, slower
-`+"`4.`"+` *max* — maximum (Opus only)
-
-_Set: /effort <level> or /effort <number>_
-_Reset: /effort reset_`, current), nil
+			return fmt.Sprintf("⚡ *Effort:* `%s`\n\n"+
+				"1. *low* — fast, short answers\n"+
+				"2. *medium* — balanced (default)\n"+
+				"3. *high* — detailed, slower\n"+
+				"4. *max* — maximum (Opus only)\n\n"+
+				"_Set: /effort <level> or /effort <number>_\n"+
+				"_Reset: /effort reset_", current), nil
 		}
 		// Support number selection
 		switch args[0] {

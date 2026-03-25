@@ -70,16 +70,15 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 	sb.WriteString("🔐 *Config Status*\n\n")
 
 	// Access info
-	sb.WriteString(fmt.Sprintf("Mode: `%s`\n", h.cfg.Access.Mode))
-	sb.WriteString("Your Role: ")
+	sb.WriteString(fmt.Sprintf("🔑 Mode: `%s`\n", h.cfg.Access.Mode))
 	if isPlatformAdmin {
-		sb.WriteString(fmt.Sprintf("👤 %s Admin\n", platform))
+		sb.WriteString(fmt.Sprintf("👤 Role: %s Admin\n", platform))
 	} else {
-		sb.WriteString("User\n")
+		sb.WriteString("👤 Role: User\n")
 	}
 
 	// Platform info
-	sb.WriteString(fmt.Sprintf("\n*Platform: %s*\n", platform))
+	sb.WriteString(fmt.Sprintf("\n📡 Platform: %s\n", platform))
 
 	var admins, users, chats []string
 	var allowGroups, allowDMs bool
@@ -96,9 +95,9 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 	sb.WriteString(fmt.Sprintf("Admins: %d | Users: %d | Chats: %d\n", len(admins), len(users), len(chats)))
 
 	if isPlatformAdmin && len(admins) > 0 {
-		sb.WriteString("\n*Platform Admins:*\n")
-		for _, admin := range admins {
-			sb.WriteString(fmt.Sprintf("  • `%s`\n", admin))
+		sb.WriteString("\n👥 Platform Admins:\n")
+		for i, admin := range admins {
+			sb.WriteString(fmt.Sprintf("  %d. `%s`\n", i+1, admin))
 		}
 	}
 
@@ -110,12 +109,12 @@ func (h *AdminHandler) showStatus(platform, userID string) string {
 // handleAdmin manages admin add/remove
 func (h *AdminHandler) handleAdmin(platform, userID string, args []string) (string, bool, error) {
 	if len(args) < 2 {
-		return `*Admin Management*
+		return `👥 Admin Management
 
-/config admin add <user_id>    - Add platform admin
-/config admin remove <user_id> - Remove platform admin
+1. /config admin add <user_id> — Add platform admin
+2. /config admin remove <user_id> — Remove platform admin
 
-Note: New admin must be in allowlist first.`, false, nil
+💡 New admin must be in allowlist first.`, false, nil
 	}
 
 	action := strings.ToLower(args[0])
@@ -136,12 +135,12 @@ Note: New admin must be in allowlist first.`, false, nil
 // handleAllow manages allowlist
 func (h *AdminHandler) handleAllow(platform, userID, currentChatID string, args []string) (string, bool, error) {
 	if len(args) < 1 {
-		return `*Allow User/Chat*
+		return `✅ Allow User/Chat
 
-/config allow user <user_id>  - Allow a user
-/config allow chat <chat_id>  - Allow a group/channel
-/config allow chat this       - Allow this chat
-/config allow me              - Allow yourself`, false, nil
+1. /config allow user <user_id> — Allow a user
+2. /config allow chat <chat_id> — Allow a group/channel
+3. /config allow chat this — Allow this chat
+4. /config allow me — Allow yourself`, false, nil
 	}
 
 	targetType := strings.ToLower(args[0])
@@ -176,10 +175,10 @@ func (h *AdminHandler) handleAllow(platform, userID, currentChatID string, args 
 // handleRemove manages removing from allowlist
 func (h *AdminHandler) handleRemove(platform, userID string, args []string) (string, bool, error) {
 	if len(args) < 2 {
-		return `*Remove User/Chat*
+		return `🚫 Remove User/Chat
 
-/config remove user <user_id>  - Remove a user
-/config remove chat <chat_id>  - Remove a chat`, false, nil
+1. /config remove user <user_id> — Remove a user
+2. /config remove chat <chat_id> — Remove a chat`, false, nil
 	}
 
 	targetType := strings.ToLower(args[0])
@@ -200,13 +199,13 @@ func (h *AdminHandler) handleRemove(platform, userID string, args []string) (str
 // handleMode sets access mode
 func (h *AdminHandler) handleMode(platform, userID string, args []string) (string, bool, error) {
 	if len(args) < 1 {
-		return `*Access Mode*
+		return `🔑 Access Mode
 
-/config mode allowlist  - Only allowed users (default)
-/config mode denylist   - Everyone except denied
-/config mode open       - Everyone can use
+1. /config mode allowlist — Only allowed users (default)
+2. /config mode denylist — Everyone except denied
+3. /config mode open — Everyone can use
 
-Current: ` + h.cfg.Access.Mode, false, nil
+📍 Current: ` + h.cfg.Access.Mode, false, nil
 	}
 
 	mode := args[0]
@@ -221,25 +220,25 @@ func (h *AdminHandler) showHelp(platform, userID string) string {
 	var sb strings.Builder
 	sb.WriteString("🔧 *Config Commands*\n\n")
 
-	sb.WriteString("/config status - Show current config\n")
+	sb.WriteString("📊 /config status — Show current config\n")
 
 	if isPlatformAdmin {
-		sb.WriteString("\n*Allowlist:*\n")
-		sb.WriteString("/config allow user <id>\n")
-		sb.WriteString("/config allow chat <id|this>\n")
-		sb.WriteString("/config remove user <id>\n")
-		sb.WriteString("/config remove chat <id>\n")
+		sb.WriteString("\n✅ Allowlist:\n")
+		sb.WriteString("  • /config allow user <id>\n")
+		sb.WriteString("  • /config allow chat <id|this>\n")
+		sb.WriteString("  • /config remove user <id>\n")
+		sb.WriteString("  • /config remove chat <id>\n")
 
-		sb.WriteString("\n*Platform Admins:*\n")
-		sb.WriteString("/config admin add <id>\n")
-		sb.WriteString("/config admin remove <id>\n")
+		sb.WriteString("\n👥 Platform Admins:\n")
+		sb.WriteString("  • /config admin add <id>\n")
+		sb.WriteString("  • /config admin remove <id>\n")
 
-		sb.WriteString("\n*Access Mode:*\n")
-		sb.WriteString("/config mode <allowlist|open>\n")
+		sb.WriteString("\n🔑 Access Mode:\n")
+		sb.WriteString("  • /config mode <allowlist|open>\n")
 	}
 
 	if !isPlatformAdmin {
-		sb.WriteString("\n_You don't have admin access._")
+		sb.WriteString("\n🔒 _You don't have admin access._")
 	}
 
 	sb.WriteString("\n\n💡 Changes trigger auto-restart.")

@@ -213,11 +213,11 @@ func (h *MemoryHandler) showStats(store *memory.Store) string {
 
 	var sb strings.Builder
 	sb.WriteString("📊 *Memory Stats*\n\n")
-	sb.WriteString(fmt.Sprintf("Total: %d\n", stats["total"]))
+	sb.WriteString(fmt.Sprintf("📦 Total: %d\n", stats["total"]))
 
 	for k, v := range stats {
 		if k != "total" && v > 0 {
-			sb.WriteString(fmt.Sprintf("• %s: %d\n", k, v))
+			sb.WriteString(fmt.Sprintf("  • %s: %d\n", k, v))
 		}
 	}
 
@@ -228,21 +228,21 @@ func (h *MemoryHandler) showStats(store *memory.Store) string {
 func (h *MemoryHandler) showHelp() string {
 	return `🧠 *Memory Commands*
 
-/memory add <text>     Remember something
-/memory search <query> Find memories
-/memory list [type]    List all memories
-/memory delete <id>    Delete a memory
-/memory clear          Clear all memories
-/memory stats          Show statistics
-/memory help           Show this help
+1. /memory add <text> — Remember something
+2. /memory search <query> — Find memories
+3. /memory list [type] — List all memories
+4. /memory delete <id> — Delete a memory
+5. /memory clear — Clear all memories
+6. /memory stats — Show statistics
+7. /memory help — Show this help
 
-*Memory Types:* fact, preference, event, note
+🏷️ Types: fact, preference, event, note
 
-*Examples:*
-• /memory add My name is Kus
-• /memory search trading
-• /memory list preference
-• /memory delete abc123`
+💡 Examples:
+  • /memory add My name is Kus
+  • /memory search trading
+  • /memory list preference
+  • /memory delete abc123`
 }
 
 // GetContext retrieves relevant memories for LLM context

@@ -118,15 +118,15 @@ func (h *SessionHandler) formatSessionStatus(s *session.Session) string {
 	sb.WriteString(fmt.Sprintf("Status: %s\n", s.Status))
 
 	if s.Task != "" {
-		sb.WriteString(fmt.Sprintf("\n📋 *Task:*\n%s\n", s.Task))
+		sb.WriteString(fmt.Sprintf("\n📋 Task:\n%s\n", s.Task))
 	}
 
 	if s.Result != "" {
-		sb.WriteString(fmt.Sprintf("\n✅ *Result:*\n%s\n", util.Truncate(s.Result, 500)))
+		sb.WriteString(fmt.Sprintf("\n✅ Result:\n%s\n", util.Truncate(s.Result, 500)))
 	}
 
 	if s.Error != "" {
-		sb.WriteString(fmt.Sprintf("\n❌ *Error:*\n%s\n", s.Error))
+		sb.WriteString(fmt.Sprintf("\n❌ Error:\n%s\n", s.Error))
 	}
 
 	sb.WriteString(fmt.Sprintf("\n📅 Created: %s", s.CreatedAt.Format("15:04:05")))
@@ -169,18 +169,16 @@ func (h *SessionHandler) clearSessions() (string, error) {
 func (h *SessionHandler) showHelp() string {
 	return `🔄 *Session/Task Commands*
 
-/task spawn <task>     Run a task in background
-/task list             List active sessions
-/task status <id>      Show session status
-/task cancel <id>      Cancel a running task
-/task clear            Clear completed tasks
-/task help             Show this help
+1. /task spawn <task> — Run a task in background
+2. /task list — List active sessions
+3. /task status <id> — Show session status
+4. /task cancel <id> — Cancel a running task
+5. /task clear — Clear completed tasks
+6. /task help — Show this help
 
-*Examples:*
-• /task spawn Research AI trends and summarize
-• /task spawn Analyze BBNI stock performance
-• /task list
-• /task cancel abc123
-
-💡 Background tasks run independently and notify you when done.`
+💡 Examples:
+  • /task spawn Research AI trends and summarize
+  • /task spawn Analyze BBNI stock performance
+  • /task list
+  • /task cancel abc123`
 }

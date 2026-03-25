@@ -90,61 +90,53 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Printf(`Magabot - Lightweight, secure multi-platform chatbot
+	fmt.Printf(`Magabot — Lightweight, secure multi-platform chatbot
 
 Usage: magabot <command>
 
-Commands:
-  start       Start magabot daemon
-  stop        Stop magabot daemon
-  restart     Restart magabot daemon
-  status      Show magabot status
-  log         View logs (tail -f)
-  qr          Show WhatsApp QR code for pairing
-  init        Quick setup (auto-detects env vars, zero prompts)
-  setup       Interactive setup wizard (detailed configuration)
-  reset       Reset config (keep platform connections)
-  uninstall   Completely uninstall magabot
-  genkey      Generate encryption key
-  skill       Manage skills (list, create, enable, disable)
-  cron        Manage scheduled jobs
-  config      Show/edit config (admins, allowlist, platforms)
-  update      Check and apply updates
-  version     Show version
-  help        Show this help
+  start         Start magabot daemon
+  stop          Stop magabot daemon
+  restart       Restart magabot daemon
+  status        Show magabot status
+  log           View logs (tail -f)
+  qr            Show WhatsApp QR code for pairing
+  init          Quick setup (auto-detects env vars, zero prompts)
+  setup         Interactive setup wizard (detailed configuration)
+  reset         Reset config (keep platform connections)
+  uninstall     Completely uninstall magabot
+  genkey        Generate encryption key
+  version       Show version
+  help          Show this help
 
-Update Commands:
-  update check          Check for new version
-  update apply          Download and install update
-  update rollback       Restore previous version
+  update check                         Check for new version
+  update apply                         Download and install update
+  update rollback                      Restore previous version
 
-Config Commands:
-  config show                   Show current configuration
-  config edit                   Edit config.yaml
+  config show                          Show current configuration
+  config edit                          Edit config.yaml
   config admin <platform> add <id>     Add platform admin
   config admin <platform> remove <id>  Remove platform admin
 
-Cron Commands:
-  cron list           List all cron jobs
-  cron add            Add new scheduled job
-  cron edit <id>      Edit a job
-  cron delete <id>    Delete a job
-  cron enable <id>    Enable a job
-  cron disable <id>   Disable a job
-  cron run <id>       Run job immediately
-  cron show <id>      Show job details
+  cron list                            List all cron jobs
+  cron add                             Add new scheduled job
+  cron edit <id>                       Edit a job
+  cron delete <id>                     Delete a job
+  cron enable <id>                     Enable a job
+  cron disable <id>                    Disable a job
+  cron run <id>                        Run job immediately
+  cron show <id>                       Show job details
 
-Skill Commands:
-  skill list          List installed skills
-  skill info <name>   Show skill details
-  skill create <name> Create new skill template
-  skill builtin       List built-in skills
-  skill reload        Reload all skills
+  skill list                           List installed skills
+  skill info <name>                    Show skill details
+  skill create <name>                  Create new skill template
+  skill builtin                        List built-in skills
+  skill reload                         Reload all skills
 
-Config: %s
-Data:   %s
-Logs:   %s
-Skills: %s/skills
+Paths:
+  Config: %s
+  Data:   %s
+  Logs:   %s
+  Skills: %s/skills
 
 `, configFile, dataDir, logFile, configDir)
 }

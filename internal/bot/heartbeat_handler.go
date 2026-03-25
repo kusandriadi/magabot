@@ -155,14 +155,14 @@ func (h *HeartbeatHandler) listChecks() string {
 func (h *HeartbeatHandler) showHelp() string {
 	return `💓 *Heartbeat Commands*
 
-/heartbeat status     Show check status
-/heartbeat run        Run all checks now
-/heartbeat enable <n> Enable a check
-/heartbeat disable <n> Disable a check
-/heartbeat list       List configured checks
-/heartbeat help       Show this help
+1. /heartbeat status — Show check status
+2. /heartbeat run — Run all checks now
+3. /heartbeat enable <name> — Enable a check
+4. /heartbeat disable <name> — Disable a check
+5. /heartbeat list — List configured checks
+6. /heartbeat help — Show this help
 
-💡 Heartbeat runs checks periodically and alerts you if something needs attention.`
+💡 Runs checks periodically and alerts you if something needs attention.`
 }
 
 // RegisterDefaultChecks adds default checks
