@@ -137,8 +137,9 @@ func TestRouter_SystemPrompt(t *testing.T) {
 	if req.Messages[0].Role != "system" {
 		t.Errorf("First message role = %q, want %q", req.Messages[0].Role, "system")
 	}
-	if req.Messages[0].Content != "You are a helpful assistant." {
-		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, "You are a helpful assistant.")
+	want := "You are a helpful assistant." + systemPromptRules
+	if req.Messages[0].Content != want {
+		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, want)
 	}
 }
 
@@ -379,8 +380,9 @@ func TestRouter_SetSystemPrompt(t *testing.T) {
 	if req.Messages[0].Role != "system" {
 		t.Errorf("First message role = %q, want system", req.Messages[0].Role)
 	}
-	if req.Messages[0].Content != "You are a helpful bot." {
-		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, "You are a helpful bot.")
+	wantPrompt := "You are a helpful bot." + systemPromptRules
+	if req.Messages[0].Content != wantPrompt {
+		t.Errorf("System prompt = %q, want %q", req.Messages[0].Content, wantPrompt)
 	}
 }
 
@@ -589,8 +591,9 @@ func TestRouter_BuildMessages(t *testing.T) {
 		t.Errorf("First message role = %q, want system", result[0].Role)
 	}
 
-	if result[0].Content != "You are helpful." {
-		t.Errorf("System prompt = %q, want %q", result[0].Content, "You are helpful.")
+	wantBuild := "You are helpful." + systemPromptRules
+	if result[0].Content != wantBuild {
+		t.Errorf("System prompt = %q, want %q", result[0].Content, wantBuild)
 	}
 }
 
