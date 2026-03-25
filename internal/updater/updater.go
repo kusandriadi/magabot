@@ -68,7 +68,7 @@ func New(config Config) *Updater {
 
 	return &Updater{
 		config: config,
-		client: util.NewHTTPClient(0),
+		client: util.NewHTTPClient(5 * time.Minute),
 	}
 }
 
