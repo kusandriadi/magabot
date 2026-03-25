@@ -142,31 +142,6 @@ func (r *Router) EnablePromptCaching() {
 	r.promptCaching = true
 }
 
-// Complete sends a simple text request to the LLM
-func (r *Router) Complete(ctx context.Context, userID, text string) (*Response, error) {
-	// Rate limit check
-	if !r.rateLimiter.allow(userID) {
-		r.logger.Warn("rate limit exceeded", "user", util.MaskSecret(userID))
-		return nil, ErrRateLimited
-	}
-
-	// Sanitize input to remove control characters (injection protection)
-	text = allm.SanitizeInput(text)
-
-	// Build messages
-	messages := []Message{
-		{Role: "user", Content: text},
-	}
-
-	allmMessages := r.buildMessages(messages)
-
-	// Apply timeout
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	return r.chat(ctx, allmMessages)
-}
-
 // QuickChat makes a lightweight LLM call without system prompt or rate limiting.
 // Useful for internal tasks like translation or template generation.
 func (r *Router) QuickChat(ctx context.Context, prompt string) (string, error) {
@@ -355,58 +330,6 @@ func (r *Router) CountTokens(ctx context.Context, messages []Message) (*TokenCou
 
 	allmMessages := r.buildMessages(messages)
 	return client.CountTokens(ctx, allmMessages)
-}
-
-// GenerateImage generates an image from a text prompt
-func (r *Router) GenerateImage(ctx context.Context, userID, prompt string, opts ...ImageOption) (*ImageResponse, error) {
-	// Rate limit check
-	if r.rateLimiter != nil && !r.rateLimiter.allow(userID) {
-		return nil, ErrRateLimited
-	}
-
-	// Need OpenAI client specifically (DALL-E)
-	r.mu.RLock()
-	client, ok := r.clients["openai"]
-	if !ok {
-		// Fall back to main client
-		client, ok = r.clients[r.mainName]
-	}
-	r.mu.RUnlock()
-
-	if !ok {
-		return nil, ErrNoProvider
-	}
-
-	return client.GenerateImage(ctx, prompt, opts...)
-}
-
-// Speak converts text to speech using the configured provider
-func (r *Router) Speak(ctx context.Context, req *SpeechRequest) (*SpeechResponse, error) {
-	r.mu.RLock()
-	// Prefer OpenAI for TTS (has the API)
-	client, ok := r.clients["openai"]
-	if !ok {
-		client, ok = r.clients[r.mainName]
-	}
-	r.mu.RUnlock()
-	if !ok {
-		return nil, ErrNoProvider
-	}
-	return client.Speak(ctx, req)
-}
-
-// Transcribe converts audio to text using the configured provider
-func (r *Router) Transcribe(ctx context.Context, req *TranscribeRequest) (*TranscribeResponse, error) {
-	r.mu.RLock()
-	client, ok := r.clients["openai"]
-	if !ok {
-		client, ok = r.clients[r.mainName]
-	}
-	r.mu.RUnlock()
-	if !ok {
-		return nil, ErrNoProvider
-	}
-	return client.Transcribe(ctx, req)
 }
 
 // SetSystemPrompt updates the system prompt
@@ -615,20 +538,6 @@ func (r *Router) GetModel() string {
 	return r.mainName
 }
 
-// Usage returns cumulative usage stats aggregated from all clients.
-func (r *Router) Usage() allm.UsageStats {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var total allm.UsageStats
-	for _, c := range r.clients {
-		u := c.Usage()
-		total.Requests += u.Requests
-		total.InputTokens += u.InputTokens
-		total.OutputTokens += u.OutputTokens
-	}
-	return total
-}
-
 // CLIProvider returns the underlying ClaudeCLIProvider if the main provider is CLI-based.
 func (r *Router) CLIProvider() *provider.ClaudeCLIProvider {
 	r.mu.RLock()
@@ -639,16 +548,6 @@ func (r *Router) CLIProvider() *provider.ClaudeCLIProvider {
 	}
 	cli, _ := client.Provider().(*provider.ClaudeCLIProvider)
 	return cli
-}
-
-// SetResponseFormat sets the response format on the main client
-func (r *Router) SetResponseFormat(format *allm.ResponseFormat) {
-	r.mu.RLock()
-	client, ok := r.clients[r.mainName]
-	r.mu.RUnlock()
-	if ok {
-		client.SetResponseFormat(format)
-	}
 }
 
 // SetThinking sets the thinking configuration on the main client

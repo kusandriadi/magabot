@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/kusa/magabot/internal/util"
@@ -198,44 +197,4 @@ func validateCloudBaseURL(baseURL string) error {
 		return nil
 	}
 	return util.ValidateBaseURL(baseURL)
-}
-
-// FormatModelList formats models for display
-func FormatModelList(models map[string][]ModelInfo) string {
-	var sb strings.Builder
-
-	providers := make([]string, 0, len(models))
-	for p := range models {
-		providers = append(providers, p)
-	}
-	sort.Strings(providers)
-
-	for _, providerName := range providers {
-		modelList := models[providerName]
-		sb.WriteString(fmt.Sprintf("\n**%s** (%d models):\n", strings.ToUpper(providerName), len(modelList)))
-		for _, m := range modelList {
-			if len(modelList) > 10 {
-				// Compact for many models
-				sb.WriteString(fmt.Sprintf("• `%s`", m.ID))
-				if m.ContextWindow > 0 {
-					sb.WriteString(fmt.Sprintf(" (%dk ctx)", m.ContextWindow/1000))
-				}
-				sb.WriteString("\n")
-			} else {
-				sb.WriteString(fmt.Sprintf("• `%s`", m.ID))
-				if m.ContextWindow > 0 {
-					sb.WriteString(fmt.Sprintf(" - %dk context", m.ContextWindow/1000))
-				}
-				if len(m.Capabilities) > 0 {
-					sb.WriteString(fmt.Sprintf(" [%s]", strings.Join(m.Capabilities, ", ")))
-				}
-				if m.Description != "" {
-					sb.WriteString(fmt.Sprintf(" - %s", m.Description))
-				}
-				sb.WriteString("\n")
-			}
-		}
-	}
-
-	return sb.String()
 }

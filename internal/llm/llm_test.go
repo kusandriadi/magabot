@@ -77,66 +77,6 @@ func TestImageFromBytes(t *testing.T) {
 	}
 }
 
-func TestRouter_Complete(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{
-			Content:  "Hello!",
-			Provider: "test",
-			Model:    "test-model",
-		}),
-	)
-
-	router := NewRouter(&Config{
-		Main:     "test",
-		MaxInput: 1000,
-	})
-	router.Register("test", allm.New(mock))
-
-	ctx := context.Background()
-	resp, err := router.Complete(ctx, "user1", "Hi there")
-	if err != nil {
-		t.Fatalf("Complete failed: %v", err)
-	}
-
-	if resp.Content != "Hello!" {
-		t.Errorf("Content = %q, want %q", resp.Content, "Hello!")
-	}
-
-	// Verify request was captured
-	if mock.CallCount() != 1 {
-		t.Errorf("CallCount = %d, want 1", mock.CallCount())
-	}
-}
-
-func TestRouter_RateLimit(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "OK"}),
-	)
-
-	router := NewRouter(&Config{
-		Main:      "test",
-		RateLimit: 2, // 2 requests per minute
-	})
-	router.Register("test", allm.New(mock))
-
-	ctx := context.Background()
-	userID := "user1"
-
-	// First 2 requests should succeed
-	for i := 0; i < 2; i++ {
-		_, err := router.Complete(ctx, userID, "test")
-		if err != nil {
-			t.Fatalf("Request %d failed: %v", i+1, err)
-		}
-	}
-
-	// Third request should be rate limited
-	_, err := router.Complete(ctx, userID, "test")
-	if !errors.Is(err, ErrRateLimited) {
-		t.Errorf("Expected ErrRateLimited, got %v", err)
-	}
-}
-
 func TestRouter_InputTooLong(t *testing.T) {
 	mock := allmtest.NewMockProvider("test",
 		allmtest.WithResponse(&allm.Response{Content: "OK"}),
@@ -149,9 +89,19 @@ func TestRouter_InputTooLong(t *testing.T) {
 	router.Register("test", allm.New(mock, allm.WithMaxInputLen(10)))
 
 	ctx := context.Background()
-	_, err := router.Complete(ctx, "user1", "This is a very long message that exceeds the limit")
-	if !errors.Is(err, ErrInputTooLong) {
-		t.Errorf("Expected ErrInputTooLong, got %v", err)
+	ch, err := router.StreamChat(ctx, "user1", []Message{{Role: "user", Content: "This is a very long message that exceeds the limit"}})
+	if err != nil {
+		t.Fatalf("StreamChat returned unexpected setup error: %v", err)
+	}
+	// Drain channel and check for error
+	var streamErr error
+	for chunk := range ch {
+		if chunk.Error != nil {
+			streamErr = chunk.Error
+		}
+	}
+	if streamErr == nil {
+		t.Error("Expected error for input too long")
 	}
 }
 
@@ -167,9 +117,11 @@ func TestRouter_SystemPrompt(t *testing.T) {
 	router.Register("test", allm.New(mock))
 
 	ctx := context.Background()
-	_, err := router.Complete(ctx, "user1", "Hello")
+	ch, err := router.StreamChat(ctx, "user1", []Message{{Role: "user", Content: "Hello"}})
 	if err != nil {
-		t.Fatalf("Complete failed: %v", err)
+		t.Fatalf("StreamChat failed: %v", err)
+	}
+	for range ch {
 	}
 
 	// Verify system prompt was added
@@ -194,7 +146,7 @@ func TestRouter_NoProvider(t *testing.T) {
 	router := NewRouter(&Config{Main: "missing"})
 
 	ctx := context.Background()
-	_, err := router.Complete(ctx, "user1", "Hello")
+	_, err := router.StreamChat(ctx, "user1", []Message{{Role: "user", Content: "Hello"}})
 	if !errors.Is(err, ErrNoProvider) {
 		t.Errorf("Expected ErrNoProvider, got %v", err)
 	}
@@ -209,9 +161,19 @@ func TestRouter_ProviderFails(t *testing.T) {
 	router.Register("test", allm.New(mock))
 
 	ctx := context.Background()
-	_, err := router.Complete(ctx, "user1", "Hello")
-	if !errors.Is(err, ErrProviderFailed) {
-		t.Errorf("Expected ErrProviderFailed, got %v", err)
+	ch, err := router.StreamChat(ctx, "user1", []Message{{Role: "user", Content: "Hello"}})
+	if err != nil {
+		t.Fatalf("StreamChat returned unexpected setup error: %v", err)
+	}
+	// Drain channel and check for error
+	var streamErr error
+	for chunk := range ch {
+		if chunk.Error != nil {
+			streamErr = chunk.Error
+		}
+	}
+	if streamErr == nil {
+		t.Error("Expected error from failing provider")
 	}
 }
 
@@ -314,8 +276,14 @@ func TestRouter_Concurrent(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			userID := string(rune('A' + id))
-			_, err := router.Complete(ctx, userID, "test")
-			done <- err
+			ch, err := router.StreamChat(ctx, userID, []Message{{Role: "user", Content: "test"}})
+			if err != nil {
+				done <- err
+				return
+			}
+			for range ch {
+			}
+			done <- nil
 		}(i)
 	}
 
@@ -324,49 +292,6 @@ func TestRouter_Concurrent(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Errorf("Concurrent request %d failed: %v", i, err)
 		}
-	}
-}
-
-func TestFormatModelList(t *testing.T) {
-	tests := []struct {
-		name   string
-		models map[string][]ModelInfo
-		want   []string // Strings that should appear in output
-	}{
-		{
-			name:   "empty",
-			models: map[string][]ModelInfo{},
-			want:   []string{},
-		},
-		{
-			name: "single provider few models",
-			models: map[string][]ModelInfo{
-				"anthropic": {
-					{ID: "claude-3-opus", Provider: "anthropic"},
-					{ID: "claude-3-sonnet", Provider: "anthropic"},
-				},
-			},
-			want: []string{"ANTHROPIC", "claude-3-opus", "claude-3-sonnet", "2 models"},
-		},
-		{
-			name: "multiple providers",
-			models: map[string][]ModelInfo{
-				"anthropic": {{ID: "claude-3-opus", Provider: "anthropic"}},
-				"openai":    {{ID: "gpt-4", Provider: "openai"}},
-			},
-			want: []string{"ANTHROPIC", "OPENAI", "claude-3-opus", "gpt-4"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := FormatModelList(tt.models)
-			for _, want := range tt.want {
-				if !strings.Contains(result, want) {
-					t.Errorf("FormatModelList() result should contain %q\nGot: %s", want, result)
-				}
-			}
-		})
 	}
 }
 
@@ -434,9 +359,11 @@ func TestRouter_SetSystemPrompt(t *testing.T) {
 	router.SetSystemPrompt("You are a helpful bot.")
 
 	ctx := context.Background()
-	_, err := router.Complete(ctx, "user1", "Hello")
+	ch, err := router.StreamChat(ctx, "user1", []Message{{Role: "user", Content: "Hello"}})
 	if err != nil {
-		t.Fatalf("Complete failed: %v", err)
+		t.Fatalf("StreamChat failed: %v", err)
+	}
+	for range ch {
 	}
 
 	req := mock.LastRequest()
@@ -499,23 +426,6 @@ func TestRouter_HealthCheck(t *testing.T) {
 			t.Errorf("HealthCheck for %s returned nil status", name)
 		}
 	}
-}
-
-func TestRouter_SetResponseFormat(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "OK"}),
-	)
-
-	router := NewRouter(&Config{Main: "test"})
-	router.Register("test", allm.New(mock))
-
-	// Set response format
-	format := &allm.ResponseFormat{Type: allm.ResponseFormatJSON}
-	router.SetResponseFormat(format)
-
-	// The method should not panic
-	// We can't easily verify the format was set without introspection,
-	// but at least we confirm the method runs without error
 }
 
 func TestRouter_SetThinking(t *testing.T) {
@@ -613,54 +523,6 @@ func TestRouter_CountTokens_NoProvider(t *testing.T) {
 	}
 }
 
-func TestRouter_GenerateImage(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "OK"}),
-	)
-
-	router := NewRouter(&Config{Main: "test"})
-	router.Register("test", allm.New(mock))
-
-	// Mock may not support GenerateImage, so we test error path
-	_, err := router.GenerateImage(context.Background(), "user1", "a cat")
-	// Either it returns an image or an error - both are acceptable
-	// We just verify it doesn't panic
-	_ = err
-}
-
-func TestRouter_GenerateImage_NoProvider(t *testing.T) {
-	router := NewRouter(&Config{Main: "missing"})
-
-	_, err := router.GenerateImage(context.Background(), "user1", "a cat")
-	if !errors.Is(err, ErrNoProvider) {
-		t.Errorf("Expected ErrNoProvider, got %v", err)
-	}
-}
-
-func TestRouter_GenerateImage_RateLimit(t *testing.T) {
-	mock := allmtest.NewMockProvider("test",
-		allmtest.WithResponse(&allm.Response{Content: "OK"}),
-	)
-
-	router := NewRouter(&Config{Main: "test", RateLimit: 1})
-	router.Register("test", allm.New(mock))
-
-	ctx := context.Background()
-	userID := "user1"
-
-	// First request should succeed (or fail with provider error, but not rate limit)
-	_, err := router.GenerateImage(ctx, userID, "test")
-	if errors.Is(err, ErrRateLimited) {
-		t.Fatal("First request should not be rate limited")
-	}
-
-	// Second request should be rate limited
-	_, err = router.GenerateImage(ctx, userID, "test")
-	if !errors.Is(err, ErrRateLimited) {
-		t.Errorf("Expected ErrRateLimited, got %v", err)
-	}
-}
-
 func TestRouter_EnablePromptCaching(t *testing.T) {
 	mock := allmtest.NewMockProvider("test",
 		allmtest.WithResponse(&allm.Response{Content: "OK"}),
@@ -677,9 +539,11 @@ func TestRouter_EnablePromptCaching(t *testing.T) {
 
 	// Make a request
 	ctx := context.Background()
-	_, err := router.Complete(ctx, "user1", "Hello")
+	ch, err := router.StreamChat(ctx, "user1", []Message{{Role: "user", Content: "Hello"}})
 	if err != nil {
-		t.Fatalf("Complete failed: %v", err)
+		t.Fatalf("StreamChat failed: %v", err)
+	}
+	for range ch {
 	}
 
 	// Verify cache control was set on system message
