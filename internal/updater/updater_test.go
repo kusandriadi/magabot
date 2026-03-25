@@ -293,25 +293,3 @@ func TestNew_CustomConfig(t *testing.T) {
 	}
 }
 
-func TestTruncateNotes(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		max   int
-		want  string
-	}{
-		{"short", "hello", 10, "hello"},
-		{"exact", "hello", 5, "hello"},
-		{"long", "hello world", 5, "hello..."},
-		{"empty", "", 10, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := truncateNotes(tt.input, tt.max)
-			if got != tt.want {
-				t.Errorf("truncateNotes(%q, %d) = %q, want %q", tt.input, tt.max, got, tt.want)
-			}
-		})
-	}
-}

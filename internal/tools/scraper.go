@@ -223,9 +223,7 @@ func (s *Scraper) scrapeLinks(ctx context.Context, targetURL, selector string) (
 				sb.WriteString(fmt.Sprintf("• %s\n", l.URL))
 			}
 		}
-		if len(links) > 20 {
-			sb.WriteString(fmt.Sprintf("\n... and %d more links", len(links)-20))
-		}
+		util.WriteTruncatedFooter(&sb, len(links), limit, "links")
 	}
 
 	return sb.String(), nil
@@ -282,9 +280,7 @@ func (s *Scraper) scrapeImages(ctx context.Context, targetURL string) (string, e
 				sb.WriteString(fmt.Sprintf("• %s\n", img.URL))
 			}
 		}
-		if len(images) > 10 {
-			sb.WriteString(fmt.Sprintf("\n... and %d more images", len(images)-10))
-		}
+		util.WriteTruncatedFooter(&sb, len(images), limit, "images")
 	}
 
 	return sb.String(), nil
@@ -360,28 +356,21 @@ func (s *Scraper) DuckDuckGoSearch(ctx context.Context, query string, count int)
 
 	c.Wait()
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🔍 **Search results for: %s**\n\n", query))
-
 	if len(results) == 0 {
-		sb.WriteString("(No results found)")
-	} else {
-		limit := count
-		if len(results) < limit {
-			limit = len(results)
-		}
-		for i := 0; i < limit; i++ {
-			r := results[i]
-			sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
-			sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
-			if r.Snippet != "" {
-				sb.WriteString(fmt.Sprintf("   %s\n", util.Truncate(r.Snippet, 150)))
-			}
-			sb.WriteString("\n")
-		}
+		return "(No results found)", nil
 	}
 
-	return sb.String(), nil
+	limit := count
+	if len(results) < limit {
+		limit = len(results)
+	}
+	searchResults := make([]util.SearchResult, limit)
+	for i := 0; i < limit; i++ {
+		r := results[i]
+		searchResults[i] = util.SearchResult{Title: r.Title, URL: r.URL, Description: r.Snippet}
+	}
+
+	return util.FormatSearchResults(fmt.Sprintf("🔍 **Search results for: %s**", query), searchResults, 150), nil
 }
 
 // newCollector creates a configured Colly collector

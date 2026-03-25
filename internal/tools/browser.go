@@ -215,9 +215,7 @@ func (b *Browser) getLinks(ctx context.Context, targetURL, selector string) (str
 		}
 	}
 
-	if len(links) > 20 {
-		sb.WriteString(fmt.Sprintf("\n... and %d more links", len(links)-20))
-	}
+	util.WriteTruncatedFooter(&sb, len(links), limit, "links")
 
 	return sb.String(), nil
 }
@@ -365,17 +363,10 @@ func (b *Browser) Search(ctx context.Context, query string, count int) (string, 
 		}
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🔍 **Google Search: %s**\n\n", query))
-
+	searchResults := make([]util.SearchResult, len(results))
 	for i, r := range results {
-		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
-		sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
-		if r.Snippet != "" {
-			sb.WriteString(fmt.Sprintf("   %s\n", util.Truncate(r.Snippet, 150)))
-		}
-		sb.WriteString("\n")
+		searchResults[i] = util.SearchResult{Title: r.Title, URL: r.URL, Description: r.Snippet}
 	}
 
-	return sb.String(), nil
+	return util.FormatSearchResults(fmt.Sprintf("🔍 **Google Search: %s**", query), searchResults, 150), nil
 }

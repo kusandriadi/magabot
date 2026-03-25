@@ -74,13 +74,7 @@ func (m *Maps) searchPlaces(ctx context.Context, params map[string]string) (stri
 	q.Set("extratags", "1")
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "Magabot/1.0 (https://github.com/kusa/magabot)")
-
-	resp, err := m.client.Do(req)
+	resp, err := util.DoGET(ctx, m.client, u.String(), map[string]string{"User-Agent": "Magabot/1.0 (https://github.com/kusa/magabot)"})
 	if err != nil {
 		return "", err
 	}
@@ -163,13 +157,7 @@ func (m *Maps) reverseGeocode(ctx context.Context, params map[string]string) (st
 	u := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?lat=%s&lon=%s&format=json&addressdetails=1",
 		url.QueryEscape(lat), url.QueryEscape(lon))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "Magabot/1.0 (https://github.com/kusa/magabot)")
-
-	resp, err := m.client.Do(req)
+	resp, err := util.DoGET(ctx, m.client, u, map[string]string{"User-Agent": "Magabot/1.0 (https://github.com/kusa/magabot)"})
 	if err != nil {
 		return "", err
 	}

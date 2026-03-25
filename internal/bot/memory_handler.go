@@ -164,9 +164,7 @@ func (h *MemoryHandler) listMemory(store *memory.Store, args []string) (string, 
 		sb.WriteString(fmt.Sprintf("• [%s] %s\n", mem.Type, util.Truncate(mem.Content, 60)))
 	}
 
-	if len(memories) > limit {
-		sb.WriteString(fmt.Sprintf("\n... and %d more", len(memories)-limit))
-	}
+	util.WriteTruncatedFooter(&sb, len(memories), limit, "memories")
 
 	return sb.String(), nil
 }

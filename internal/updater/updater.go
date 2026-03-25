@@ -90,15 +90,10 @@ func (u *Updater) getLatestRelease(ctx context.Context) (*Release, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest",
 		u.config.RepoOwner, u.config.RepoName)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "magabot-updater")
-
-	resp, err := u.client.Do(req)
+	resp, err := util.DoGET(ctx, u.client, url, map[string]string{
+		"Accept":     "application/vnd.github.v3+json",
+		"User-Agent": "magabot-updater",
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check updates: %w", err)
 	}
@@ -264,12 +259,7 @@ func (u *Updater) findAsset(release *Release) *Asset {
 
 // downloadAsset downloads an asset to a file
 func (u *Updater) downloadAsset(ctx context.Context, asset *Asset, destPath string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", asset.BrowserDownloadURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := u.client.Do(req)
+	resp, err := util.DoGET(ctx, u.client, asset.BrowserDownloadURL, nil)
 	if err != nil {
 		return err
 	}
@@ -374,12 +364,7 @@ func (u *Updater) findChecksumAsset(release *Release) *Asset {
 
 // verifyChecksum downloads checksums file and verifies the downloaded file
 func (u *Updater) verifyChecksum(ctx context.Context, checksumAsset *Asset, assetName, filePath string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", checksumAsset.BrowserDownloadURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := u.client.Do(req)
+	resp, err := util.DoGET(ctx, u.client, checksumAsset.BrowserDownloadURL, nil)
 	if err != nil {
 		return fmt.Errorf("download checksums: %w", err)
 	}
@@ -520,14 +505,8 @@ func FormatReleaseInfo(release *Release, hasUpdate bool) string {
 		status,
 		release.TagName,
 		release.PublishedAt.Format("2006-01-02"),
-		truncateNotes(release.Body, 500),
+		util.Truncate(release.Body, 500),
 		release.HTMLURL,
 	)
 }
 
-func truncateNotes(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}

@@ -16,13 +16,6 @@ import (
 
 const braveSearchURL = "https://api.search.brave.com/res/v1/web/search"
 
-// searchResult holds a single search result from any source.
-type searchResult struct {
-	Title       string
-	URL         string
-	Description string
-}
-
 // Search tool - Brave API primary, DuckDuckGo fallback
 type Search struct {
 	apiKey    string
@@ -93,15 +86,10 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 	q.Set("count", fmt.Sprintf("%d", count))
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Subscription-Token", s.apiKey)
-
-	resp, err := s.client.Do(req)
+	resp, err := util.DoGET(ctx, s.client, u.String(), map[string]string{
+		"Accept":               "application/json",
+		"X-Subscription-Token": s.apiKey,
+	})
 	if err != nil {
 		return "", fmt.Errorf("search request failed: %w", err)
 	}
@@ -126,12 +114,12 @@ func (s *Search) braveSearch(ctx context.Context, query string, count int) (stri
 		return "", fmt.Errorf("parse response: %w", err)
 	}
 
-	results := make([]searchResult, len(raw.Web.Results))
+	results := make([]util.SearchResult, len(raw.Web.Results))
 	for i, r := range raw.Web.Results {
-		results[i] = searchResult{Title: r.Title, URL: r.URL, Description: r.Description}
+		results[i] = util.SearchResult{Title: r.Title, URL: r.URL, Description: r.Description}
 	}
 
-	return formatSearchResults(query, results, "Brave"), nil
+	return util.FormatSearchResults(fmt.Sprintf("🔍 **Search: %s** (via Brave)", query), results, 200), nil
 }
 
 // duckDuckGoSearch scrapes DuckDuckGo HTML (no API key needed!)
@@ -142,7 +130,7 @@ func (s *Search) duckDuckGoSearch(ctx context.Context, query string, count int) 
 	)
 	c.SetRequestTimeout(30 * time.Second)
 
-	var results []searchResult
+	var results []util.SearchResult
 
 	appendResult := func(title, rawURL, snippet string) {
 		if len(results) >= count || title == "" || rawURL == "" {
@@ -157,7 +145,7 @@ func (s *Search) duckDuckGoSearch(ctx context.Context, query string, count int) 
 				}
 			}
 		}
-		results = append(results, searchResult{Title: title, URL: actualURL, Description: snippet})
+		results = append(results, util.SearchResult{Title: title, URL: actualURL, Description: snippet})
 	}
 
 	// DuckDuckGo HTML search results
@@ -189,22 +177,5 @@ func (s *Search) duckDuckGoSearch(ctx context.Context, query string, count int) 
 		return fmt.Sprintf("🔍 No results found for: %s", query), nil
 	}
 
-	return formatSearchResults(query, results, "DuckDuckGo"), nil
-}
-
-// formatSearchResults formats search results from any source.
-func formatSearchResults(query string, results []searchResult, source string) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🔍 **Search: %s** (via %s)\n\n", query, source))
-
-	for i, r := range results {
-		sb.WriteString(fmt.Sprintf("**%d. %s**\n", i+1, r.Title))
-		sb.WriteString(fmt.Sprintf("   🔗 %s\n", r.URL))
-		if r.Description != "" {
-			sb.WriteString(fmt.Sprintf("   %s\n", util.Truncate(r.Description, 200)))
-		}
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
+	return util.FormatSearchResults(fmt.Sprintf("🔍 **Search: %s** (via DuckDuckGo)", query), results, 200), nil
 }

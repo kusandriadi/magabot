@@ -301,6 +301,43 @@ type openAIEmbedding struct {
 	Embedding []float32 `json:"embedding"`
 }
 
+// doEmbedRequest marshals reqBody, POSTs to baseURL+path, reads the response
+// with a size limit, and unmarshals into result. Auth header is set when APIKey
+// is configured.
+func (c *Client) doEmbedRequest(ctx context.Context, path string, reqBody interface{}, result interface{}) error {
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.config.BaseURL+path, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.config.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	if err != nil {
+		return fmt.Errorf("read response: %w", err)
+	}
+
+	if err := json.Unmarshal(body, result); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) embedOpenAI(ctx context.Context, texts []string) ([]Embedding, error) {
 	reqBody := openAIRequest{
 		Input:          texts,
@@ -315,33 +352,9 @@ func (c *Client) embedOpenAI(ctx context.Context, texts []string) ([]Embedding, 
 		}
 	}
 
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.config.BaseURL+"/embeddings", bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
 	var result openAIResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	if err := c.doEmbedRequest(ctx, "/embeddings", reqBody, &result); err != nil {
+		return nil, err
 	}
 
 	if result.Error != nil {
@@ -394,33 +407,9 @@ func (c *Client) embedVoyage(ctx context.Context, texts []string) ([]Embedding, 
 		InputType: "document",
 	}
 
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.config.BaseURL+"/embeddings", bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
 	var result voyageResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	if err := c.doEmbedRequest(ctx, "/embeddings", reqBody, &result); err != nil {
+		return nil, err
 	}
 
 	if result.Error != nil {
@@ -465,33 +454,9 @@ func (c *Client) embedCohere(ctx context.Context, texts []string) ([]Embedding, 
 		InputType: "search_document",
 	}
 
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.config.BaseURL+"/embed", bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
 	var result cohereResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	if err := c.doEmbedRequest(ctx, "/embed", reqBody, &result); err != nil {
+		return nil, err
 	}
 
 	if result.Error != nil {
@@ -527,32 +492,9 @@ type localResponse struct {
 func (c *Client) embedLocal(ctx context.Context, texts []string) ([]Embedding, error) {
 	reqBody := localRequest{Texts: texts}
 
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.config.BaseURL+"/embed", bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
 	var result localResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	if err := c.doEmbedRequest(ctx, "/embed", reqBody, &result); err != nil {
+		return nil, err
 	}
 
 	if result.Error != "" {

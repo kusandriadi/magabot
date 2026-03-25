@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,19 @@ import (
 
 // DefaultMaxBodySize is the default max response body size (1MB).
 const DefaultMaxBodySize int64 = 1 << 20
+
+// DoGET creates and executes an HTTP GET request with the given headers.
+// Caller is responsible for closing resp.Body.
+func DoGET(ctx context.Context, client *http.Client, url string, headers map[string]string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	return client.Do(req)
+}
 
 // ReadHTTPBody reads the response body with a size limit.
 // Caller is responsible for closing resp.Body (typically via defer).
