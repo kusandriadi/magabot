@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -988,21 +989,31 @@ Send any message and I'll reply using AI.
 				if p.Name == currentName {
 					marker = "▸ "
 				}
-				sb.WriteString(fmt.Sprintf("%s%d. %s — %s\n", marker, i+1, p.Name, p.Description))
+				personality := ""
+				if p.Personality != "" {
+					personality = fmt.Sprintf("\n     Personality: %s", p.Personality)
+				}
+				sb.WriteString(fmt.Sprintf("%s%d. %s — %s%s\n", marker, i+1, p.Name, p.Description, personality))
 			}
-			sb.WriteString("\nSwitch: /persona <name>")
+			sb.WriteString("\nSwitch: /persona <name or number>")
 			return sb.String(), nil
 		}
 
-		// Switch persona
-		name := strings.ToLower(args[0])
-		persona := cfg.GetPersona(name)
+		// Switch persona by name or number
+		var persona *config.Persona
+		if num, err := strconv.Atoi(args[0]); err == nil {
+			if num >= 1 && num <= len(cfg.Personas.List) {
+				persona = &cfg.Personas.List[num-1]
+			}
+		} else {
+			persona = cfg.GetPersona(strings.ToLower(args[0]))
+		}
 		if persona == nil {
 			var names []string
-			for _, p := range cfg.Personas.List {
-				names = append(names, p.Name)
+			for i, p := range cfg.Personas.List {
+				names = append(names, fmt.Sprintf("%d:%s", i+1, p.Name))
 			}
-			return fmt.Sprintf("Unknown persona %q. Available: %s", name, strings.Join(names, ", ")), nil
+			return fmt.Sprintf("Unknown persona %q. Available: %s", args[0], strings.Join(names, ", ")), nil
 		}
 
 		sessionMgr.SetContext(sess, "persona", persona.Name)
