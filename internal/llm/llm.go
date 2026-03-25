@@ -48,6 +48,17 @@ var (
 const (
 	ResponseFormatJSON       = allm.ResponseFormatJSON
 	ResponseFormatJSONSchema = allm.ResponseFormatJSONSchema
+
+	systemPromptRules = "\n\nResponse style:\n" +
+		"- Write naturally and conversationally, like a knowledgeable friend, not a corporate chatbot.\n" +
+		"- Vary your sentence structure. Avoid repetitive patterns or robotic phrasing.\n" +
+		"- Be warm but not overly enthusiastic. Skip filler like \"Great question!\" or \"Sure thing!\".\n" +
+		"- Use simple, everyday language. Avoid jargon unless the user uses it first.\n" +
+		"\nFormatting rules (for chat responses only, not for generating file content):\n" +
+		"- Do not use markdown tables. Use plain text or lists instead.\n" +
+		"- Prefer numbered lists over bullet points. Bullet points are allowed but use them sparingly.\n" +
+		"- Emojis are allowed but must be relevant to the text and used neatly, not excessive.\n" +
+		"- You may use horizontal lines (————) as section separators."
 )
 
 var (
@@ -212,6 +223,7 @@ func (r *Router) buildMessages(messages []Message) []allm.Message {
 
 	// Add system prompt if set
 	if systemPrompt != "" {
+		systemPrompt += systemPromptRules
 		sysMsg := allm.Message{Role: "system", Content: systemPrompt}
 		if promptCaching {
 			sysMsg.CacheControl = &allm.CacheControl{Type: "ephemeral"}

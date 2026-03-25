@@ -179,8 +179,8 @@ type WebhookConfig struct {
 
 // LLMConfig holds LLM provider settings
 type LLMConfig struct {
-	Main               string          `yaml:"main"`          // Main/primary provider
-	MainProvider       string          `yaml:"main_provider"` // Alias for main
+	Main               string          `yaml:"main"`                // Main/primary provider
+	MainProvider       string          `yaml:"main_provider"`       // Alias for main
 	Providers          ProvidersConfig `yaml:"providers,omitempty"` // Alternative structure
 	SystemPrompt       string          `yaml:"system_prompt"`
 	MaxInputLength     int             `yaml:"max_input_length"`
