@@ -277,11 +277,15 @@ func runDaemon() {
 
 	// Initialize agent session manager
 	agentMgr := agent.NewManager(agent.Config{
-		Timeout:       cfg.Agent.Timeout,
-		MaxRetries:    cfg.Agent.MaxRetries,
-		Shortcuts:     cfg.Agent.Shortcuts,
-		DiscoverDepth: cfg.Agent.DiscoverDepth,
-		PlanDelegate:  cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
+		Timeout:        cfg.Agent.Timeout,
+		MaxRetries:     cfg.Agent.MaxRetries,
+		SessionTimeout: cfg.Agent.SessionTimeout,
+		Shortcuts:      cfg.Agent.Shortcuts,
+		DiscoverDepth:  cfg.Agent.DiscoverDepth,
+		PlanDelegate:   cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
+		OnSessionClose: func(platform, chatID, message string) {
+			_ = rtr.Send(platform, chatID, message)
+		},
 		GetCLISettings: func() (string, string) {
 			model := llmRouter.GetModel()
 			var effort string
@@ -606,6 +610,7 @@ func runDaemon() {
 	}
 
 	logger.Info("shutting down...")
+	agentMgr.Stop()
 
 	// Fire on_stop hooks (synchronous, give hooks a chance to run)
 	hooksMgr.Fire(hooks.OnStop, &hooks.EventData{
@@ -1492,7 +1497,8 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 		if sess == nil {
 			return "No active agent session.", nil
 		}
-		return fmt.Sprintf("Agent: %s\nDirectory: %s\nMessages: %d", sess.Agent, sess.Dir, sess.GetMsgCount()), nil
+		idle := time.Since(sess.GetLastActivity()).Truncate(time.Second)
+		return fmt.Sprintf("Agent: %s\nDirectory: %s\nMessages: %d\nIdle: %s", sess.Agent, sess.Dir, sess.GetMsgCount(), idle), nil
 
 	default:
 		return fmt.Sprintf("Unknown agent command: %s\nAvailable: :new, :quit, :status", cmd), nil
@@ -1558,13 +1564,14 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify)
 	close(statusDone)
 
-	// After the first response, detect language from the response and cache
+	// After the first response, detect language from the user's message and cache
 	// templates for subsequent messages (non-blocking).
-	if sess.Templates == nil && output != "" {
+	if sess.Templates == nil && msg.Text != "" {
+		userText := msg.Text
 		go func() {
 			tplCtx, tplCancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer tplCancel()
-			sess.Templates = generateProgressTemplates(tplCtx, llmRouter, output)
+			sess.Templates = generateProgressTemplates(tplCtx, llmRouter, userText)
 		}()
 	}
 

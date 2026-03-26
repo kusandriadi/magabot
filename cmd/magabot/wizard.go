@@ -825,6 +825,7 @@ func generateWizardConfig(state *WizardState) string {
 	b.WriteString("  plan_delegate: true\n")
 	b.WriteString("  timeout: 300\n")
 	b.WriteString("  max_retries: 2\n")
+	b.WriteString("  session_timeout: 21600\n")
 	b.WriteString("  discover_depth: 3\n")
 
 	return b.String()

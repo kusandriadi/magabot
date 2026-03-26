@@ -227,6 +227,7 @@ tools:
 agent:
   timeout: 300            # seconds per attempt
   max_retries: 2          # auto-retry on timeout
+  session_timeout: 21600  # idle session timeout in seconds (default: 6 hours, 0 = disabled)
   discover_depth: 3       # auto-discover directory search depth (default 3)
   # shortcuts:            # custom directory shortcuts
   #   myproject: "~/code/myproject"

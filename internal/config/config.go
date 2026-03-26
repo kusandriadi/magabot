@@ -361,11 +361,12 @@ type HookConfig struct {
 
 // AgentConfig holds coding agent session settings
 type AgentConfig struct {
-	Timeout       int               `yaml:"timeout"`        // seconds per attempt, default 300
-	MaxRetries    int               `yaml:"max_retries"`    // auto-retry on timeout, default 2
-	Shortcuts     map[string]string `yaml:"shortcuts"`      // directory shortcuts, e.g. "myproject": "~/code/myproject"
-	DiscoverDepth int               `yaml:"discover_depth"` // auto-discover search depth (default 3)
-	PlanDelegate  *bool             `yaml:"plan_delegate"`  // plan first, then delegate to subagents (default: true)
+	Timeout        int               `yaml:"timeout"`         // seconds per attempt, default 300
+	MaxRetries     int               `yaml:"max_retries"`     // auto-retry on timeout, default 2
+	SessionTimeout int               `yaml:"session_timeout"` // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
+	Shortcuts      map[string]string `yaml:"shortcuts"`       // directory shortcuts, e.g. "myproject": "~/code/myproject"
+	DiscoverDepth  int               `yaml:"discover_depth"`  // auto-discover search depth (default 3)
+	PlanDelegate   *bool             `yaml:"plan_delegate"`   // plan first, then delegate to subagents (default: true)
 }
 
 // HooksFile is the top-level structure for config-hooks.yml
@@ -557,6 +558,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Agent.MaxRetries <= 0 {
 		c.Agent.MaxRetries = 2
+	}
+	if c.Agent.SessionTimeout == 0 {
+		c.Agent.SessionTimeout = 21600 // 6 hours
 	}
 	if c.Agent.PlanDelegate == nil {
 		t := true

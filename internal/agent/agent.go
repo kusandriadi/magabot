@@ -33,28 +33,34 @@ const maxOutputBytes = 10 * 1024 * 1024
 // This is called on each execution to pick up runtime changes from /model and /effort.
 type CLISettings func() (model, effort string)
 
+// NotifyFunc sends a message to a specific platform+chat (for idle timeout notifications).
+type NotifyFunc func(platform, chatID, message string)
+
 // Config holds agent manager settings.
 type Config struct {
 	Main           string            // main/primary agent type
 	Timeout        int               // execution timeout in seconds
 	MaxRetries     int               // auto-retry on timeout (0 = no retry)
+	SessionTimeout int               // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
 	AllowedDirs    []string          // directories users may target (empty = user home only)
 	Shortcuts      map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
 	DiscoverDepth  int               // auto-discover search depth (default 3)
 	GetCLISettings CLISettings       // optional: returns current model+effort for Claude CLI
 	PlanDelegate   bool              // plan first, then delegate to subagents
+	OnSessionClose NotifyFunc        // optional: called when a session is auto-closed
 }
 
 // Session represents an active agent session tied to a chat.
 type Session struct {
-	mu        sync.Mutex
-	Agent     string // agent type: claude, codex, gemini
-	Dir       string // working directory (resolved absolute path)
-	Platform  string
-	ChatID    string
-	UserID    string
-	MsgCount  int               // tracks messages sent (for --continue)
-	Templates map[string]string // progress message templates in user's language
+	mu           sync.Mutex
+	Agent        string            // agent type: claude, codex, gemini
+	Dir          string            // working directory (resolved absolute path)
+	Platform     string
+	ChatID       string
+	UserID       string
+	MsgCount     int               // tracks messages sent (for --continue)
+	Templates    map[string]string // progress message templates in user's language
+	LastActivity time.Time         // last Execute() call (for idle timeout)
 }
 
 // Manager manages agent sessions across chats.
@@ -63,6 +69,8 @@ type Manager struct {
 	sessions map[string]*Session // key: "platform:chatID"
 	config   Config
 	logger   *slog.Logger
+	done     chan struct{}  // signals idle cleanup goroutine to stop
+	stopOnce sync.Once
 }
 
 // agentInfo maps agent type to its binary name.
@@ -89,11 +97,24 @@ func NewManager(cfg Config, logger *slog.Logger) *Manager {
 	if cfg.MaxRetries < 0 {
 		cfg.MaxRetries = 2
 	}
-	return &Manager{
+	if cfg.SessionTimeout < 0 {
+		cfg.SessionTimeout = 0
+	}
+	m := &Manager{
 		sessions: make(map[string]*Session),
 		config:   cfg,
 		logger:   logger,
+		done:     make(chan struct{}),
 	}
+	if cfg.SessionTimeout > 0 {
+		go m.idleCleanupLoop()
+	}
+	return m
+}
+
+// Stop signals the idle cleanup goroutine to exit.
+func (m *Manager) Stop() {
+	m.stopOnce.Do(func() { close(m.done) })
 }
 
 // sessionKey returns the map key for a platform+chatID pair.
@@ -145,11 +166,12 @@ func (m *Manager) NewSession(platform, chatID, userID, agent, dir string) (*Sess
 
 	key := sessionKey(platform, chatID)
 	sess := &Session{
-		Agent:    agent,
-		Dir:      absDir,
-		Platform: platform,
-		ChatID:   chatID,
-		UserID:   userID,
+		Agent:        agent,
+		Dir:          absDir,
+		Platform:     platform,
+		ChatID:       chatID,
+		UserID:       userID,
+		LastActivity: time.Now(),
 	}
 
 	m.mu.Lock()
@@ -295,6 +317,7 @@ func (m *Manager) CloseSession(platform, chatID string) {
 // When onProgress is non-nil and the agent is Claude, stdout is streamed as
 // NDJSON events so tool-use progress can be forwarded to the user in real time.
 func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string)) (string, error) {
+	sess.Touch()
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	maxRetries := m.config.MaxRetries
 	streaming := onProgress != nil && sess.Agent == AgentClaude
@@ -431,6 +454,72 @@ func (s *Session) GetMsgCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.MsgCount
+}
+
+// Touch updates the session's last activity timestamp.
+func (s *Session) Touch() {
+	s.mu.Lock()
+	s.LastActivity = time.Now()
+	s.mu.Unlock()
+}
+
+// GetLastActivity returns the session's last activity timestamp (thread-safe).
+func (s *Session) GetLastActivity() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.LastActivity
+}
+
+// idleCleanupLoop periodically sweeps idle sessions.
+func (m *Manager) idleCleanupLoop() {
+	interval := time.Duration(m.config.SessionTimeout) * time.Second / 6
+	if interval < time.Minute {
+		interval = time.Minute
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.sweepIdleSessions()
+		case <-m.done:
+			return
+		}
+	}
+}
+
+// sweepIdleSessions closes sessions that have been idle longer than SessionTimeout.
+func (m *Manager) sweepIdleSessions() {
+	timeout := time.Duration(m.config.SessionTimeout) * time.Second
+	now := time.Now()
+
+	m.mu.Lock()
+	var expired []*Session
+	for key, sess := range m.sessions {
+		sess.mu.Lock()
+		idle := now.Sub(sess.LastActivity)
+		sess.mu.Unlock()
+		if idle > timeout {
+			expired = append(expired, sess)
+			delete(m.sessions, key)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, sess := range expired {
+		m.logger.Info("agent session expired (idle timeout)",
+			"platform", sess.Platform,
+			"chat_id", sess.ChatID,
+			"agent", sess.Agent,
+			"idle", now.Sub(sess.LastActivity).Truncate(time.Second).String(),
+		)
+		if m.config.OnSessionClose != nil {
+			m.config.OnSessionClose(sess.Platform, sess.ChatID,
+				fmt.Sprintf("⏱ Agent session (%s in %s) closed — idle for more than %s.",
+					sess.Agent, sess.Dir, timeout.Truncate(time.Second)))
+		}
+	}
 }
 
 // planDelegatePrompt instructs Claude to plan first, then delegate to subagents.
