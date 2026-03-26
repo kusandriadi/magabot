@@ -235,6 +235,30 @@ func (c *Config) PromoteFirstAdmin(platform, userID string) bool {
 	return true
 }
 
+// EnsureAllowedUser adds a user to the platform's allowed_users list if not already present.
+// Returns true if the user was added. Safe to call concurrently.
+func (c *Config) EnsureAllowedUser(platform, userID string) bool {
+	c.mu.Lock()
+	users := c.platformAllowedUsers(platform)
+	if users == nil {
+		c.mu.Unlock()
+		return false
+	}
+	for _, u := range *users {
+		if u == userID {
+			c.mu.Unlock()
+			return false // already present
+		}
+	}
+	*users = append(*users, userID)
+	c.mu.Unlock()
+
+	if err := c.SaveBy("auto:pair"); err != nil {
+		return false
+	}
+	return true
+}
+
 // platformAccessPtrs returns pointers to the platform's access slices (caller must hold mu).
 func (c *Config) platformAccessPtrs(platform string) (admins, users, chats *[]string) {
 	switch platform {

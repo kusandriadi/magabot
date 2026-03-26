@@ -11,6 +11,14 @@ import (
 	"github.com/kusa/magabot/internal/util"
 )
 
+// normalizeUserID normalizes user IDs for platform-specific formats
+func normalizeUserID(platform, userID string) string {
+	if platform == "whatsapp" {
+		return util.NormalizeWhatsAppJID(userID)
+	}
+	return userID
+}
+
 // AdminHandler handles admin commands from chat
 type AdminHandler struct {
 	cfg        *config.Config
@@ -118,7 +126,7 @@ func (h *AdminHandler) handleAdmin(platform, userID string, args []string) (stri
 	}
 
 	action := strings.ToLower(args[0])
-	targetID := args[1]
+	targetID := normalizeUserID(platform, args[1])
 
 	switch action {
 	case "add":
@@ -155,7 +163,7 @@ func (h *AdminHandler) handleAllow(platform, userID, currentChatID string, args 
 		return "❌ Please specify the ID to allow", false, nil
 	}
 
-	targetID := args[1]
+	targetID := normalizeUserID(platform, args[1])
 
 	switch targetType {
 	case "user":
@@ -182,7 +190,7 @@ func (h *AdminHandler) handleRemove(platform, userID string, args []string) (str
 	}
 
 	targetType := strings.ToLower(args[0])
-	targetID := args[1]
+	targetID := normalizeUserID(platform, args[1])
 
 	switch targetType {
 	case "user":

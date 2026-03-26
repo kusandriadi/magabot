@@ -769,6 +769,9 @@ func (c *Config) IsPlatformAdmin(platform, userID string) bool {
 
 // isPlatformAdmin is the lock-free internal version (caller must hold mu)
 func (c *Config) isPlatformAdmin(platform, userID string) bool {
+	if platform == "whatsapp" {
+		userID = util.NormalizeWhatsAppJID(userID)
+	}
 	pa := c.getPlatformAccess(platform)
 	return pa != nil && util.Contains(pa.Admins, userID)
 }
@@ -787,6 +790,11 @@ func (c *Config) IsAllowed(platform, userID, chatID string, isGroup bool) bool {
 	// Open mode = everyone allowed
 	if c.Access.Mode == "open" {
 		return true
+	}
+
+	if platform == "whatsapp" {
+		userID = util.NormalizeWhatsAppJID(userID)
+		chatID = util.NormalizeWhatsAppJID(chatID)
 	}
 
 	pa := c.getPlatformAccess(platform)
@@ -853,9 +861,9 @@ func (c *Config) getPlatformAccess(platform string) *PlatformAccess {
 		if c.Platforms.WhatsApp != nil {
 			return &PlatformAccess{
 				Enabled:      c.Platforms.WhatsApp.Enabled,
-				Admins:       c.Platforms.WhatsApp.Admins,
-				AllowedUsers: c.Platforms.WhatsApp.AllowedUsers,
-				AllowedChats: c.Platforms.WhatsApp.AllowedChats,
+				Admins:       util.NormalizeWhatsAppJIDs(c.Platforms.WhatsApp.Admins),
+				AllowedUsers: util.NormalizeWhatsAppJIDs(c.Platforms.WhatsApp.AllowedUsers),
+				AllowedChats: util.NormalizeWhatsAppJIDs(c.Platforms.WhatsApp.AllowedChats),
 				AllowGroups:  c.Platforms.WhatsApp.AllowGroups,
 				AllowDMs:     c.Platforms.WhatsApp.AllowDMs,
 			}

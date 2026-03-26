@@ -113,6 +113,23 @@ func SanitizeFilename(s string) string {
 	return reSanitizeFilename.ReplaceAllString(s, "_")
 }
 
+// NormalizeWhatsAppJID ensures a WhatsApp JID has the @s.whatsapp.net suffix
+func NormalizeWhatsAppJID(id string) string {
+	if id != "" && !strings.HasSuffix(id, "@s.whatsapp.net") {
+		return id + "@s.whatsapp.net"
+	}
+	return id
+}
+
+// NormalizeWhatsAppJIDs normalizes a slice of WhatsApp JIDs
+func NormalizeWhatsAppJIDs(ids []string) []string {
+	result := make([]string, len(ids))
+	for i, id := range ids {
+		result[i] = NormalizeWhatsAppJID(id)
+	}
+	return result
+}
+
 // Contains checks if slice contains item
 func Contains(slice []string, item string) bool {
 	for _, s := range slice {
