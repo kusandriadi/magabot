@@ -53,8 +53,8 @@ type Config struct {
 // Session represents an active agent session tied to a chat.
 type Session struct {
 	mu           sync.Mutex
-	Agent        string            // agent type: claude, codex, gemini
-	Dir          string            // working directory (resolved absolute path)
+	Agent        string // agent type: claude, codex, gemini
+	Dir          string // working directory (resolved absolute path)
 	Platform     string
 	ChatID       string
 	UserID       string
@@ -69,7 +69,7 @@ type Manager struct {
 	sessions map[string]*Session // key: "platform:chatID"
 	config   Config
 	logger   *slog.Logger
-	done     chan struct{}  // signals idle cleanup goroutine to stop
+	done     chan struct{} // signals idle cleanup goroutine to stop
 	stopOnce sync.Once
 }
 
