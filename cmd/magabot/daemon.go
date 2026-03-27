@@ -1558,7 +1558,6 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify)
 	close(statusDone)
 
-
 	if err != nil {
 		if output != "" {
 			return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
@@ -1570,7 +1569,6 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	}
 	return output, nil
 }
-
 
 // mergeHooksConfig loads hooks from config-hooks.yml and merges with inline config hooks.
 // File hooks take precedence over inline hooks with the same name.
