@@ -213,7 +213,7 @@ func (u *Updater) findAsset(release *Release) *Asset {
 
 	// Preferred extensions in order (archive first, then raw binary)
 	archiveExts := []string{".tar.gz", ".tgz", ".zip"}
-	checksumExts := []string{".sha256", ".sha512", ".md5"}
+	checksumExts := []string{".sha256", ".sha512"}
 
 	isChecksum := func(name string) bool {
 		lower := strings.ToLower(name)

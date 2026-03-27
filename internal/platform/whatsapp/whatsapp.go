@@ -73,6 +73,14 @@ func New(cfg *Config) (*Bot, error) {
 	}, nil
 }
 
+// getClient returns a snapshot of the current WhatsApp client (thread-safe).
+func (b *Bot) getClient() *whatsmeow.Client {
+	b.mu.RLock()
+	c := b.client
+	b.mu.RUnlock()
+	return c
+}
+
 // Name returns the platform name
 func (b *Bot) Name() string {
 	return "whatsapp"
@@ -115,9 +123,7 @@ func (b *Bot) qrLoop(ctx context.Context) {
 	const maxRetries = 3
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		b.mu.RLock()
-		client := b.client
-		b.mu.RUnlock()
+		client := b.getClient()
 
 		qrChan, err := client.GetQRChannel(ctx)
 		if err != nil {
@@ -167,9 +173,7 @@ func (b *Bot) qrLoop(ctx context.Context) {
 
 	// All retries exhausted — disable WhatsApp
 	b.logger.Warn("WhatsApp QR pairing failed after 3 attempts, disabling platform — run 'magabot setup platform' to re-enable")
-	b.mu.RLock()
-	client := b.client
-	b.mu.RUnlock()
+	client := b.getClient()
 	if client != nil {
 		client.Disconnect()
 	}
@@ -182,11 +186,7 @@ func (b *Bot) qrLoop(ctx context.Context) {
 func (b *Bot) Stop() error {
 	close(b.done)
 
-	b.mu.RLock()
-	client := b.client
-	b.mu.RUnlock()
-
-	if client != nil {
+	if client := b.getClient(); client != nil {
 		client.Disconnect()
 	}
 
@@ -196,10 +196,7 @@ func (b *Bot) Stop() error {
 
 // Send sends a text message to a WhatsApp chat
 func (b *Bot) Send(chatID, message string) error {
-	b.mu.RLock()
-	client := b.client
-	b.mu.RUnlock()
-
+	client := b.getClient()
 	if client == nil || !client.IsConnected() {
 		return fmt.Errorf("WhatsApp not connected")
 	}
@@ -219,9 +216,7 @@ func (b *Bot) Send(chatID, message string) error {
 
 // IsConnected returns connection status
 func (b *Bot) IsConnected() bool {
-	b.mu.RLock()
-	client := b.client
-	b.mu.RUnlock()
+	client := b.getClient()
 	return client != nil && client.IsConnected()
 }
 
@@ -281,9 +276,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	ctx := context.Background()
 
 	// Send typing indicator
-	b.mu.RLock()
-	client := b.client
-	b.mu.RUnlock()
+	client := b.getClient()
 	if client != nil && client.IsConnected() {
 		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 	}
@@ -460,10 +453,7 @@ func extractReplyContext(evt *events.Message, b *Bot) *router.ReplyContext {
 	var username string
 	var isBot bool
 
-	b.mu.RLock()
-	client := b.client
-	b.mu.RUnlock()
-
+	client := b.getClient()
 	if client != nil && participant != "" {
 		jid, err := types.ParseJID(participant)
 		if err == nil && jid.User == client.Store.ID.User {

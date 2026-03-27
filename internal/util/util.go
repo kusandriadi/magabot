@@ -24,20 +24,6 @@ func NewHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// ResolveAPIKey returns configKey if non-empty, otherwise checks each
-// environment variable in order and returns the first non-empty value.
-func ResolveAPIKey(configKey string, envVars ...string) string {
-	if configKey != "" {
-		return configKey
-	}
-	for _, env := range envVars {
-		if v := os.Getenv(env); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // Truncate shortens a string to max length with ellipsis
 func Truncate(s string, max int) string {
 	if max <= 3 {
@@ -182,40 +168,6 @@ func IsValidID(s string) bool {
 		}
 	}
 	return true
-}
-
-// ExtractAPIMessage safely extracts a human-readable message from API error strings
-// This sanitizes the error to prevent leaking sensitive information
-func ExtractAPIMessage(err error) string {
-	if err == nil {
-		return ""
-	}
-	s := err.Error()
-
-	// Look for "message":"..." in JSON error responses
-	if idx := strings.Index(s, "\"message\":\""); idx != -1 {
-		start := idx + len("\"message\":\"")
-		end := strings.Index(s[start:], "\"")
-		if end != -1 && end < 200 { // Limit message length
-			msg := s[start : start+end]
-			// Sanitize the message - remove potential API keys or tokens
-			msg = SanitizeErrorMessage(msg)
-			return msg
-		}
-	}
-
-	// Look for "error":"..." format
-	if idx := strings.Index(s, "\"error\":\""); idx != -1 {
-		start := idx + len("\"error\":\"")
-		end := strings.Index(s[start:], "\"")
-		if end != -1 && end < 200 {
-			msg := s[start : start+end]
-			msg = SanitizeErrorMessage(msg)
-			return msg
-		}
-	}
-
-	return ""
 }
 
 // Pre-compiled regexes for error sanitization (compiled once, not per call)

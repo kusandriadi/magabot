@@ -46,7 +46,7 @@ func ReadHTTPResponse(resp *http.Response, context string) ([]byte, error) {
 		return nil, fmt.Errorf("read %s response: %w", context, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s error %d: %s", context, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s error %d: %s", context, resp.StatusCode, SanitizeErrorMessage(string(body)))
 	}
 	return body, nil
 }
@@ -82,7 +82,7 @@ func DoPostJSON(ctx context.Context, client *http.Client, url string, payload in
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, SanitizeErrorMessage(string(body)))
 	}
 
 	return body, nil

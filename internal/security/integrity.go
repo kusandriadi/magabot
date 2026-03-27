@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -117,66 +116,6 @@ func (s *Signer) computeSignature(contentBase64 string, timestamp int64) []byte 
 	return h.Sum(nil)
 }
 
-// IntegrityVault combines encryption with HMAC for authenticated encryption
-// Note: AES-GCM already provides authentication, but this adds an extra layer
-// for sensitive data and enables signature verification without decryption
-type IntegrityVault struct {
-	vault  *Vault
-	signer *Signer
-}
-
-// NewIntegrityVault creates a vault with both encryption and signing
-func NewIntegrityVault(encKeyBase64, signKeyBase64 string) (*IntegrityVault, error) {
-	vault, err := NewVault(encKeyBase64)
-	if err != nil {
-		return nil, fmt.Errorf("create vault: %w", err)
-	}
-
-	signer, err := NewSigner(signKeyBase64, 0) // No TTL for stored data
-	if err != nil {
-		return nil, fmt.Errorf("create signer: %w", err)
-	}
-
-	return &IntegrityVault{
-		vault:  vault,
-		signer: signer,
-	}, nil
-}
-
-// EncryptAndSign encrypts then signs data
-func (iv *IntegrityVault) EncryptAndSign(plaintext []byte) (string, error) {
-	// First encrypt
-	ciphertext, err := iv.vault.Encrypt(plaintext)
-	if err != nil {
-		return "", fmt.Errorf("encrypt: %w", err)
-	}
-
-	// Then sign the ciphertext
-	signed, err := iv.signer.Sign([]byte(ciphertext))
-	if err != nil {
-		return "", fmt.Errorf("sign: %w", err)
-	}
-
-	return signed, nil
-}
-
-// VerifyAndDecrypt verifies signature then decrypts
-func (iv *IntegrityVault) VerifyAndDecrypt(signedCiphertext string) ([]byte, error) {
-	// First verify signature
-	ciphertext, err := iv.signer.Verify(signedCiphertext)
-	if err != nil {
-		return nil, fmt.Errorf("verify: %w", err)
-	}
-
-	// Then decrypt
-	plaintext, err := iv.vault.Decrypt(string(ciphertext))
-	if err != nil {
-		return nil, fmt.Errorf("decrypt: %w", err)
-	}
-
-	return plaintext, nil
-}
-
 // GenerateSigningKey generates a new random signing key
 func GenerateSigningKey() string {
 	key := make([]byte, 32)
@@ -196,43 +135,4 @@ func HashForIntegrity(data []byte) string {
 func VerifyHash(data []byte, expectedHash string) bool {
 	actualHash := HashForIntegrity(data)
 	return hmac.Equal([]byte(actualHash), []byte(expectedHash))
-}
-
-// FileIntegrity provides file integrity checking
-type FileIntegrity struct {
-	mu     sync.RWMutex
-	hashes map[string]string // path -> hash
-}
-
-// NewFileIntegrity creates a new file integrity checker
-func NewFileIntegrity() *FileIntegrity {
-	return &FileIntegrity{
-		hashes: make(map[string]string),
-	}
-}
-
-// RecordHash records the hash of file content
-func (fi *FileIntegrity) RecordHash(path string, content []byte) {
-	fi.mu.Lock()
-	fi.hashes[path] = HashForIntegrity(content)
-	fi.mu.Unlock()
-}
-
-// VerifyFile checks if file content matches recorded hash
-func (fi *FileIntegrity) VerifyFile(path string, content []byte) bool {
-	fi.mu.RLock()
-	expected, ok := fi.hashes[path]
-	fi.mu.RUnlock()
-	if !ok {
-		return false
-	}
-	return VerifyHash(content, expected)
-}
-
-// GetHash returns the recorded hash for a path
-func (fi *FileIntegrity) GetHash(path string) (string, bool) {
-	fi.mu.RLock()
-	h, ok := fi.hashes[path]
-	fi.mu.RUnlock()
-	return h, ok
 }

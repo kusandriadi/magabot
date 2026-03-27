@@ -138,6 +138,11 @@ func (m *Manager) loadSkill(path string) (*Skill, error) {
 
 	skill.Path = filepath.Dir(path)
 
+	// Validate skill name to prevent path traversal
+	if strings.ContainsAny(skill.Name, "/\\") || strings.Contains(skill.Name, "..") || skill.Name == "" {
+		return nil, fmt.Errorf("invalid skill name: %q", skill.Name)
+	}
+
 	// Compile regex patterns
 	for _, pattern := range skill.Triggers.Patterns {
 		re, err := regexp.Compile(pattern)

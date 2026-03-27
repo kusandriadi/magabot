@@ -79,13 +79,3 @@ func validateBaseURL(rawURL string, allowLocal bool) error {
 
 	return nil
 }
-
-// IsLocalURL checks if a URL points to localhost/127.0.0.1
-func IsLocalURL(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
-}
