@@ -58,9 +58,8 @@ type Session struct {
 	Platform     string
 	ChatID       string
 	UserID       string
-	MsgCount     int               // tracks messages sent (for --continue)
-	Templates    map[string]string // progress message templates in user's language
-	LastActivity time.Time         // last Execute() call (for idle timeout)
+	MsgCount     int       // tracks messages sent (for --continue)
+	LastActivity time.Time // last Execute() call (for idle timeout)
 }
 
 // Manager manages agent sessions across chats.
@@ -377,12 +376,8 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 				cancel()
 				return "", fmt.Errorf("start agent: %w", err)
 			}
-			templates := sess.Templates
-			if templates == nil {
-				templates = DefaultTemplates
-			}
 			heartbeat := func() { idle.Reset(timeout) }
-			partial = m.readStreamEvents(pipe, onProgress, heartbeat, templates)
+			partial = m.readStreamEvents(pipe, onProgress, heartbeat, DefaultTemplates)
 			err = cmd.Wait()
 		} else {
 			var stdout bytes.Buffer

@@ -1512,13 +1512,7 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		return "", nil
 	}
 
-	// Use cached templates if available; otherwise start with English defaults.
-	// After the first response, we detect the language from the response text
-	// and cache templates for subsequent messages.
-	templates := sess.Templates
-	if templates == nil {
-		templates = agent.DefaultTemplates
-	}
+	templates := agent.DefaultTemplates
 
 	// Wrap notify to track last send time so ticker can coordinate.
 	var progressMu sync.Mutex
@@ -1564,16 +1558,6 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify)
 	close(statusDone)
 
-	// After the first response, detect language from the user's message and cache
-	// templates for subsequent messages (non-blocking).
-	if sess.Templates == nil && msg.Text != "" {
-		userText := msg.Text
-		go func() {
-			tplCtx, tplCancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer tplCancel()
-			sess.Templates = generateProgressTemplates(tplCtx, llmRouter, userText)
-		}()
-	}
 
 	if err != nil {
 		if output != "" {
@@ -1587,36 +1571,6 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	return output, nil
 }
 
-// generateProgressTemplates asks the LLM to produce progress message templates
-// in the same language as the user's message. Falls back to English defaults.
-func generateProgressTemplates(ctx context.Context, llmRouter *llm.Router, userMsg string) map[string]string {
-	prompt := fmt.Sprintf(`Based on the user's message below, determine what language they're writing in and generate short, conversational progress update phrases in that SAME language.
-
-User's message: "%s"
-
-Return ONLY a valid JSON object (no markdown, no explanation) with these exact keys. Keep the placeholders exactly as shown:
-{"read_file":"...{file}...","edit_file":"...{file}...","write_file":"...{file}...","search_files":"...{pattern}...","search_code":"...{pattern}...","run_command":"...{command}...","run_described":"...{description}...","generic":"...","still_working":"...{elapsed}..."}
-
-Make them sound natural and conversational, like a colleague giving quick status updates.`, userMsg)
-
-	content, err := llmRouter.QuickChat(ctx, prompt)
-	if err != nil {
-		return agent.DefaultTemplates
-	}
-
-	// Extract JSON from response (LLM may wrap in markdown code blocks)
-	start := strings.Index(content, "{")
-	end := strings.LastIndex(content, "}")
-	if start < 0 || end <= start {
-		return agent.DefaultTemplates
-	}
-
-	var templates map[string]string
-	if err := json.Unmarshal([]byte(content[start:end+1]), &templates); err != nil {
-		return agent.DefaultTemplates
-	}
-	return templates
-}
 
 // mergeHooksConfig loads hooks from config-hooks.yml and merges with inline config hooks.
 // File hooks take precedence over inline hooks with the same name.
