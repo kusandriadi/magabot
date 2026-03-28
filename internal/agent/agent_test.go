@@ -60,6 +60,11 @@ func TestSessionCRUD(t *testing.T) {
 		t.Error("GetSession returned different session")
 	}
 
+	// Claude sessions should have a CLI provider
+	if sess.cli == nil {
+		t.Error("expected Claude session to have CLI provider")
+	}
+
 	// Close session
 	m.CloseSession("telegram", "123")
 	if m.HasSession("telegram", "123") {
@@ -175,40 +180,6 @@ func TestStripANSI(t *testing.T) {
 	}
 }
 
-func TestBuildArgs(t *testing.T) {
-	tests := []struct {
-		agent   string
-		count   int
-		message string
-		wantLen int
-	}{
-		{AgentClaude, 0, "hello", 5}, // -p hello --output-format text --dangerously-skip-permissions
-		{AgentClaude, 1, "hello", 6}, // + --continue
-		{AgentCodex, 0, "hello", 3},  // exec -- hello
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.agent, func(t *testing.T) {
-			sess := &Session{Agent: tt.agent, MsgCount: tt.count}
-			args := buildArgs(sess, tt.message, nil, nil, false)
-			if len(args) != tt.wantLen {
-				t.Errorf("buildArgs(%s, count=%d) len = %d, want %d: %v",
-					tt.agent, tt.count, len(args), tt.wantLen, args)
-			}
-		})
-	}
-}
-
-func TestBuildArgsFlagInjection(t *testing.T) {
-	// Codex uses -- separator to prevent flag injection
-	sess := &Session{Agent: AgentCodex}
-	args := buildArgs(sess, "--malicious-flag", nil, nil, false)
-	// Should be: exec -- --malicious-flag
-	if len(args) < 2 || args[1] != "--" {
-		t.Errorf("codex args should have -- separator: %v", args)
-	}
-}
-
 func TestExecuteCanceledContext(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	m := NewManager(Config{Timeout: 10, AllowedDirs: []string{home}}, nil)
@@ -238,25 +209,6 @@ func TestSessionKey(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("sessionKey(%q, %q) = %q, want %q", tt.platform, tt.chatID, got, tt.want)
 		}
-	}
-}
-
-func TestLimitedWriter(t *testing.T) {
-	var buf []byte
-	w := &limitedWriter{w: writerFunc(func(p []byte) (int, error) {
-		buf = append(buf, p...)
-		return len(p), nil
-	}), n: 5}
-
-	_, _ = w.Write([]byte("hello world")) // 11 bytes, limit 5
-	if string(buf) != "hello" {
-		t.Errorf("limitedWriter wrote %q, want %q", string(buf), "hello")
-	}
-
-	// Further writes should be discarded
-	_, _ = w.Write([]byte("more"))
-	if string(buf) != "hello" {
-		t.Errorf("limitedWriter should discard after limit, got %q", string(buf))
 	}
 }
 
@@ -346,8 +298,3 @@ func TestManagerStopIdempotent(t *testing.T) {
 	m.Stop()
 	m.Stop() // should not panic
 }
-
-// writerFunc is a helper that implements io.Writer via a function.
-type writerFunc func([]byte) (int, error)
-
-func (f writerFunc) Write(p []byte) (int, error) { return f(p) }

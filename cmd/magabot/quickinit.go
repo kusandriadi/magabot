@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusandriadi/allm-go/provider"
 )
 
 // cmdInit runs the zero-config quick init.
@@ -223,7 +224,9 @@ func buildInitConfig(cfg *envConfig) string {
 		} else {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.AnthropicKey)
 		}
-		b.WriteString("    model: \"claude-sonnet-4-6\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.AnthropicSonnet)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", provider.AnthropicOpus)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", provider.AnthropicSonnet)
 		b.WriteString("    max_tokens: 4096\n\n")
 	}
 
@@ -231,7 +234,9 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("  openai:\n")
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.OpenAIKey)
-		b.WriteString("    model: \"gpt-4o\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.OpenAIGPT5)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", provider.OpenAIGPT5)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", provider.OpenAIGPT5)
 		b.WriteString("    max_tokens: 4096\n\n")
 	}
 
@@ -239,7 +244,9 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("  glm:\n")
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.GLMKey)
-		b.WriteString("    model: \"glm-4\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", provider.GLM5Dot1)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", provider.GLM5Turbo)
 		b.WriteString("    max_tokens: 4096\n\n")
 	}
 

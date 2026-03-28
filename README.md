@@ -29,7 +29,7 @@
 | Provider | Default Model | Environment Variable |
 |----------|---------------|---------------------|
 | Anthropic | claude-sonnet-4-6 | `ANTHROPIC_API_KEY` |
-| OpenAI | gpt-4o | `OPENAI_API_KEY` |
+| OpenAI | gpt-5 | `OPENAI_API_KEY` |
 | GLM | glm-4.7 | `GLM_API_KEY` or `ZAI_API_KEY` |
 | Kimi | moonshot-v1 | `KIMI_API_KEY` |
 | MiniMax | minimax-pro | `MINIMAX_API_KEY` |

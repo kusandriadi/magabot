@@ -3,12 +3,9 @@
 package agent
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -17,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kusandriadi/allm-go"
+	"github.com/kusandriadi/allm-go/provider"
 )
 
 // Supported agent types.
@@ -25,28 +25,28 @@ const (
 	AgentCodex  = "codex"
 )
 
-// maxOutputBytes limits CLI stdout/stderr capture to prevent OOM (10 MB).
-const maxOutputBytes = 10 * 1024 * 1024
-
-// CLISettings returns the current model and effort for Claude CLI.
-// This is called on each execution to pick up runtime changes from /model and /effort.
-type CLISettings func() (model, effort string)
+// CLISettings returns the current effort for Claude CLI.
+// This is called on each execution to pick up runtime changes from /effort.
+type CLISettings func() (effort string)
 
 // NotifyFunc sends a message to a specific platform+chat (for idle timeout notifications).
 type NotifyFunc func(platform, chatID, message string)
 
 // Config holds agent manager settings.
 type Config struct {
-	Main           string            // main/primary agent type
-	Timeout        int               // execution timeout in seconds
-	MaxRetries     int               // auto-retry on timeout (0 = no retry)
-	SessionTimeout int               // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
-	AllowedDirs    []string          // directories users may target (empty = user home only)
-	Shortcuts      map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
-	DiscoverDepth  int               // auto-discover search depth (default 3)
-	GetCLISettings CLISettings       // optional: returns current model+effort for Claude CLI
-	PlanDelegate   bool              // plan first, then delegate to subagents
-	OnSessionClose NotifyFunc        // optional: called when a session is auto-closed
+	Main                string            // main/primary agent type
+	Timeout             int               // execution timeout in seconds
+	MaxRetries          int               // auto-retry on timeout (0 = no retry)
+	SessionTimeout      int               // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
+	AllowedDirs         []string          // directories users may target (empty = user home only)
+	Shortcuts           map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
+	DiscoverDepth       int               // auto-discover search depth (default 3)
+	GetCLISettings      CLISettings       // optional: returns current effort for Claude CLI
+	PlanDelegate        bool              // plan first, then delegate to subagents
+	OnSessionClose      NotifyFunc        // optional: called when a session is auto-closed
+	CLIPath             string            // path to claude binary (default: "claude")
+	PlanModel       string            // model for planning phase (overrides default during plan)
+	ImplModel string            // model for implementation phase (overrides default during impl)
 }
 
 // Session represents an active agent session tied to a chat.
@@ -57,8 +57,9 @@ type Session struct {
 	Platform     string
 	ChatID       string
 	UserID       string
-	MsgCount     int       // tracks messages sent (for --continue)
-	LastActivity time.Time // last Execute() call (for idle timeout)
+	MsgCount     int                         // tracks messages sent (for --continue)
+	LastActivity time.Time                   // last Execute() call (for idle timeout)
+	cli          *provider.ClaudeCLIProvider // Claude CLI provider (nil for non-Claude agents)
 }
 
 // Manager manages agent sessions across chats.
@@ -169,6 +170,19 @@ func (m *Manager) NewSession(platform, chatID, userID, agent, dir string) (*Sess
 		ChatID:       chatID,
 		UserID:       userID,
 		LastActivity: time.Now(),
+	}
+
+	// Create Claude CLI provider for Claude agent sessions
+	if agent == AgentClaude {
+		cliPath := m.config.CLIPath
+		if cliPath == "" {
+			cliPath = "claude"
+		}
+		sess.cli = provider.ClaudeCLI(
+			provider.WithCLIPath(cliPath),
+			provider.WithCLIWorkDir(absDir),
+			provider.WithCLISessionPersist(true),
+		)
 	}
 
 	m.mu.Lock()
@@ -308,16 +322,23 @@ func (m *Manager) CloseSession(platform, chatID string) {
 	m.logger.Info("agent session closed", "platform", platform, "chat_id", chatID)
 }
 
-// Execute runs a message through the agent CLI and returns the output.
-// On timeout, it automatically retries with --continue up to MaxRetries times,
-// accumulating partial output across attempts.
-// When onProgress is non-nil and the agent is Claude, stdout is streamed as
-// NDJSON events so tool-use progress can be forwarded to the user in real time.
+// Execute runs a message through the agent and returns the output.
+// For Claude agents, uses allm-go ClaudeCLIProvider. For Codex, uses direct exec.
+// On timeout, it automatically retries with --continue up to MaxRetries times.
 func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string)) (string, error) {
 	sess.Touch()
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	maxRetries := m.config.MaxRetries
-	streaming := onProgress != nil && sess.Agent == AgentClaude
+
+	if sess.Agent == AgentClaude && sess.cli != nil {
+		return m.executeClaude(ctx, sess, message, media, onProgress, timeout, maxRetries)
+	}
+	return m.executeCodex(ctx, sess, message, timeout)
+}
+
+// executeClaude runs a message through Claude CLI via allm-go provider.
+func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), timeout time.Duration, maxRetries int) (string, error) {
+	streaming := onProgress != nil
 
 	var allOutput []string
 
@@ -327,70 +348,50 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 		var idle *time.Timer
 
 		if streaming {
-			// Idle-based timeout: resets every time Claude sends output.
 			attemptCtx, cancel = context.WithCancel(ctx)
 			idle = time.AfterFunc(timeout, cancel)
 		} else {
 			attemptCtx, cancel = context.WithTimeout(ctx, timeout)
 		}
 
-		args := buildArgs(sess, message, media, m.config.GetCLISettings, m.config.PlanDelegate)
-		if streaming {
-			for i, arg := range args {
-				if arg == "--output-format" && i+1 < len(args) {
-					args[i+1] = "stream-json"
-					break
-				}
-			}
-			args = append(args, "--verbose")
+		// Configure provider for this attempt
+		count := sess.GetMsgCount()
+		sess.cli.SetContinue(count > 0)
+
+		if m.config.PlanDelegate && count == 0 {
+			sess.cli.SetAppendPrompt(planDelegatePrompt)
+		} else {
+			sess.cli.SetAppendPrompt("")
 		}
-		bin := agentInfo[sess.Agent]
+
+		// Build request with phase-aware model selection
+		req := m.buildRequest(sess, message, media, count)
 
 		m.logger.Debug("executing agent",
 			"agent", sess.Agent, "dir", sess.Dir,
-			"attempt", attempt, "msg_count", sess.MsgCount,
+			"attempt", attempt, "msg_count", count,
 			"streaming", streaming,
 		)
-
-		cmd := exec.CommandContext(attemptCtx, bin, args...)
-		cmd.Dir = sess.Dir
-
-		var stderr bytes.Buffer
-		cmd.Stderr = &limitedWriter{w: &stderr, n: maxOutputBytes}
 
 		var partial string
 		var err error
 
 		if streaming {
-			var pipe io.ReadCloser
-			pipe, err = cmd.StdoutPipe()
-			if err != nil {
-				idle.Stop()
-				cancel()
-				return "", fmt.Errorf("stdout pipe: %w", err)
-			}
-			if err = cmd.Start(); err != nil {
-				idle.Stop()
-				cancel()
-				return "", fmt.Errorf("start agent: %w", err)
-			}
-			heartbeat := func() { idle.Reset(timeout) }
-			partial = m.readStreamEvents(pipe, onProgress, heartbeat, DefaultTemplates)
-			err = cmd.Wait()
+			partial, err = m.streamClaude(attemptCtx, sess, req, onProgress, idle, timeout)
 		} else {
-			var stdout bytes.Buffer
-			cmd.Stdout = &limitedWriter{w: &stdout, n: maxOutputBytes}
-			err = cmd.Run()
-			partial = strings.TrimSpace(StripANSI(stdout.String()))
+			var resp *allm.Response
+			resp, err = sess.cli.Complete(attemptCtx, req)
+			if err == nil {
+				partial = strings.TrimSpace(resp.Content)
+			}
 		}
-		// Save timeout state BEFORE cancel — cancel() always sets Err() non-nil
+
 		timedOut := attemptCtx.Err() != nil
 		cancel()
 		if idle != nil {
 			idle.Stop()
 		}
 
-		// Always increment so next attempt/call uses --continue
 		sess.mu.Lock()
 		sess.MsgCount++
 		sess.mu.Unlock()
@@ -402,26 +403,19 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 			return strings.Join(allOutput, "\n"), nil
 		}
 
-		// Parent context canceled (e.g. shutdown) — don't retry
 		if ctx.Err() != nil {
 			combined := strings.Join(allOutput, "\n")
 			return combined, fmt.Errorf("agent %s: %s", sess.Agent, ctx.Err())
 		}
 
-		// Non-timeout error — don't retry
 		if !timedOut {
-			errMsg := strings.TrimSpace(stderr.String())
-			if errMsg == "" {
-				errMsg = err.Error()
-			}
 			combined := strings.Join(allOutput, "\n")
 			if combined != "" {
-				return combined, fmt.Errorf("agent %s: %s", sess.Agent, errMsg)
+				return combined, fmt.Errorf("agent %s: %s", sess.Agent, err)
 			}
-			return "", fmt.Errorf("agent %s: %s", sess.Agent, errMsg)
+			return "", fmt.Errorf("agent %s: %s", sess.Agent, err)
 		}
 
-		// Internal timeout — auto-retry with continue
 		if attempt < maxRetries {
 			m.logger.Info("agent timed out, auto-retrying",
 				"agent", sess.Agent, "attempt", attempt+1, "max_retries", maxRetries,
@@ -432,14 +426,112 @@ func (m *Manager) Execute(ctx context.Context, sess *Session, message string, me
 		}
 	}
 
-	// All retries exhausted — return as output (not error) so user sees
-	// a clean message without "Agent error:" prefix
 	combined := strings.Join(allOutput, "\n")
 	timeoutNotice := fmt.Sprintf("\n\n⏱ Agent timed out after %d attempts (%v each). Send a message to continue, or :quit to end session.", maxRetries+1, timeout)
 	if combined != "" {
 		return combined + timeoutNotice, nil
 	}
 	return strings.TrimPrefix(timeoutNotice, "\n\n"), nil
+}
+
+// buildRequest constructs an allm.Request for the Claude CLI provider.
+// count is the current message count: 0 = planning phase, >0 = implementation phase.
+func (m *Manager) buildRequest(sess *Session, message string, media []string, count int) *allm.Request {
+	// Prepend file references so the agent can read them
+	if len(media) > 0 {
+		var parts []string
+		parts = append(parts, "User sent files (use Read tool to view them):")
+		for _, path := range media {
+			parts = append(parts, "  "+path)
+		}
+		if message != "" {
+			parts = append(parts, "", message)
+		}
+		message = strings.Join(parts, "\n")
+	}
+
+	req := &allm.Request{
+		Messages: []allm.Message{
+			{Role: allm.RoleUser, Content: message},
+		},
+	}
+
+	// Phase-aware model selection:
+	// planning phase (count == 0) → PlanModel
+	// implementation phase (count > 0) → ImplModel
+	if m.config.PlanDelegate && count == 0 && m.config.PlanModel != "" {
+		req.Model = m.config.PlanModel
+	} else if m.config.ImplModel != "" {
+		req.Model = m.config.ImplModel
+	}
+
+	// Effort from /effort command
+	if m.config.GetCLISettings != nil {
+		if effort := m.config.GetCLISettings(); effort != "" {
+			req.Effort = effort
+		}
+	}
+
+	return req
+}
+
+// streamClaude reads streaming output from Claude CLI via allm-go.
+func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Request, onProgress func(string), idle *time.Timer, timeout time.Duration) (string, error) {
+	ch := sess.cli.Stream(ctx, req)
+
+	var textContent strings.Builder
+	var lastNotify time.Time
+	var lastMsg string
+	const notifyInterval = 30 * time.Second
+
+	for chunk := range ch {
+		if chunk.Error != nil {
+			return textContent.String(), chunk.Error
+		}
+		if chunk.Done {
+			break
+		}
+
+		// Reset idle timer on every chunk
+		if idle != nil {
+			idle.Reset(timeout)
+		}
+
+		if chunk.ToolUse != nil && onProgress != nil {
+			if time.Since(lastNotify) >= notifyInterval {
+				msg := formatToolUse(chunk.ToolUse.Name, chunk.ToolUse.Input, DefaultTemplates)
+				if msg != lastMsg {
+					onProgress(msg)
+					lastNotify = time.Now()
+					lastMsg = msg
+				}
+			}
+		}
+
+		if chunk.Content != "" {
+			textContent.WriteString(chunk.Content)
+		}
+	}
+
+	return strings.TrimSpace(textContent.String()), nil
+}
+
+// executeCodex runs a message through Codex via direct exec.
+func (m *Manager) executeCodex(ctx context.Context, sess *Session, message string, timeout time.Duration) (string, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	args := []string{"exec", "--", message}
+	bin := agentInfo[sess.Agent]
+
+	cmd := exec.CommandContext(attemptCtx, bin, args...)
+	cmd.Dir = sess.Dir
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("agent %s: %w", sess.Agent, err)
+	}
+	return strings.TrimSpace(StripANSI(string(out))), nil
 }
 
 // GetMsgCount returns the session message count (thread-safe).
@@ -561,90 +653,9 @@ PHASE 3 — IMPLEMENT (only after user confirms):
 When to use subagents: independent work that can run in parallel (e.g. editing unrelated files, exploring separate packages, running different checks).
 When NOT to use subagents: sequential/dependent changes, small scope (1-2 files), or when order matters.`
 
-// buildArgs constructs CLI arguments for the given agent and message.
-func buildArgs(sess *Session, message string, media []string, getCLI CLISettings, planDelegate bool) []string {
-	// Prepend file references so the agent can read them
-	if len(media) > 0 {
-		var parts []string
-		parts = append(parts, "User sent files (use Read tool to view them):")
-		for _, path := range media {
-			parts = append(parts, "  "+path)
-		}
-		if message != "" {
-			parts = append(parts, "", message)
-		}
-		message = strings.Join(parts, "\n")
-	}
-
-	count := sess.GetMsgCount()
-	switch sess.Agent {
-	case AgentClaude:
-		args := []string{"-p", message, "--output-format", "text", "--dangerously-skip-permissions"}
-		if count > 0 {
-			args = append(args, "--continue")
-		}
-		if planDelegate && count == 0 {
-			args = append(args, "--append-system-prompt", planDelegatePrompt)
-		}
-		// Apply current model/effort from /model and /effort commands
-		if getCLI != nil {
-			model, effort := getCLI()
-			if model != "" {
-				args = append(args, "--model", model)
-			}
-			if effort != "" {
-				args = append(args, "--effort", effort)
-			}
-		}
-		return args
-	case AgentCodex:
-		return []string{"exec", "--", message}
-	default:
-		return []string{"--", message}
-	}
-}
-
 // StripANSI removes ANSI escape sequences from a string.
 func StripANSI(s string) string {
 	return ansiRegex.ReplaceAllString(s, "")
-}
-
-// limitedWriter wraps a writer and stops after n bytes, preventing OOM.
-type limitedWriter struct {
-	w io.Writer
-	n int64
-}
-
-func (lw *limitedWriter) Write(p []byte) (int, error) {
-	if lw.n <= 0 {
-		return len(p), nil // discard excess silently
-	}
-	if int64(len(p)) > lw.n {
-		p = p[:lw.n]
-	}
-	n, err := lw.w.Write(p)
-	lw.n -= int64(n)
-	return n, err
-}
-
-// --- Claude stream-json event parsing ---
-
-// streamEvent represents a parsed event from Claude's stream-json output.
-type streamEvent struct {
-	Type    string         `json:"type"`
-	Message *streamMessage `json:"message,omitempty"`
-	Result  string         `json:"result,omitempty"`
-}
-
-type streamMessage struct {
-	Content []contentBlock `json:"content"`
-}
-
-type contentBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
 }
 
 // DefaultTemplates provides English fallback progress messages.
@@ -659,61 +670,6 @@ var DefaultTemplates = map[string]string{
 	"run_described": "Hold on, I need to {description}",
 	"generic":       "Hold on, I'm analyzing something",
 	"still_working": "Still working on it, been {elapsed} so far",
-}
-
-// readStreamEvents reads Claude's stream-json output, sends progress notifications
-// for tool-use events, and returns the final result text.
-// When heartbeat is non-nil it is called on every parsed event so the caller
-// can reset an idle timer.
-func (m *Manager) readStreamEvents(r io.Reader, onProgress func(string), heartbeat func(), templates map[string]string) string {
-	scanner := bufio.NewScanner(r)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, maxOutputBytes)
-
-	var result string
-	var textContent strings.Builder
-	var lastNotify time.Time
-	var lastMsg string
-	const notifyInterval = 30 * time.Second
-
-	for scanner.Scan() {
-		var evt streamEvent
-		if err := json.Unmarshal(scanner.Bytes(), &evt); err != nil {
-			continue
-		}
-		if heartbeat != nil {
-			heartbeat()
-		}
-
-		switch evt.Type {
-		case "assistant":
-			if evt.Message == nil {
-				continue
-			}
-			for _, block := range evt.Message.Content {
-				switch block.Type {
-				case "tool_use":
-					if time.Since(lastNotify) >= notifyInterval {
-						msg := formatToolUse(block.Name, block.Input, templates)
-						if msg != lastMsg {
-							onProgress(msg)
-							lastNotify = time.Now()
-							lastMsg = msg
-						}
-					}
-				case "text":
-					textContent.WriteString(block.Text)
-				}
-			}
-		case "result":
-			result = evt.Result
-		}
-	}
-
-	if result != "" {
-		return strings.TrimSpace(result)
-	}
-	return strings.TrimSpace(textContent.String())
 }
 
 // tpl returns a template value, falling back to DefaultTemplates.

@@ -218,6 +218,8 @@ type LLMProviderConfig struct {
 	MaxRetries    int      `yaml:"max_retries"`
 	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
+	PlanModel     string   `yaml:"plan_model,omitempty"`     // Model for agent planning phase
+	ImplModel     string   `yaml:"impl_model,omitempty"`     // Model for agent implementation phase
 }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)

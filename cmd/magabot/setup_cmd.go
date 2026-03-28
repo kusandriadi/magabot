@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
+	"github.com/kusandriadi/allm-go/provider"
 	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
@@ -543,10 +544,11 @@ func setupLLM() {
 
 	fmt.Println("Which LLM provider do you want as default?")
 	fmt.Println("  1. anthropic  - Claude (recommended)")
-	fmt.Println("  2. openai     - GPT-4")
+	fmt.Println("  2. openai     - GPT-5")
 	fmt.Println("  3. glm        - Zhipu GLM")
 	fmt.Println("  4. kimi       - Moonshot Kimi")
 	fmt.Println("  5. minimax    - MiniMax")
+	fmt.Println("  6. local      - Self-hosted (Ollama/vLLM)")
 	fmt.Println()
 
 	defaultLLM := askString(reader, "Default provider", "anthropic")
@@ -558,12 +560,13 @@ func setupLLM() {
 		"3": "glm", "glm": "glm",
 		"4": "kimi", "kimi": "kimi",
 		"5": "minimax", "minimax": "minimax",
+		"6": "local", "local": "local",
 	}
-	provider := providerMap[strings.ToLower(defaultLLM)]
-	if provider == "" {
-		provider = "anthropic"
+	llmProvider := providerMap[strings.ToLower(defaultLLM)]
+	if llmProvider == "" {
+		llmProvider = "anthropic"
 	}
-	cfg.LLM.Main = provider
+	cfg.LLM.Main = llmProvider
 
 	// Reset all provider configs so old settings don't leak through
 	cfg.LLM.Anthropic = config.LLMProviderConfig{}
@@ -574,7 +577,7 @@ func setupLLM() {
 	cfg.LLM.MiniMax = config.LLMProviderConfig{}
 
 	fmt.Println()
-	switch provider {
+	switch llmProvider {
 	case "anthropic":
 		fmt.Println("  Authentication method:")
 		fmt.Println("    1. API Key (sk-ant-api03-...)")
@@ -612,17 +615,17 @@ func setupLLM() {
 		}
 		fmt.Println()
 		fmt.Println("  Available models:")
-		fmt.Println("    1. glm-5")
-		fmt.Println("    2. glm-5-turbo")
-		fmt.Println("    3. glm-4.7")
+		fmt.Printf("    1. %s\n", provider.GLM5)
+		fmt.Printf("    2. %s\n", provider.GLM5Turbo)
+		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
 		fmt.Println()
 		modelChoice := askString(reader, "Choose model [1/2/3]", "1")
 		modelMap := map[string]string{
-			"1": "glm-5", "2": "glm-5-turbo", "3": "glm-4.7",
+			"1": provider.GLM5, "2": provider.GLM5Turbo, "3": provider.GLM4Dot7,
 		}
 		model := modelMap[modelChoice]
 		if model == "" {
-			model = "glm-5"
+			model = provider.GLM5
 		}
 		saveSecret("llm/glm_api_key", key)
 		cfg.LLM.GLM.Enabled = true
@@ -640,6 +643,12 @@ func setupLLM() {
 			saveSecret("llm/minimax_api_key", key)
 			cfg.LLM.MiniMax.Enabled = true
 		}
+	case "local":
+		baseURL := askString(reader, "Base URL", "http://localhost:11434/v1")
+		model := askString(reader, "Model name", "llama3")
+		cfg.LLM.Local.Enabled = true
+		cfg.LLM.Local.BaseURL = baseURL
+		cfg.LLM.Local.Model = model
 	}
 
 	if err := cfg.Save(); err != nil {

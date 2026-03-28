@@ -227,22 +227,23 @@ func runDaemon() {
 
 	// Initialize agent session manager
 	agentMgr := agent.NewManager(agent.Config{
-		Timeout:        cfg.Agent.Timeout,
-		MaxRetries:     cfg.Agent.MaxRetries,
-		SessionTimeout: cfg.Agent.SessionTimeout,
-		Shortcuts:      cfg.Agent.Shortcuts,
-		DiscoverDepth:  cfg.Agent.DiscoverDepth,
-		PlanDelegate:   cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
+		Timeout:             cfg.Agent.Timeout,
+		MaxRetries:          cfg.Agent.MaxRetries,
+		SessionTimeout:      cfg.Agent.SessionTimeout,
+		Shortcuts:           cfg.Agent.Shortcuts,
+		DiscoverDepth:       cfg.Agent.DiscoverDepth,
+		PlanDelegate:        cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
+		CLIPath:             cfg.LLM.Anthropic.CLIPath,
+		PlanModel:           cfg.LLM.Anthropic.PlanModel,
+		ImplModel: cfg.LLM.Anthropic.ImplModel,
 		OnSessionClose: func(platform, chatID, message string) {
 			_ = rtr.Send(platform, chatID, message)
 		},
-		GetCLISettings: func() (string, string) {
-			model := llmRouter.GetModel()
-			var effort string
+		GetCLISettings: func() string {
 			if cli := llmRouter.CLIProvider(); cli != nil {
-				effort = cli.Effort()
+				return cli.Effort()
 			}
-			return model, effort
+			return ""
 		},
 	}, logger.With("component", "agent"))
 

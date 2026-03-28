@@ -12,6 +12,7 @@ import (
 	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
+	"github.com/kusandriadi/allm-go/provider"
 )
 
 // WizardState holds the wizard configuration state
@@ -61,6 +62,13 @@ type WizardState struct {
 	KimiKey          string
 	MiniMaxEnabled   bool
 	MiniMaxKey       string
+	LocalEnabled     bool
+	LocalBaseURL     string
+	LocalModel       string
+
+	PlanModel  string
+	ImplModel  string
+	Effort     string
 }
 
 // testLLMConnection tests the LLM connection with the configured provider
@@ -86,6 +94,9 @@ func testLLMConnection(state *WizardState) {
 		apiKey = state.KimiKey
 	case "minimax":
 		apiKey = state.MiniMaxKey
+	case "local":
+		fmt.Println("⏭️  Skipping connection test for local provider")
+		return
 	}
 
 	if apiKey == "" {
@@ -395,10 +406,11 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 	fmt.Println("Which LLM provider do you want as your main/default?")
 	fmt.Println()
 	fmt.Println("  1. anthropic  - Claude (recommended)")
-	fmt.Println("  2. openai     - GPT-4")
+	fmt.Println("  2. openai     - GPT-5")
 	fmt.Println("  3. glm        - Zhipu GLM")
 	fmt.Println("  4. kimi       - Moonshot Kimi")
 	fmt.Println("  5. minimax    - MiniMax")
+	fmt.Println("  6. local      - Self-hosted (Ollama/vLLM)")
 	fmt.Println()
 
 	mainChoice := askString(reader, "Main provider", "1")
@@ -410,6 +422,7 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		"3": "glm", "glm": "glm",
 		"4": "kimi", "kimi": "kimi",
 		"5": "minimax", "minimax": "minimax",
+		"6": "local", "local": "local",
 	}
 	state.LLMDefault = providerMap[strings.ToLower(mainChoice)]
 	if state.LLMDefault == "" {
@@ -440,6 +453,58 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 			state.AnthropicKey = askPassword(reader, "API key (sk-ant-...)")
 		}
 
+		fmt.Println()
+		fmt.Println("  Model selection:")
+		fmt.Println("    Plan model (used for planning phase):")
+		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicOpus)
+		fmt.Printf("    2. %s\n", provider.AnthropicSonnet)
+		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			state.PlanModel = provider.AnthropicSonnet
+		case "3":
+			state.PlanModel = provider.AnthropicHaiku
+		default:
+			state.PlanModel = provider.AnthropicOpus
+		}
+
+		fmt.Println()
+		fmt.Println("    Implementation model (used for coding):")
+		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicSonnet)
+		fmt.Printf("    2. %s\n", provider.AnthropicOpus)
+		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			state.ImplModel = provider.AnthropicOpus
+		case "3":
+			state.ImplModel = provider.AnthropicHaiku
+		default:
+			state.ImplModel = provider.AnthropicSonnet
+		}
+
+		fmt.Println()
+		fmt.Println("  Effort level:")
+		fmt.Println("    1. high (recommended)")
+		fmt.Println("    2. medium")
+		fmt.Println("    3. low")
+		fmt.Println("    4. max")
+		fmt.Println()
+		effortChoice := askString(reader, "Effort", "1")
+		switch effortChoice {
+		case "2":
+			state.Effort = "medium"
+		case "3":
+			state.Effort = "low"
+		case "4":
+			state.Effort = "max"
+		default:
+			state.Effort = "high"
+		}
+
 	case "openai":
 		state.OpenAIEnabled = true
 		fmt.Println("🟢 OpenAI Configuration")
@@ -447,6 +512,38 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://platform.openai.com/api-keys")
 		fmt.Println()
 		state.OpenAIKey = askPassword(reader, "API key (sk-...)")
+
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
+		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
+		fmt.Printf("    3. %s\n", provider.OpenAIO3)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			state.PlanModel = provider.OpenAIGPT5Mini
+		case "3":
+			state.PlanModel = provider.OpenAIO3
+		default:
+			state.PlanModel = provider.OpenAIGPT5
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
+		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
+		fmt.Printf("    3. %s\n", provider.OpenAIGPT4_1)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			state.ImplModel = provider.OpenAIGPT5Mini
+		case "3":
+			state.ImplModel = provider.OpenAIGPT4_1
+		default:
+			state.ImplModel = provider.OpenAIGPT5
+		}
 
 	case "glm":
 		state.GLMEnabled = true
@@ -456,6 +553,38 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println()
 		state.GLMKey = askPassword(reader, "API key")
 
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
+		fmt.Printf("    2. %s\n", provider.GLM5)
+		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			state.PlanModel = provider.GLM5
+		case "3":
+			state.PlanModel = provider.GLM4Dot7
+		default:
+			state.PlanModel = provider.GLM5Dot1
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Turbo)
+		fmt.Printf("    2. %s\n", provider.GLM5)
+		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			state.ImplModel = provider.GLM5
+		case "3":
+			state.ImplModel = provider.GLM4Dot7
+		default:
+			state.ImplModel = provider.GLM5Turbo
+		}
+
 	case "kimi":
 		state.KimiEnabled = true
 		fmt.Println("🌙 Moonshot Kimi Configuration")
@@ -464,6 +593,32 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println()
 		state.KimiKey = askPassword(reader, "API key")
 
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
+		fmt.Printf("    2. %s\n", provider.KimiK2Thinking)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			state.PlanModel = provider.KimiK2Thinking
+		default:
+			state.PlanModel = provider.KimiK2_5
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
+		fmt.Printf("    2. %s\n", provider.KimiK2TurboPreview)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			state.ImplModel = provider.KimiK2TurboPreview
+		default:
+			state.ImplModel = provider.KimiK2_5
+		}
+
 	case "minimax":
 		state.MiniMaxEnabled = true
 		fmt.Println("⚡ MiniMax Configuration")
@@ -471,6 +626,41 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://platform.minimaxi.com/")
 		fmt.Println()
 		state.MiniMaxKey = askPassword(reader, "API key")
+
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
+		fmt.Printf("    2. %s\n", provider.MiniMaxM2_5)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			state.PlanModel = provider.MiniMaxM2_5
+		default:
+			state.PlanModel = provider.MiniMaxM2_7
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
+		fmt.Printf("    2. %s\n", provider.MiniMaxM2_7HighSpeed)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			state.ImplModel = provider.MiniMaxM2_7HighSpeed
+		default:
+			state.ImplModel = provider.MiniMaxM2_7
+		}
+
+	case "local":
+		state.LocalEnabled = true
+		fmt.Println("🖥️  Local LLM Configuration")
+		fmt.Println("───────────────────────────")
+		fmt.Println("  Supports Ollama, vLLM, llama.cpp, etc.")
+		fmt.Println()
+		state.LocalBaseURL = askString(reader, "Base URL", "http://localhost:11434/v1")
+		state.LocalModel = askString(reader, "Model name", "llama3")
 	}
 
 }
@@ -695,7 +885,12 @@ func generateWizardConfig(state *WizardState) string {
 		if state.AnthropicKey != "" {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.AnthropicKey)
 		}
-		b.WriteString("    model: \"claude-sonnet-4-6\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.AnthropicSonnet)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
+		if state.Effort != "" {
+			fmt.Fprintf(&b, "    effort: \"%s\"\n", state.Effort)
+		}
 		b.WriteString("    max_tokens: 4096\n")
 		b.WriteString("    temperature: 0.7\n\n")
 	}
@@ -704,7 +899,9 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("  openai:\n")
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.OpenAIKey)
-		b.WriteString("    model: \"gpt-4o\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.OpenAIGPT5)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 4096\n")
 		b.WriteString("    temperature: 0.7\n\n")
 	}
@@ -713,7 +910,9 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("  glm:\n")
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.GLMKey)
-		b.WriteString("    model: \"glm-4\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 4096\n")
 		b.WriteString("    temperature: 0.7\n\n")
 	}
@@ -722,7 +921,9 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("  kimi:\n")
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.KimiKey)
-		b.WriteString("    model: \"moonshot-v1-8k\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.KimiK2_5)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 4096\n")
 		b.WriteString("    temperature: 0.7\n\n")
 	}
@@ -731,7 +932,18 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("  minimax:\n")
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.MiniMaxKey)
-		b.WriteString("    model: \"abab6.5-chat\"\n")
+		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.MiniMaxM2_7)
+		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
+		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
+		b.WriteString("    max_tokens: 4096\n")
+		b.WriteString("    temperature: 0.7\n\n")
+	}
+
+	if state.LocalEnabled {
+		b.WriteString("  local:\n")
+		b.WriteString("    enabled: true\n")
+		fmt.Fprintf(&b, "    base_url: \"%s\"\n", state.LocalBaseURL)
+		fmt.Fprintf(&b, "    model: \"%s\"\n", state.LocalModel)
 		b.WriteString("    max_tokens: 4096\n")
 		b.WriteString("    temperature: 0.7\n\n")
 	}
