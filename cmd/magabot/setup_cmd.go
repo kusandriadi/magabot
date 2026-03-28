@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/kusa/magabot/internal/config"
-	"github.com/kusandriadi/allm-go/provider"
 	"github.com/kusa/magabot/internal/llm"
 	"github.com/kusa/magabot/internal/secrets"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/util"
+	"github.com/kusandriadi/allm-go/provider"
 	"github.com/mdp/qrterminal/v3"
 )
 
