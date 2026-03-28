@@ -227,7 +227,8 @@ func buildInitConfig(cfg *envConfig) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.AnthropicSonnet)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", provider.AnthropicOpus)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", provider.AnthropicSonnet)
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if cfg.OpenAIKey != "" {
@@ -237,7 +238,8 @@ func buildInitConfig(cfg *envConfig) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.OpenAIGPT5)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", provider.OpenAIGPT5)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", provider.OpenAIGPT5)
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if cfg.GLMKey != "" {
@@ -247,7 +249,8 @@ func buildInitConfig(cfg *envConfig) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", provider.GLM5Dot1)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", provider.GLM5Turbo)
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if cfg.LocalEnabled {
@@ -263,7 +266,8 @@ func buildInitConfig(cfg *envConfig) string {
 			model = "llama3"
 		}
 		fmt.Fprintf(&b, "    model: \"%s\"\n", model)
-		b.WriteString("    max_tokens: 4096\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	// Platforms

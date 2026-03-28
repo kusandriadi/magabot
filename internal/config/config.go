@@ -550,6 +550,16 @@ func (c *Config) setDefaults() {
 	if c.Agent.SessionTimeout == 0 {
 		c.Agent.SessionTimeout = 21600 // 6 hours
 	}
+	// Temperature defaults (0.5 for all providers)
+	for _, p := range []*LLMProviderConfig{
+		&c.LLM.Anthropic, &c.LLM.OpenAI, &c.LLM.GLM,
+		&c.LLM.Local, &c.LLM.Kimi, &c.LLM.MiniMax,
+	} {
+		if p.Enabled && p.Temperature == 0 {
+			p.Temperature = 0.5
+		}
+	}
+
 	if c.Agent.PlanDelegate == nil {
 		t := true
 		c.Agent.PlanDelegate = &t

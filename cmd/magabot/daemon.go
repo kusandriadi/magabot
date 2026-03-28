@@ -680,25 +680,38 @@ Send any message and I'll reply using AI.
 
 		sb.WriteString("\n🤖 LLM:\n")
 		sb.WriteString(fmt.Sprintf("  • Provider: %s\n", llmStats["main"]))
-		sb.WriteString(fmt.Sprintf("  • Model: %s\n", llmRouter.GetModel()))
+		// Show plan/impl model for the active provider
+		var activeCfg *config.LLMProviderConfig
+		switch cfg.LLM.Main {
+		case "anthropic":
+			activeCfg = &cfg.LLM.Anthropic
+		case "openai":
+			activeCfg = &cfg.LLM.OpenAI
+		case "glm":
+			activeCfg = &cfg.LLM.GLM
+		case "kimi":
+			activeCfg = &cfg.LLM.Kimi
+		case "minimax":
+			activeCfg = &cfg.LLM.MiniMax
+		}
+		if activeCfg != nil {
+			if activeCfg.PlanModel != "" {
+				sb.WriteString(fmt.Sprintf("  • Plan Model: %s\n", activeCfg.PlanModel))
+			}
+			if activeCfg.ImplModel != "" {
+				sb.WriteString(fmt.Sprintf("  • Impl Model: %s\n", activeCfg.ImplModel))
+			}
+			if activeCfg.Effort != "" {
+				sb.WriteString(fmt.Sprintf("  • Effort: %s\n", activeCfg.Effort))
+			}
+		}
 
 		if cli := llmRouter.CLIProvider(); cli != nil {
-			effort := cli.Effort()
-			if effort == "" {
-				effort = "default"
-			}
-			sb.WriteString(fmt.Sprintf("  • Effort: %s\n", effort))
 			if fb := cli.FallbackModel(); fb != "" {
 				sb.WriteString(fmt.Sprintf("  • Fallback: %s\n", fb))
 			}
 			if budget := cli.MaxBudget(); budget > 0 {
 				sb.WriteString(fmt.Sprintf("  • Budget: $%.2f/req\n", budget))
-			}
-			if prompt := cli.AppendPrompt(); prompt != "" {
-				if len(prompt) > 50 {
-					prompt = prompt[:50] + "..."
-				}
-				sb.WriteString(fmt.Sprintf("  • Custom prompt: %s\n", prompt))
 			}
 		}
 
@@ -1242,11 +1255,11 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 	opts := []provider.CompatOption{
 		provider.WithDefaultModel(cfg.model),
 	}
-	if cfg.maxTokens > 0 {
-		opts = append(opts, provider.WithMaxTokens(cfg.maxTokens))
-	}
 	if cfg.temperature > 0 {
 		opts = append(opts, provider.WithTemperature(cfg.temperature))
+	}
+	if cfg.maxTokens > 0 {
+		opts = append(opts, provider.WithMaxTokens(cfg.maxTokens))
 	}
 	if cfg.baseURL != "" && !cfg.isLocal {
 		opts = append(opts, provider.WithBaseURL(cfg.baseURL))
@@ -1332,12 +1345,14 @@ func registerAnthropicCompatProvider(llmRouter *llm.Router, name string, ac conf
 		}
 	}
 
-	opts := []provider.AnthropicOption{
-		provider.WithAnthropicModel(ac.Model),
-		provider.WithAnthropicMaxTokens(ac.MaxTokens),
+	model := ac.Model
+	if model == "" {
+		model = ac.ImplModel
 	}
-	if ac.Temperature > 0 {
-		opts = append(opts, provider.WithAnthropicTemperature(ac.Temperature))
+	opts := []provider.AnthropicOption{
+		provider.WithAnthropicModel(model),
+		provider.WithAnthropicMaxTokens(ac.MaxTokens),
+		provider.WithAnthropicTemperature(ac.Temperature),
 	}
 	if ac.BaseURL != "" {
 		opts = append(opts, provider.WithAnthropicBaseURL(ac.BaseURL))
@@ -1365,12 +1380,14 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 		}
 	}
 
-	opts := []provider.OpenAIOption{
-		provider.WithOpenAIModel(cfg.LLM.OpenAI.Model),
-		provider.WithOpenAIMaxTokens(cfg.LLM.OpenAI.MaxTokens),
+	openaiModel := cfg.LLM.OpenAI.Model
+	if openaiModel == "" {
+		openaiModel = cfg.LLM.OpenAI.ImplModel
 	}
-	if cfg.LLM.OpenAI.Temperature > 0 {
-		opts = append(opts, provider.WithOpenAITemperature(cfg.LLM.OpenAI.Temperature))
+	opts := []provider.OpenAIOption{
+		provider.WithOpenAIModel(openaiModel),
+		provider.WithOpenAIMaxTokens(cfg.LLM.OpenAI.MaxTokens),
+		provider.WithOpenAITemperature(cfg.LLM.OpenAI.Temperature),
 	}
 	if cfg.LLM.OpenAI.BaseURL != "" {
 		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))

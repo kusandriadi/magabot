@@ -891,8 +891,8 @@ func generateWizardConfig(state *WizardState) string {
 		if state.Effort != "" {
 			fmt.Fprintf(&b, "    effort: \"%s\"\n", state.Effort)
 		}
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if state.OpenAIEnabled {
@@ -902,8 +902,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.OpenAIGPT5)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if state.GLMEnabled {
@@ -913,8 +913,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if state.KimiEnabled {
@@ -924,8 +924,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.KimiK2_5)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if state.MiniMaxEnabled {
@@ -935,8 +935,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.MiniMaxM2_7)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	if state.LocalEnabled {
@@ -944,8 +944,8 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    base_url: \"%s\"\n", state.LocalBaseURL)
 		fmt.Fprintf(&b, "    model: \"%s\"\n", state.LocalModel)
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
+		b.WriteString("    max_tokens: 200000\n")
+		b.WriteString("    max_retries: 3\n\n")
 	}
 
 	// Tools
