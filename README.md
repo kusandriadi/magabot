@@ -1,7 +1,7 @@
 # Magabot
 
 [![CI](https://github.com/kusandriadi/magabot/actions/workflows/ci.yml/badge.svg)](https://github.com/kusandriadi/magabot/actions/workflows/ci.yml)
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **Magabot** is a privacy-first, self-hosted AI chatbot that connects multiple LLM providers to messaging platforms. Single static binary, zero runtime dependencies, encrypted at rest with AES-256-GCM.
@@ -10,12 +10,12 @@
 
 ## Key Features
 
-- **Multi-LLM** — Anthropic, OpenAI, Gemini, DeepSeek, GLM, Kimi, Qwen, MiniMax, Local (Ollama/vLLM)
+- **Multi-LLM** — Anthropic, OpenAI, GLM, Kimi, MiniMax, Local (Ollama/vLLM)
 - **Multi-Platform** — Telegram, Slack, WhatsApp, Webhooks
 - **Multi-Modal** — Vision (image analysis), voice messages, document processing, image generation
 - **Privacy-First** — All data encrypted at rest, runs on your hardware
 - **Zero Dependencies** — Single binary, no Docker/Python/Node.js required
-- **Agent Sessions** — Spawn coding agents (Claude, Codex, Gemini) directly from chat
+- **Agent Sessions** — Spawn coding agents (Claude, Codex) directly from chat
 - **Semantic Memory** — Vector-based memory with OpenAI/Voyage/Cohere embeddings
 - **Cron Jobs** — Schedule messages with cron, interval, or one-shot timing
 - **Skills System** — Extend with custom YAML-defined skills
@@ -30,11 +30,8 @@
 |----------|---------------|---------------------|
 | Anthropic | claude-sonnet-4-6 | `ANTHROPIC_API_KEY` |
 | OpenAI | gpt-4o | `OPENAI_API_KEY` |
-| Gemini | gemini-2.0-flash | `GEMINI_API_KEY` |
-| DeepSeek | deepseek-chat | `DEEPSEEK_API_KEY` |
 | GLM | glm-4.7 | `GLM_API_KEY` or `ZAI_API_KEY` |
 | Kimi | moonshot-v1 | `KIMI_API_KEY` |
-| Qwen | qwen-plus | `QWEN_API_KEY` |
 | MiniMax | minimax-pro | `MINIMAX_API_KEY` |
 | Local | llama3 | `LOCAL_LLM_BASE_URL` |
 
@@ -167,7 +164,7 @@ Send these in any connected platform:
 
 | Command | Description |
 |---------|-------------|
-| `:new [agent] <dir>` | Start a coding agent (claude/codex/gemini) |
+| `:new [agent] <dir>` | Start a coding agent (claude/codex) |
 | `:status` | Show agent session info |
 | `:quit` | Close agent session |
 
@@ -175,7 +172,7 @@ Send these in any connected platform:
 
 ## Building from Source
 
-Requires Go 1.24+ and a C compiler (for SQLite).
+Requires Go 1.26+ and a C compiler (for SQLite).
 
 ```bash
 git clone https://github.com/kusandriadi/magabot.git
