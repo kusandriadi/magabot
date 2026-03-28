@@ -145,9 +145,6 @@ func TestValidAgent(t *testing.T) {
 	if !ValidAgent("codex") {
 		t.Error("codex should be valid")
 	}
-	if !ValidAgent("gemini") {
-		t.Error("gemini should be valid")
-	}
 	if ValidAgent("unknown") {
 		t.Error("unknown should not be valid")
 	}
@@ -188,7 +185,6 @@ func TestBuildArgs(t *testing.T) {
 		{AgentClaude, 0, "hello", 5}, // -p hello --output-format text --dangerously-skip-permissions
 		{AgentClaude, 1, "hello", 6}, // + --continue
 		{AgentCodex, 0, "hello", 3},  // exec -- hello
-		{AgentGemini, 0, "hello", 3}, // -p -- hello
 	}
 
 	for _, tt := range tests {
@@ -204,19 +200,12 @@ func TestBuildArgs(t *testing.T) {
 }
 
 func TestBuildArgsFlagInjection(t *testing.T) {
-	// Codex and Gemini use -- separator to prevent flag injection
+	// Codex uses -- separator to prevent flag injection
 	sess := &Session{Agent: AgentCodex}
 	args := buildArgs(sess, "--malicious-flag", nil, nil, false)
 	// Should be: exec -- --malicious-flag
 	if len(args) < 2 || args[1] != "--" {
 		t.Errorf("codex args should have -- separator: %v", args)
-	}
-
-	sess = &Session{Agent: AgentGemini}
-	args = buildArgs(sess, "--malicious-flag", nil, nil, false)
-	// Should be: -p -- --malicious-flag
-	if len(args) < 2 || args[1] != "--" {
-		t.Errorf("gemini args should have -- separator: %v", args)
 	}
 }
 

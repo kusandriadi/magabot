@@ -544,12 +544,9 @@ func setupLLM() {
 	fmt.Println("Which LLM provider do you want as default?")
 	fmt.Println("  1. anthropic  - Claude (recommended)")
 	fmt.Println("  2. openai     - GPT-4")
-	fmt.Println("  3. gemini     - Google Gemini")
-	fmt.Println("  4. deepseek   - DeepSeek")
-	fmt.Println("  5. glm        - Zhipu GLM")
-	fmt.Println("  6. kimi       - Moonshot Kimi")
-	fmt.Println("  7. qwen       - Alibaba Qwen")
-	fmt.Println("  8. minimax    - MiniMax")
+	fmt.Println("  3. glm        - Zhipu GLM")
+	fmt.Println("  4. kimi       - Moonshot Kimi")
+	fmt.Println("  5. minimax    - MiniMax")
 	fmt.Println()
 
 	defaultLLM := askString(reader, "Default provider", "anthropic")
@@ -558,18 +555,23 @@ func setupLLM() {
 	providerMap := map[string]string{
 		"1": "anthropic", "anthropic": "anthropic",
 		"2": "openai", "openai": "openai",
-		"3": "gemini", "gemini": "gemini",
-		"4": "deepseek", "deepseek": "deepseek",
-		"5": "glm", "glm": "glm",
-		"6": "kimi", "kimi": "kimi",
-		"7": "qwen", "qwen": "qwen",
-		"8": "minimax", "minimax": "minimax",
+		"3": "glm", "glm": "glm",
+		"4": "kimi", "kimi": "kimi",
+		"5": "minimax", "minimax": "minimax",
 	}
 	provider := providerMap[strings.ToLower(defaultLLM)]
 	if provider == "" {
 		provider = "anthropic"
 	}
 	cfg.LLM.Main = provider
+
+	// Reset all provider configs so old settings don't leak through
+	cfg.LLM.Anthropic = config.LLMProviderConfig{}
+	cfg.LLM.OpenAI = config.LLMProviderConfig{}
+	cfg.LLM.GLM = config.LLMProviderConfig{}
+	cfg.LLM.Local = config.LLMProviderConfig{}
+	cfg.LLM.Kimi = config.LLMProviderConfig{}
+	cfg.LLM.MiniMax = config.LLMProviderConfig{}
 
 	fmt.Println()
 	switch provider {
@@ -597,35 +599,40 @@ func setupLLM() {
 			saveSecret("llm/openai_api_key", key)
 			cfg.LLM.OpenAI.Enabled = true
 		}
-	case "gemini":
-		key := askString(reader, "Google API Key", "")
-		if key != "" {
-			saveSecret("llm/gemini_api_key", key)
-			cfg.LLM.Gemini.Enabled = true
-		}
-	case "deepseek":
-		key := askString(reader, "DeepSeek API Key", "")
-		if key != "" {
-			saveSecret("llm/deepseek_api_key", key)
-			cfg.LLM.DeepSeek.Enabled = true
-		}
 	case "glm":
 		key := askString(reader, "GLM API Key", "")
-		if key != "" {
-			saveSecret("llm/glm_api_key", key)
-			cfg.LLM.GLM.Enabled = true
+		if key == "" {
+			fmt.Println("  ❌ API key is required for GLM")
+			return
 		}
+		baseURL := askString(reader, "Base URL (Anthropic-compatible endpoint)", "")
+		if baseURL == "" {
+			fmt.Println("  ❌ Base URL is required for GLM")
+			return
+		}
+		fmt.Println()
+		fmt.Println("  Available models:")
+		fmt.Println("    1. glm-5")
+		fmt.Println("    2. glm-5-turbo")
+		fmt.Println("    3. glm-4.7")
+		fmt.Println()
+		modelChoice := askString(reader, "Choose model [1/2/3]", "1")
+		modelMap := map[string]string{
+			"1": "glm-5", "2": "glm-5-turbo", "3": "glm-4.7",
+		}
+		model := modelMap[modelChoice]
+		if model == "" {
+			model = "glm-5"
+		}
+		saveSecret("llm/glm_api_key", key)
+		cfg.LLM.GLM.Enabled = true
+		cfg.LLM.GLM.BaseURL = baseURL
+		cfg.LLM.GLM.Model = model
 	case "kimi":
 		key := askString(reader, "Kimi API Key", "")
 		if key != "" {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
-		}
-	case "qwen":
-		key := askString(reader, "Qwen API Key (DashScope)", "")
-		if key != "" {
-			saveSecret("llm/qwen_api_key", key)
-			cfg.LLM.Qwen.Enabled = true
 		}
 	case "minimax":
 		key := askString(reader, "MiniMax API Key", "")
@@ -656,16 +663,10 @@ func setupLLM() {
 			apiKey = cfg.LLM.Anthropic.APIKey
 		case "openai":
 			apiKey = cfg.LLM.OpenAI.APIKey
-		case "gemini":
-			apiKey = cfg.LLM.Gemini.APIKey
-		case "deepseek":
-			apiKey = cfg.LLM.DeepSeek.APIKey
 		case "glm":
 			apiKey = cfg.LLM.GLM.APIKey
 		case "kimi":
 			apiKey = cfg.LLM.Kimi.APIKey
-		case "qwen":
-			apiKey = cfg.LLM.Qwen.APIKey
 		case "minimax":
 			apiKey = cfg.LLM.MiniMax.APIKey
 		}

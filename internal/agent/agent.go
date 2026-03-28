@@ -1,4 +1,4 @@
-// Package agent manages coding agent sessions (Claude Code, Codex, Gemini CLI)
+// Package agent manages coding agent sessions (Claude Code, Codex)
 // that users can control through chat commands.
 package agent
 
@@ -23,7 +23,6 @@ import (
 const (
 	AgentClaude = "claude"
 	AgentCodex  = "codex"
-	AgentGemini = "gemini"
 )
 
 // maxOutputBytes limits CLI stdout/stderr capture to prevent OOM (10 MB).
@@ -53,7 +52,7 @@ type Config struct {
 // Session represents an active agent session tied to a chat.
 type Session struct {
 	mu           sync.Mutex
-	Agent        string // agent type: claude, codex, gemini
+	Agent        string // agent type: claude, codex
 	Dir          string // working directory (resolved absolute path)
 	Platform     string
 	ChatID       string
@@ -76,7 +75,6 @@ type Manager struct {
 var agentInfo = map[string]string{
 	AgentClaude: "claude",
 	AgentCodex:  "codex",
-	AgentGemini: "gemini",
 }
 
 // ansiRegex matches ANSI escape sequences for stripping from CLI output.
@@ -135,7 +133,7 @@ func (m *Manager) NewSession(platform, chatID, userID, agent, dir string) (*Sess
 	}
 	bin, ok := agentInfo[agent]
 	if !ok {
-		return nil, fmt.Errorf("unknown agent %q (supported: claude, codex, gemini)", agent)
+		return nil, fmt.Errorf("unknown agent %q (supported: claude, codex)", agent)
 	}
 
 	// Resolve to absolute path to prevent traversal
@@ -601,8 +599,6 @@ func buildArgs(sess *Session, message string, media []string, getCLI CLISettings
 		return args
 	case AgentCodex:
 		return []string{"exec", "--", message}
-	case AgentGemini:
-		return []string{"-p", "--", message}
 	default:
 		return []string{"--", message}
 	}

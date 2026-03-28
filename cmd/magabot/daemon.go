@@ -167,38 +167,9 @@ func runDaemon() {
 		}
 	}
 
-	if cfg.LLM.Gemini.Enabled {
-		if err := registerCompatProvider(llmRouter, compatProviderConfig{
-			name: "gemini", apiKey: cfg.LLM.Gemini.APIKey,
-			model: cfg.LLM.Gemini.Model, maxTokens: cfg.LLM.Gemini.MaxTokens,
-			temperature: cfg.LLM.Gemini.Temperature, maxRetries: cfg.LLM.Gemini.MaxRetries,
-			constructor: provider.Gemini,
-		}, cfg); err != nil {
-			logger.Error("register gemini provider failed", "error", err)
-		}
-	}
-
 	if cfg.LLM.GLM.Enabled {
-		if err := registerCompatProvider(llmRouter, compatProviderConfig{
-			name: "glm", apiKey: cfg.LLM.GLM.APIKey,
-			model: cfg.LLM.GLM.Model, maxTokens: cfg.LLM.GLM.MaxTokens,
-			temperature: cfg.LLM.GLM.Temperature, baseURL: cfg.LLM.GLM.BaseURL,
-			maxRetries:  cfg.LLM.GLM.MaxRetries,
-			constructor: provider.GLM,
-		}, cfg); err != nil {
+		if err := registerAnthropicCompatProvider(llmRouter, "glm", cfg.LLM.GLM, cfg); err != nil {
 			logger.Error("register glm provider failed", "error", err)
-		}
-	}
-
-	if cfg.LLM.DeepSeek.Enabled {
-		if err := registerCompatProvider(llmRouter, compatProviderConfig{
-			name: "deepseek", apiKey: cfg.LLM.DeepSeek.APIKey,
-			model: cfg.LLM.DeepSeek.Model, maxTokens: cfg.LLM.DeepSeek.MaxTokens,
-			temperature: cfg.LLM.DeepSeek.Temperature, baseURL: cfg.LLM.DeepSeek.BaseURL,
-			maxRetries:  cfg.LLM.DeepSeek.MaxRetries,
-			constructor: provider.DeepSeek,
-		}, cfg); err != nil {
-			logger.Error("register deepseek provider failed", "error", err)
 		}
 	}
 
@@ -213,34 +184,13 @@ func runDaemon() {
 	}
 
 	if cfg.LLM.Kimi.Enabled {
-		if err := registerCompatProvider(llmRouter, compatProviderConfig{
-			name: "kimi", apiKey: cfg.LLM.Kimi.APIKey,
-			model: cfg.LLM.Kimi.Model, maxTokens: cfg.LLM.Kimi.MaxTokens,
-			temperature: cfg.LLM.Kimi.Temperature, maxRetries: cfg.LLM.Kimi.MaxRetries,
-			constructor: provider.Kimi,
-		}, cfg); err != nil {
+		if err := registerAnthropicCompatProvider(llmRouter, "kimi", cfg.LLM.Kimi, cfg); err != nil {
 			logger.Error("register kimi provider failed", "error", err)
 		}
 	}
 
-	if cfg.LLM.Qwen.Enabled {
-		if err := registerCompatProvider(llmRouter, compatProviderConfig{
-			name: "qwen", apiKey: cfg.LLM.Qwen.APIKey,
-			model: cfg.LLM.Qwen.Model, maxTokens: cfg.LLM.Qwen.MaxTokens,
-			temperature: cfg.LLM.Qwen.Temperature, maxRetries: cfg.LLM.Qwen.MaxRetries,
-			constructor: provider.Qwen,
-		}, cfg); err != nil {
-			logger.Error("register qwen provider failed", "error", err)
-		}
-	}
-
 	if cfg.LLM.MiniMax.Enabled {
-		if err := registerCompatProvider(llmRouter, compatProviderConfig{
-			name: "minimax", apiKey: cfg.LLM.MiniMax.APIKey,
-			model: cfg.LLM.MiniMax.Model, maxTokens: cfg.LLM.MiniMax.MaxTokens,
-			temperature: cfg.LLM.MiniMax.Temperature, maxRetries: cfg.LLM.MiniMax.MaxRetries,
-			constructor: provider.MiniMax,
-		}, cfg); err != nil {
+		if err := registerAnthropicCompatProvider(llmRouter, "minimax", cfg.LLM.MiniMax, cfg); err != nil {
 			logger.Error("register minimax provider failed", "error", err)
 		}
 	}
@@ -1222,11 +1172,8 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 		{secrets.KeyAnthropicAPIKey, &cfg.LLM.Anthropic.APIKey, "anthropic_api_key"},
 		{secrets.KeyClaudeCodeAuthToken, &cfg.LLM.Anthropic.AuthToken, "claude_code_auth_token"},
 		{secrets.KeyOpenAIAPIKey, &cfg.LLM.OpenAI.APIKey, "openai_api_key"},
-		{secrets.KeyGeminiAPIKey, &cfg.LLM.Gemini.APIKey, "gemini_api_key"},
 		{secrets.KeyGLMAPIKey, &cfg.LLM.GLM.APIKey, "glm_api_key"},
-		{secrets.KeyDeepSeekAPIKey, &cfg.LLM.DeepSeek.APIKey, "deepseek_api_key"},
 		{secrets.KeyKimiAPIKey, &cfg.LLM.Kimi.APIKey, "kimi_api_key"},
-		{secrets.KeyQwenAPIKey, &cfg.LLM.Qwen.APIKey, "qwen_api_key"},
 		{secrets.KeyMiniMaxAPIKey, &cfg.LLM.MiniMax.APIKey, "minimax_api_key"},
 	}
 
@@ -1264,7 +1211,7 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 
 // Provider registration helpers with URL validation (SSRF protection - A10)
 
-// compatProviderConfig holds config for OpenAI-compatible providers (Gemini, GLM, DeepSeek, Local)
+// compatProviderConfig holds config for OpenAI-compatible providers (GLM, Local)
 type compatProviderConfig struct {
 	name        string
 	apiKey      string
@@ -1334,8 +1281,12 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 }
 
 func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error {
-	ac := cfg.LLM.Anthropic
+	return registerAnthropicCompatProvider(llmRouter, "anthropic", cfg.LLM.Anthropic, cfg)
+}
 
+// registerAnthropicCompatProvider registers any provider that uses the Anthropic-compatible API.
+// Used by Anthropic, GLM, Kimi, and MiniMax.
+func registerAnthropicCompatProvider(llmRouter *llm.Router, name string, ac config.LLMProviderConfig, cfg *config.Config) error {
 	// Create client with retry, context window, and input validation options
 	clientOpts := []allm.Option{}
 	if ac.Model != "" {
@@ -1369,7 +1320,7 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 			allowedTools = defaultCLITools
 		}
 		cliOpts = append(cliOpts, provider.WithCLIAllowedTools(allowedTools))
-		llmRouter.Register("anthropic", allm.New(provider.ClaudeCLI(cliOpts...), clientOpts...))
+		llmRouter.Register(name, allm.New(provider.ClaudeCLI(cliOpts...), clientOpts...))
 		return nil
 	}
 
@@ -1391,7 +1342,18 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 		opts = append(opts, provider.WithAnthropicBaseURL(ac.BaseURL))
 	}
 
-	llmRouter.Register("anthropic", allm.New(provider.Anthropic(ac.APIKey, opts...), clientOpts...))
+	var p allm.Provider
+	switch name {
+	case "glm":
+		p = provider.GLM(ac.APIKey, opts...)
+	case "kimi":
+		p = provider.Kimi(ac.APIKey, opts...)
+	case "minimax":
+		p = provider.MiniMax(ac.APIKey, opts...)
+	default:
+		p = provider.Anthropic(ac.APIKey, opts...)
+	}
+	llmRouter.Register(name, allm.New(p, clientOpts...))
 	return nil
 }
 
@@ -1461,7 +1423,7 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 
 		switch len(parts) {
 		case 1:
-			return "Usage: :new [agent] <directory>\nAgents: claude, codex, gemini", nil
+			return "Usage: :new [agent] <directory>\nAgents: claude, codex", nil
 		case 2:
 			dir = parts[1]
 		default:
@@ -1617,8 +1579,10 @@ func restoreLLMSettings(llmRouter *llm.Router, cfg *config.Config, logger *slog.
 	switch providerName {
 	case "anthropic":
 		pc = &cfg.LLM.Anthropic
+	case "glm":
+		pc = &cfg.LLM.GLM
 	default:
-		return // effort/fallback only apply to CLI providers (anthropic)
+		return // effort/fallback only apply to CLI providers
 	}
 
 	if pc.Effort != "" {

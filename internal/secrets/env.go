@@ -62,16 +62,10 @@ func mapSecretToEnvVar(key string) string {
 		return "CLAUDE_CODE_OAUTH_TOKEN"
 	case KeyOpenAIAPIKey:
 		return "OPENAI_API_KEY"
-	case KeyGeminiAPIKey:
-		return "GEMINI_API_KEY"
 	case KeyGLMAPIKey:
 		return "GLM_API_KEY"
-	case KeyDeepSeekAPIKey:
-		return "DEEPSEEK_API_KEY"
 	case KeyKimiAPIKey:
 		return "KIMI_API_KEY"
-	case KeyQwenAPIKey:
-		return "QWEN_API_KEY"
 	case KeyMiniMaxAPIKey:
 		return "MINIMAX_API_KEY"
 	case KeyBraveAPIKey:

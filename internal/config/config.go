@@ -183,7 +183,6 @@ type WebhookConfig struct {
 // LLMConfig holds LLM provider settings
 type LLMConfig struct {
 	Main               string          `yaml:"main"`                // Main/primary provider
-	MainProvider       string          `yaml:"main_provider"`       // Alias for main
 	Providers          ProvidersConfig `yaml:"providers,omitempty"` // Alternative structure
 	SystemPrompt       string          `yaml:"system_prompt"`
 	MaxInputLength     int             `yaml:"max_input_length"`
@@ -198,12 +197,9 @@ type LLMConfig struct {
 	// omitempty: disabled providers are pruned on save so only active ones appear in YAML
 	Anthropic LLMProviderConfig `yaml:"anthropic,omitempty"`
 	OpenAI    LLMProviderConfig `yaml:"openai,omitempty"`
-	Gemini    LLMProviderConfig `yaml:"gemini,omitempty"`
 	GLM       LLMProviderConfig `yaml:"glm,omitempty"`
-	DeepSeek  LLMProviderConfig `yaml:"deepseek,omitempty"`
 	Local     LLMProviderConfig `yaml:"local,omitempty"` // Self-hosted (Ollama, vLLM, llama.cpp, etc.)
 	Kimi      LLMProviderConfig `yaml:"kimi,omitempty"`
-	Qwen      LLMProviderConfig `yaml:"qwen,omitempty"`
 	MiniMax   LLMProviderConfig `yaml:"minimax,omitempty"`
 }
 
@@ -222,24 +218,14 @@ type LLMProviderConfig struct {
 	MaxRetries    int            `yaml:"max_retries"`
 	Effort        string         `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string         `yaml:"fallback_model,omitempty"` // CLI fallback model
-	Agent         LLMAgentConfig `yaml:"agent"`                    // Agent session settings for this provider
-}
-
-// LLMAgentConfig holds agent session settings per LLM provider
-type LLMAgentConfig struct {
-	Timeout    int `yaml:"timeout"`     // seconds per attempt, default 300
-	MaxRetries int `yaml:"max_retries"` // auto-retry on timeout, default 2
 }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)
 type ProvidersConfig struct {
 	Anthropic *LLMProviderConfig `yaml:"anthropic,omitempty"`
 	OpenAI    *LLMProviderConfig `yaml:"openai,omitempty"`
-	Gemini    *LLMProviderConfig `yaml:"gemini,omitempty"`
 	GLM       *LLMProviderConfig `yaml:"glm,omitempty"`
-	DeepSeek  *LLMProviderConfig `yaml:"deepseek,omitempty"`
 	Kimi      *LLMProviderConfig `yaml:"kimi,omitempty"`
-	Qwen      *LLMProviderConfig `yaml:"qwen,omitempty"`
 	MiniMax   *LLMProviderConfig `yaml:"minimax,omitempty"`
 }
 
@@ -688,23 +674,14 @@ func (c *Config) pruneDisabledForSave() {
 	if !c.LLM.OpenAI.Enabled {
 		c.LLM.OpenAI = z
 	}
-	if !c.LLM.Gemini.Enabled {
-		c.LLM.Gemini = z
-	}
 	if !c.LLM.GLM.Enabled {
 		c.LLM.GLM = z
-	}
-	if !c.LLM.DeepSeek.Enabled {
-		c.LLM.DeepSeek = z
 	}
 	if !c.LLM.Local.Enabled {
 		c.LLM.Local = z
 	}
 	if !c.LLM.Kimi.Enabled {
 		c.LLM.Kimi = z
-	}
-	if !c.LLM.Qwen.Enabled {
-		c.LLM.Qwen = z
 	}
 	if !c.LLM.MiniMax.Enabled {
 		c.LLM.MiniMax = z
@@ -717,20 +694,11 @@ func (c *Config) pruneDisabledForSave() {
 	if c.LLM.Providers.OpenAI != nil && !c.LLM.Providers.OpenAI.Enabled {
 		c.LLM.Providers.OpenAI = nil
 	}
-	if c.LLM.Providers.Gemini != nil && !c.LLM.Providers.Gemini.Enabled {
-		c.LLM.Providers.Gemini = nil
-	}
 	if c.LLM.Providers.GLM != nil && !c.LLM.Providers.GLM.Enabled {
 		c.LLM.Providers.GLM = nil
 	}
-	if c.LLM.Providers.DeepSeek != nil && !c.LLM.Providers.DeepSeek.Enabled {
-		c.LLM.Providers.DeepSeek = nil
-	}
 	if c.LLM.Providers.Kimi != nil && !c.LLM.Providers.Kimi.Enabled {
 		c.LLM.Providers.Kimi = nil
-	}
-	if c.LLM.Providers.Qwen != nil && !c.LLM.Providers.Qwen.Enabled {
-		c.LLM.Providers.Qwen = nil
 	}
 	if c.LLM.Providers.MiniMax != nil && !c.LLM.Providers.MiniMax.Enabled {
 		c.LLM.Providers.MiniMax = nil

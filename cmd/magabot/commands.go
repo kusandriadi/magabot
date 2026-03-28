@@ -151,10 +151,6 @@ func cmdStatus() {
 	if cfg.LLM.OpenAI.Enabled {
 		fmt.Printf("     OpenAI:   %s\n", cfg.LLM.OpenAI.Model)
 	}
-	if cfg.LLM.Gemini.Enabled {
-		fmt.Printf("     Gemini:   %s\n", cfg.LLM.Gemini.Model)
-	}
-
 	// Platforms
 	fmt.Println("\n   Platforms:")
 	if cfg.Platforms.Telegram != nil && cfg.Platforms.Telegram.Enabled {

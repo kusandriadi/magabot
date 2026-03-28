@@ -55,16 +55,10 @@ type WizardState struct {
 	AnthropicMode    string // "api" or "cli"
 	OpenAIEnabled    bool
 	OpenAIKey        string
-	GeminiEnabled    bool
-	GeminiKey        string
-	DeepSeekEnabled  bool
-	DeepSeekKey      string
 	GLMEnabled       bool
 	GLMKey           string
 	KimiEnabled      bool
 	KimiKey          string
-	QwenEnabled      bool
-	QwenKey          string
 	MiniMaxEnabled   bool
 	MiniMaxKey       string
 }
@@ -86,16 +80,10 @@ func testLLMConnection(state *WizardState) {
 		apiKey = state.AnthropicKey
 	case "openai":
 		apiKey = state.OpenAIKey
-	case "gemini":
-		apiKey = state.GeminiKey
-	case "deepseek":
-		apiKey = state.DeepSeekKey
 	case "glm":
 		apiKey = state.GLMKey
 	case "kimi":
 		apiKey = state.KimiKey
-	case "qwen":
-		apiKey = state.QwenKey
 	case "minimax":
 		apiKey = state.MiniMaxKey
 	}
@@ -408,12 +396,9 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 	fmt.Println()
 	fmt.Println("  1. anthropic  - Claude (recommended)")
 	fmt.Println("  2. openai     - GPT-4")
-	fmt.Println("  3. gemini     - Google Gemini")
-	fmt.Println("  4. deepseek   - DeepSeek")
-	fmt.Println("  5. glm        - Zhipu GLM")
-	fmt.Println("  6. kimi       - Moonshot Kimi")
-	fmt.Println("  7. qwen       - Alibaba Qwen")
-	fmt.Println("  8. minimax    - MiniMax")
+	fmt.Println("  3. glm        - Zhipu GLM")
+	fmt.Println("  4. kimi       - Moonshot Kimi")
+	fmt.Println("  5. minimax    - MiniMax")
 	fmt.Println()
 
 	mainChoice := askString(reader, "Main provider", "1")
@@ -422,12 +407,9 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 	providerMap := map[string]string{
 		"1": "anthropic", "anthropic": "anthropic",
 		"2": "openai", "openai": "openai",
-		"3": "gemini", "gemini": "gemini",
-		"4": "deepseek", "deepseek": "deepseek",
-		"5": "glm", "glm": "glm",
-		"6": "kimi", "kimi": "kimi",
-		"7": "qwen", "qwen": "qwen",
-		"8": "minimax", "minimax": "minimax",
+		"3": "glm", "glm": "glm",
+		"4": "kimi", "kimi": "kimi",
+		"5": "minimax", "minimax": "minimax",
 	}
 	state.LLMDefault = providerMap[strings.ToLower(mainChoice)]
 	if state.LLMDefault == "" {
@@ -466,22 +448,6 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println()
 		state.OpenAIKey = askPassword(reader, "API key (sk-...)")
 
-	case "gemini":
-		state.GeminiEnabled = true
-		fmt.Println("🔵 Google Gemini Configuration")
-		fmt.Println("──────────────────────────────")
-		fmt.Println("  Get API key: https://makersuite.google.com/app/apikey")
-		fmt.Println()
-		state.GeminiKey = askPassword(reader, "API key")
-
-	case "deepseek":
-		state.DeepSeekEnabled = true
-		fmt.Println("🔍 DeepSeek Configuration")
-		fmt.Println("─────────────────────────")
-		fmt.Println("  Get API key: https://platform.deepseek.com/")
-		fmt.Println()
-		state.DeepSeekKey = askPassword(reader, "API key")
-
 	case "glm":
 		state.GLMEnabled = true
 		fmt.Println("🇨🇳 Zhipu GLM Configuration")
@@ -497,14 +463,6 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://platform.moonshot.cn/")
 		fmt.Println()
 		state.KimiKey = askPassword(reader, "API key")
-
-	case "qwen":
-		state.QwenEnabled = true
-		fmt.Println("☁️  Alibaba Qwen Configuration")
-		fmt.Println("──────────────────────────────")
-		fmt.Println("  Get API key: https://dashscope.console.aliyun.com/")
-		fmt.Println()
-		state.QwenKey = askPassword(reader, "API key (DashScope)")
 
 	case "minimax":
 		state.MiniMaxEnabled = true
@@ -751,24 +709,6 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    temperature: 0.7\n\n")
 	}
 
-	if state.GeminiEnabled {
-		b.WriteString("  gemini:\n")
-		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.GeminiKey)
-		b.WriteString("    model: \"gemini-2.0-flash\"\n")
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
-	}
-
-	if state.DeepSeekEnabled {
-		b.WriteString("  deepseek:\n")
-		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.DeepSeekKey)
-		b.WriteString("    model: \"deepseek-chat\"\n")
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
-	}
-
 	if state.GLMEnabled {
 		b.WriteString("  glm:\n")
 		b.WriteString("    enabled: true\n")
@@ -783,15 +723,6 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.KimiKey)
 		b.WriteString("    model: \"moonshot-v1-8k\"\n")
-		b.WriteString("    max_tokens: 4096\n")
-		b.WriteString("    temperature: 0.7\n\n")
-	}
-
-	if state.QwenEnabled {
-		b.WriteString("  qwen:\n")
-		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.QwenKey)
-		b.WriteString("    model: \"qwen-max\"\n")
 		b.WriteString("    max_tokens: 4096\n")
 		b.WriteString("    temperature: 0.7\n\n")
 	}
@@ -863,10 +794,6 @@ func storeSecretsInVault(state *WizardState) {
 	if state.OpenAIKey != "" {
 		secretsToStore[secrets.KeyOpenAIAPIKey] = state.OpenAIKey
 	}
-	if state.GeminiKey != "" {
-		secretsToStore[secrets.KeyGeminiAPIKey] = state.GeminiKey
-	}
-
 	for key, value := range secretsToStore {
 		if err := vault.Set(ctx, key, value); err != nil {
 			fmt.Printf("  ⚠️  Failed to store %s: %v\n", key, err)

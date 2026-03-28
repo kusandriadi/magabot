@@ -65,32 +65,6 @@ func TestIntegration_OpenAI(t *testing.T) {
 	}
 }
 
-func TestIntegration_Gemini(t *testing.T) {
-	skipIfNoKey(t, "GEMINI_API_KEY", "GOOGLE_API_KEY")
-
-	apiKey := os.Getenv("GEMINI_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("GOOGLE_API_KEY")
-	}
-
-	models, err := FetchModels("gemini", apiKey, "")
-	if err != nil {
-		t.Fatalf("FetchModels failed: %v", err)
-	}
-
-	if len(models) == 0 {
-		t.Fatal("No models returned")
-	}
-
-	t.Logf("Found %d Gemini models", len(models))
-	for _, m := range models {
-		if strings.Contains(m.ID, "gemini") {
-			t.Logf("  - %s (%s)", m.ID, m.Provider)
-			break
-		}
-	}
-}
-
 func TestFetchModels_UnsupportedProvider(t *testing.T) {
 	_, err := FetchModels("invalid-provider", "key", "")
 	if err == nil {

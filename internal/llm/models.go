@@ -114,34 +114,18 @@ func FetchModels(providerName, apiKey, baseURL string) ([]ModelInfo, error) {
 		}
 		p = provider.OpenAI(apiKey, opts...)
 
-	case "gemini":
-		p = provider.Gemini(apiKey)
-
-	case "deepseek":
-		if err := validateCloudBaseURL(baseURL); err != nil {
-			return nil, err
-		}
-		opts := []provider.CompatOption{}
-		if baseURL != "" {
-			opts = append(opts, provider.WithBaseURL(baseURL))
-		}
-		p = provider.DeepSeek(apiKey, opts...)
-
 	case "glm":
 		if err := validateCloudBaseURL(baseURL); err != nil {
 			return nil, err
 		}
-		opts := []provider.CompatOption{}
+		opts := []provider.AnthropicOption{}
 		if baseURL != "" {
-			opts = append(opts, provider.WithBaseURL(baseURL))
+			opts = append(opts, provider.WithAnthropicBaseURL(baseURL))
 		}
 		p = provider.GLM(apiKey, opts...)
 
 	case "kimi":
 		p = provider.Kimi(apiKey)
-
-	case "qwen":
-		p = provider.Qwen(apiKey)
 
 	case "minimax":
 		p = provider.MiniMax(apiKey)

@@ -42,9 +42,6 @@ func TestAgentIntegration(t *testing.T) {
 		if !agent.ValidAgent("codex") {
 			t.Error("codex should be valid")
 		}
-		if !agent.ValidAgent("gemini") {
-			t.Error("gemini should be valid")
-		}
 		if agent.ValidAgent("invalid") {
 			t.Error("invalid should not be valid")
 		}

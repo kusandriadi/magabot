@@ -106,11 +106,8 @@ const (
 	KeyAnthropicAPIKey     = "magabot/llm/anthropic_api_key"
 	KeyClaudeCodeAuthToken = "magabot/llm/claude_code_auth_token"
 	KeyOpenAIAPIKey        = "magabot/llm/openai_api_key"
-	KeyGeminiAPIKey        = "magabot/llm/gemini_api_key"
 	KeyGLMAPIKey           = "magabot/llm/glm_api_key"
-	KeyDeepSeekAPIKey      = "magabot/llm/deepseek_api_key"
 	KeyKimiAPIKey          = "magabot/llm/kimi_api_key"
-	KeyQwenAPIKey          = "magabot/llm/qwen_api_key"
 	KeyMiniMaxAPIKey       = "magabot/llm/minimax_api_key"
 	KeyBraveAPIKey         = "magabot/tools/brave_api_key"
 )

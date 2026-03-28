@@ -35,7 +35,7 @@ func cmdInit() {
 		fmt.Println()
 		fmt.Println("  Set one of these env vars and re-run, or enter a key now:")
 		fmt.Println("    ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN (Claude Pro/Max),")
-		fmt.Println("    OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, LOCAL_LLM_URL")
+		fmt.Println("    OPENAI_API_KEY, GLM_API_KEY, LOCAL_LLM_URL")
 		fmt.Println()
 
 		reader := bufio.NewReader(os.Stdin)
@@ -98,12 +98,6 @@ func cmdInit() {
 	if detected.OpenAIKey != "" {
 		fmt.Println("    LLM: openai (GPT)")
 	}
-	if detected.GeminiKey != "" {
-		fmt.Println("    LLM: gemini")
-	}
-	if detected.DeepSeekKey != "" {
-		fmt.Println("    LLM: deepseek")
-	}
 	if detected.LocalEnabled {
 		fmt.Printf("    LLM: local (%s)\n", detected.LocalURL)
 	}
@@ -127,8 +121,6 @@ type envConfig struct {
 	AnthropicKey        string
 	ClaudeCodeAuthToken string
 	OpenAIKey           string
-	GeminiKey           string
-	DeepSeekKey         string
 	GLMKey              string
 	LocalEnabled        bool
 	LocalURL            string
@@ -144,8 +136,8 @@ type envConfig struct {
 }
 
 func (e *envConfig) hasLLM() bool {
-	return e.AnthropicKey != "" || e.ClaudeCodeAuthToken != "" || e.OpenAIKey != "" || e.GeminiKey != "" ||
-		e.DeepSeekKey != "" || e.GLMKey != "" || e.LocalEnabled
+	return e.AnthropicKey != "" || e.ClaudeCodeAuthToken != "" || e.OpenAIKey != "" ||
+		e.GLMKey != "" || e.LocalEnabled
 }
 
 func (e *envConfig) defaultProvider() string {
@@ -154,10 +146,6 @@ func (e *envConfig) defaultProvider() string {
 		return "anthropic"
 	case e.OpenAIKey != "":
 		return "openai"
-	case e.GeminiKey != "":
-		return "gemini"
-	case e.DeepSeekKey != "":
-		return "deepseek"
 	case e.GLMKey != "":
 		return "glm"
 	case e.LocalEnabled:
@@ -174,8 +162,6 @@ func detectEnvConfig() *envConfig {
 		AnthropicKey:        os.Getenv("ANTHROPIC_API_KEY"),
 		ClaudeCodeAuthToken: os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
 		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
-		GeminiKey:           firstEnv("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-		DeepSeekKey:         os.Getenv("DEEPSEEK_API_KEY"),
 		GLMKey:              os.Getenv("GLM_API_KEY"),
 		TelegramToken:       firstEnv("TELEGRAM_BOT_TOKEN", "TELEGRAM_TOKEN"),
 		SlackBotToken:       os.Getenv("SLACK_BOT_TOKEN"),
@@ -246,22 +232,6 @@ func buildInitConfig(cfg *envConfig) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.OpenAIKey)
 		b.WriteString("    model: \"gpt-4o\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
-	}
-
-	if cfg.GeminiKey != "" {
-		b.WriteString("  gemini:\n")
-		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.GeminiKey)
-		b.WriteString("    model: \"gemini-2.0-flash\"\n")
-		b.WriteString("    max_tokens: 4096\n\n")
-	}
-
-	if cfg.DeepSeekKey != "" {
-		b.WriteString("  deepseek:\n")
-		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", cfg.DeepSeekKey)
-		b.WriteString("    model: \"deepseek-chat\"\n")
 		b.WriteString("    max_tokens: 4096\n\n")
 	}
 
