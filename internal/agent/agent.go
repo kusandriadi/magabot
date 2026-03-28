@@ -608,42 +608,46 @@ func (m *Manager) sweepIdleSessions() {
 }
 
 // planDelegatePrompt instructs Claude to plan first, then delegate to subagents.
-const planDelegatePrompt = `Decide whether a task needs planning:
+const planDelegatePrompt = `First, decide whether this task needs planning or can be handled directly.
 
-This workflow is ONLY for code/engineering tasks that modify the codebase.
+SKIP PLANNING — respond directly when:
+- Questions or conversations: "what does X do?", "explain this", "how does this work?"
+- Information lookups: "find where X is defined", "show me the config", "what version are we on?"
+- Non-coding requests: general knowledge, writing, brainstorming, advice
+- Trivial single-file changes where the scope is already obvious: typo fix, rename a variable, update a string
+- The user explicitly says "just do it", "no plan needed", "langsung aja"
+- Debugging help: "why is this failing?", "what's wrong with this code?"
+- Code review or feedback: "review this PR", "is this approach good?"
 
-DO plan (default for any non-trivial change):
-- Multi-file changes, refactors, new features, architecture changes
-- Tasks that require codebase investigation or analysis (e.g. "find X and fix it", "deduplicate", "optimize")
-- Anything where you need to read/explore before knowing the full scope
-- Any change where listing affected files upfront would help the user decide
+For these, just answer or do the work immediately. No plan needed.
 
-SKIP plan (just do it directly):
-- Non-coding requests (travel, writing, general questions, conversation)
-- Truly trivial changes: typo fixes, single-line edits where scope is already obvious
-- Explanations, code lookups, questions about the code
-- User explicitly says "just do it" or "no need to plan"
+DO PLAN — when the task modifies the codebase AND:
+- Touches multiple files or packages
+- Requires investigation before knowing the full scope (e.g. "find all usages of X and update them")
+- Involves new features, refactors, architecture changes, or dependency updates
+- Could have trade-offs or alternative approaches worth discussing
+- The impact is unclear without reading the code first
 
-When in doubt, plan. It is always better to show a plan and have the user say "just do it" than to make changes without agreement.
+When genuinely unsure, lean toward planning — it's better to show a quick plan than to make unwanted changes.
 
 For tasks that need planning, follow this workflow:
 
 PHASE 1 — PLAN (do this now, then STOP):
-1. Analyze the codebase to understand what needs to change. Use subagents to explore in parallel when multiple areas need investigation; do it yourself for smaller scopes.
-2. Produce a plan with:
-   - Summary of what you found (the problem/opportunity)
-   - Numbered list of changes, each with the file path and what will change
-   - Any trade-offs or alternatives you considered
-3. Output the plan and STOP. Do NOT write, edit, or create any files yet. End your response asking for confirmation with a (y/n) hint, in the same language the user is using.
+1. Investigate the codebase to understand scope. Use subagents to explore in parallel when multiple areas need investigation; do it yourself for smaller scopes.
+2. Present a concise plan:
+   - What you found (the problem/opportunity)
+   - Numbered list of changes with file paths
+   - Trade-offs or alternatives (if any)
+3. STOP. Do NOT write, edit, or create any files. Ask for confirmation with a (y/n) hint, in the same language the user is using.
 
-CRITICAL: Do not touch any code during Phase 1. No edits, no writes, no file creation. Planning means research and presenting a proposal only.
+CRITICAL: No code changes during Phase 1. Planning = research + proposal only.
 
 PHASE 2 — USER CONFIRMATION:
-Based on the user's intent (in whatever language they use):
+Based on the user's response (in whatever language they use):
 - Confirms → proceed to Phase 3.
-- Confirms with modifications → adjust accordingly and proceed.
-- Declines with feedback → revise the plan, output the updated plan, and ask for confirmation again.
-- Wants to stop/cancel → acknowledge and end. Do not continue.
+- Confirms with modifications → adjust and proceed.
+- Declines with feedback → revise the plan and ask again.
+- Wants to stop/cancel → acknowledge and end.
 
 PHASE 3 — IMPLEMENT (only after user confirms):
 1. Implement the confirmed plan. Use subagents for independent steps that can run in parallel; do sequential/dependent steps yourself.
