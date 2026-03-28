@@ -596,12 +596,97 @@ func setupLLM() {
 				cfg.LLM.Anthropic.Enabled = true
 			}
 		}
+
+		fmt.Println()
+		fmt.Println("  Plan model (used for planning phase):")
+		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicOpus)
+		fmt.Printf("    2. %s\n", provider.AnthropicSonnet)
+		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			cfg.LLM.Anthropic.PlanModel = provider.AnthropicSonnet
+		case "3":
+			cfg.LLM.Anthropic.PlanModel = provider.AnthropicHaiku
+		default:
+			cfg.LLM.Anthropic.PlanModel = provider.AnthropicOpus
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model (used for coding):")
+		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicSonnet)
+		fmt.Printf("    2. %s\n", provider.AnthropicOpus)
+		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			cfg.LLM.Anthropic.ImplModel = provider.AnthropicOpus
+		case "3":
+			cfg.LLM.Anthropic.ImplModel = provider.AnthropicHaiku
+		default:
+			cfg.LLM.Anthropic.ImplModel = provider.AnthropicSonnet
+		}
+
+		fmt.Println()
+		fmt.Println("  Effort level:")
+		fmt.Println("    1. high (recommended)")
+		fmt.Println("    2. medium")
+		fmt.Println("    3. low")
+		fmt.Println("    4. max")
+		fmt.Println()
+		effortChoice := askString(reader, "Effort", "1")
+		switch effortChoice {
+		case "2":
+			cfg.LLM.Anthropic.Effort = "medium"
+		case "3":
+			cfg.LLM.Anthropic.Effort = "low"
+		case "4":
+			cfg.LLM.Anthropic.Effort = "max"
+		default:
+			cfg.LLM.Anthropic.Effort = "high"
+		}
+
 	case "openai":
 		key := askString(reader, "OpenAI API Key (sk-...)", "")
 		if key != "" {
 			saveSecret("llm/openai_api_key", key)
 			cfg.LLM.OpenAI.Enabled = true
 		}
+
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
+		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
+		fmt.Printf("    3. %s\n", provider.OpenAIO3)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			cfg.LLM.OpenAI.PlanModel = provider.OpenAIGPT5Mini
+		case "3":
+			cfg.LLM.OpenAI.PlanModel = provider.OpenAIO3
+		default:
+			cfg.LLM.OpenAI.PlanModel = provider.OpenAIGPT5
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
+		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
+		fmt.Printf("    3. %s\n", provider.OpenAIGPT4_1)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			cfg.LLM.OpenAI.ImplModel = provider.OpenAIGPT5Mini
+		case "3":
+			cfg.LLM.OpenAI.ImplModel = provider.OpenAIGPT4_1
+		default:
+			cfg.LLM.OpenAI.ImplModel = provider.OpenAIGPT5
+		}
+
 	case "glm":
 		key := askString(reader, "GLM API Key", "")
 		if key == "" {
@@ -631,18 +716,105 @@ func setupLLM() {
 		cfg.LLM.GLM.Enabled = true
 		cfg.LLM.GLM.BaseURL = baseURL
 		cfg.LLM.GLM.Model = model
+
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
+		fmt.Printf("    2. %s\n", provider.GLM5)
+		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			cfg.LLM.GLM.PlanModel = provider.GLM5
+		case "3":
+			cfg.LLM.GLM.PlanModel = provider.GLM4Dot7
+		default:
+			cfg.LLM.GLM.PlanModel = provider.GLM5Dot1
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Turbo)
+		fmt.Printf("    2. %s\n", provider.GLM5)
+		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			cfg.LLM.GLM.ImplModel = provider.GLM5
+		case "3":
+			cfg.LLM.GLM.ImplModel = provider.GLM4Dot7
+		default:
+			cfg.LLM.GLM.ImplModel = provider.GLM5Turbo
+		}
+
 	case "kimi":
 		key := askString(reader, "Kimi API Key", "")
 		if key != "" {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
 		}
+
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
+		fmt.Printf("    2. %s\n", provider.KimiK2Thinking)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			cfg.LLM.Kimi.PlanModel = provider.KimiK2Thinking
+		default:
+			cfg.LLM.Kimi.PlanModel = provider.KimiK2_5
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
+		fmt.Printf("    2. %s\n", provider.KimiK2TurboPreview)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			cfg.LLM.Kimi.ImplModel = provider.KimiK2TurboPreview
+		default:
+			cfg.LLM.Kimi.ImplModel = provider.KimiK2_5
+		}
+
 	case "minimax":
 		key := askString(reader, "MiniMax API Key", "")
 		if key != "" {
 			saveSecret("llm/minimax_api_key", key)
 			cfg.LLM.MiniMax.Enabled = true
 		}
+
+		fmt.Println()
+		fmt.Println("  Plan model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
+		fmt.Printf("    2. %s\n", provider.MiniMaxM2_5)
+		fmt.Println()
+		planChoice := askString(reader, "Plan model", "1")
+		switch planChoice {
+		case "2":
+			cfg.LLM.MiniMax.PlanModel = provider.MiniMaxM2_5
+		default:
+			cfg.LLM.MiniMax.PlanModel = provider.MiniMaxM2_7
+		}
+
+		fmt.Println()
+		fmt.Println("  Implementation model:")
+		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
+		fmt.Printf("    2. %s\n", provider.MiniMaxM2_7HighSpeed)
+		fmt.Println()
+		implChoice := askString(reader, "Impl model", "1")
+		switch implChoice {
+		case "2":
+			cfg.LLM.MiniMax.ImplModel = provider.MiniMaxM2_7HighSpeed
+		default:
+			cfg.LLM.MiniMax.ImplModel = provider.MiniMaxM2_7
+		}
+
 	case "local":
 		baseURL := askString(reader, "Base URL", "http://localhost:11434/v1")
 		model := askString(reader, "Model name", "llama3")
