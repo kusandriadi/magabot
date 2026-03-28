@@ -66,9 +66,9 @@ type WizardState struct {
 	LocalBaseURL     string
 	LocalModel       string
 
-	PlanModel  string
-	ImplModel  string
-	Effort     string
+	PlanModel string
+	ImplModel string
+	Effort    string
 }
 
 // testLLMConnection tests the LLM connection with the configured provider

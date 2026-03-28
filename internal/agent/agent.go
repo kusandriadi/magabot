@@ -34,19 +34,19 @@ type NotifyFunc func(platform, chatID, message string)
 
 // Config holds agent manager settings.
 type Config struct {
-	Main                string            // main/primary agent type
-	Timeout             int               // execution timeout in seconds
-	MaxRetries          int               // auto-retry on timeout (0 = no retry)
-	SessionTimeout      int               // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
-	AllowedDirs         []string          // directories users may target (empty = user home only)
-	Shortcuts           map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
-	DiscoverDepth       int               // auto-discover search depth (default 3)
-	GetCLISettings      CLISettings       // optional: returns current effort for Claude CLI
-	PlanDelegate        bool              // plan first, then delegate to subagents
-	OnSessionClose      NotifyFunc        // optional: called when a session is auto-closed
-	CLIPath             string            // path to claude binary (default: "claude")
-	PlanModel       string            // model for planning phase (overrides default during plan)
-	ImplModel string            // model for implementation phase (overrides default during impl)
+	Main           string            // main/primary agent type
+	Timeout        int               // execution timeout in seconds
+	MaxRetries     int               // auto-retry on timeout (0 = no retry)
+	SessionTimeout int               // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
+	AllowedDirs    []string          // directories users may target (empty = user home only)
+	Shortcuts      map[string]string // directory shortcuts, e.g. "myproject": "~/code/myproject"
+	DiscoverDepth  int               // auto-discover search depth (default 3)
+	GetCLISettings CLISettings       // optional: returns current effort for Claude CLI
+	PlanDelegate   bool              // plan first, then delegate to subagents
+	OnSessionClose NotifyFunc        // optional: called when a session is auto-closed
+	CLIPath        string            // path to claude binary (default: "claude")
+	PlanModel      string            // model for planning phase (overrides default during plan)
+	ImplModel      string            // model for implementation phase (overrides default during impl)
 }
 
 // Session represents an active agent session tied to a chat.
