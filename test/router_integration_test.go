@@ -53,6 +53,8 @@ func (m *MockPlatform) Send(chatID, message string) error {
 	return nil
 }
 
+func (m *MockPlatform) SendVoice(_ string, _ []byte) error { return nil }
+
 func (m *MockPlatform) SetHandler(h router.MessageHandler) {
 	m.handler = h
 }

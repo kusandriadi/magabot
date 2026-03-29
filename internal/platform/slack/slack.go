@@ -85,6 +85,9 @@ func (b *Bot) Send(chatID, message string) error {
 	return err
 }
 
+// SendVoice is not supported on Slack; it's a no-op.
+func (b *Bot) SendVoice(_ string, _ []byte) error { return nil }
+
 // SetHandler is provided by platform.Base.
 
 // processEvents processes socket mode events

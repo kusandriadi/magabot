@@ -309,6 +309,9 @@ func (s *Server) Send(chatID, message string) error {
 	return fmt.Errorf("webhook platform is receive-only")
 }
 
+// SendVoice is not applicable for webhooks (receive-only).
+func (s *Server) SendVoice(_ string, _ []byte) error { return nil }
+
 // SetHandler is provided by platform.Base.
 
 // cleanupNonces removes old nonces periodically

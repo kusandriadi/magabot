@@ -28,6 +28,9 @@ type Platform interface {
 	// Send sends a message
 	Send(chatID, message string) error
 
+	// SendVoice sends an OGG Opus audio file as a voice message
+	SendVoice(chatID string, audio []byte) error
+
 	// SetHandler sets the message handler
 	SetHandler(handler MessageHandler)
 }
@@ -295,6 +298,19 @@ func (r *Router) Send(platform, chatID, message string) error {
 	}
 
 	return p.Send(chatID, message)
+}
+
+// SendVoice sends an OGG Opus voice message to a specific platform and chat
+func (r *Router) SendVoice(platform, chatID string, audio []byte) error {
+	r.mu.RLock()
+	p, ok := r.platforms[platform]
+	r.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("unknown platform: %s", platform)
+	}
+
+	return p.SendVoice(chatID, audio)
 }
 
 // encryptAndStore encrypts content (if vault available) and saves a message to the store.

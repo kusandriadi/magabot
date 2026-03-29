@@ -24,6 +24,8 @@ import (
 	"github.com/kusa/magabot/internal/util"
 )
 
+const maxVoiceDownloadSize = 20 * 1024 * 1024 // 20 MB
+
 // Bot represents a WhatsApp bot using whatsmeow
 type Bot struct {
 	platform.Base
@@ -31,6 +33,7 @@ type Bot struct {
 	container     *sqlstore.Container
 	logger        *slog.Logger
 	dataDir       string // platform-specific data dir (e.g. data/platform/whatsapp)
+	downloadsDir  string // where downloaded voice files are saved
 	onPairFailure func()
 	done          chan struct{}
 	mu            sync.RWMutex // protects client
@@ -40,6 +43,7 @@ type Bot struct {
 // Config for WhatsApp bot
 type Config struct {
 	DataDir       string // Platform data directory (DB + QR file live here)
+	DownloadsDir  string // Directory for downloaded voice files
 	OnPairFailure func() // Called when QR pairing fails after all retries
 	Logger        *slog.Logger
 }
@@ -64,10 +68,16 @@ func New(cfg *Config) (*Bot, error) {
 		return nil, fmt.Errorf("create whatsmeow store: %w", err)
 	}
 
+	downloadsDir := cfg.DownloadsDir
+	if downloadsDir == "" {
+		downloadsDir = filepath.Join(dataDir, "downloads")
+	}
+
 	return &Bot{
 		container:     container,
 		logger:        cfg.Logger,
 		dataDir:       dataDir,
+		downloadsDir:  downloadsDir,
 		onPairFailure: cfg.OnPairFailure,
 		done:          make(chan struct{}),
 	}, nil
@@ -212,6 +222,45 @@ func (b *Bot) Send(chatID, message string) error {
 	return err
 }
 
+// SendVoice uploads and sends an OGG Opus audio as a WhatsApp PTT voice message.
+func (b *Bot) SendVoice(chatID string, audio []byte) error {
+	client := b.getClient()
+	if client == nil || !client.IsConnected() {
+		return fmt.Errorf("WhatsApp not connected")
+	}
+
+	jid, err := types.ParseJID(chatID)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID %q: %w", chatID, err)
+	}
+
+	uploaded, err := client.Upload(context.Background(), audio, whatsmeow.MediaAudio)
+	if err != nil {
+		return fmt.Errorf("upload audio: %w", err)
+	}
+
+	// Flat waveform (64 amplitude samples, 0-100)
+	waveform := make([]byte, 64)
+	for i := range waveform {
+		waveform[i] = 50
+	}
+
+	_, err = client.SendMessage(context.Background(), jid, &waE2E.Message{
+		AudioMessage: &waE2E.AudioMessage{
+			URL:           proto.String(uploaded.URL),
+			DirectPath:    proto.String(uploaded.DirectPath),
+			MediaKey:      uploaded.MediaKey,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(audio))),
+			Mimetype:      proto.String("audio/ogg; codecs=opus"),
+			PTT:           proto.Bool(true),
+			Waveform:      waveform,
+		},
+	})
+	return err
+}
+
 // SetHandler is provided by platform.Base.
 
 // IsConnected returns connection status
@@ -252,6 +301,30 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 
 	content := extractContent(evt)
+
+	// Handle voice/audio: download and save to disk so daemon can transcribe it
+	var media []string
+	client := b.getClient()
+	if evt.Message != nil && evt.Message.GetAudioMessage() != nil {
+		if content == "" {
+			content = "[Voice Message]"
+		}
+		if client != nil {
+			audioData, err := client.Download(context.Background(), evt.Message.GetAudioMessage())
+			if err != nil {
+				b.logger.Warn("download voice failed", "error", err)
+			} else if len(audioData) > maxVoiceDownloadSize {
+				b.logger.Warn("voice file too large, skipping", "size", len(audioData))
+			} else if len(audioData) > 0 {
+				if path, err := b.saveVoice(audioData); err != nil {
+					b.logger.Warn("save voice failed", "error", err)
+				} else {
+					media = append(media, path)
+				}
+			}
+		}
+	}
+
 	if content == "" {
 		return
 	}
@@ -267,6 +340,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		UserID:    userID,
 		Username:  evt.Info.PushName,
 		Text:      content,
+		Media:     media,
 		Timestamp: evt.Info.Timestamp,
 	}
 
@@ -278,7 +352,6 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	ctx := context.Background()
 
 	// Send typing indicator
-	client := b.getClient()
 	if client != nil && client.IsConnected() {
 		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
 	}
@@ -344,6 +417,19 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 }
 
+// saveVoice writes downloaded audio bytes to the downloads directory.
+func (b *Bot) saveVoice(data []byte) (string, error) {
+	if err := os.MkdirAll(b.downloadsDir, 0700); err != nil {
+		return "", fmt.Errorf("create downloads dir: %w", err)
+	}
+	filename := fmt.Sprintf("voice_%d.ogg", time.Now().UnixNano())
+	path := filepath.Join(b.downloadsDir, filename)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return "", fmt.Errorf("write voice: %w", err)
+	}
+	return path, nil
+}
+
 // extractContent extracts text content from a WhatsApp message
 func extractContent(evt *events.Message) string {
 	msg := evt.Message
@@ -383,11 +469,6 @@ func extractContent(evt *events.Message) string {
 			return "[Document] " + caption
 		}
 		return "[Document]"
-	}
-
-	// Voice/Audio message
-	if msg.GetAudioMessage() != nil {
-		return "[Voice Message]"
 	}
 
 	// Sticker

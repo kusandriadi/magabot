@@ -3,6 +3,7 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -636,4 +637,45 @@ func (r *Router) SetThinking(thinking *allm.ThinkingConfig) {
 	if ok {
 		client.SetThinking(thinking)
 	}
+}
+
+// Speak converts text to speech using the first registered provider that supports TTS.
+// Returns OGG Opus audio bytes. Tries the main client first, then falls back to others.
+func (r *Router) Speak(ctx context.Context, text string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	req := &allm.SpeechRequest{
+		Input:  text,
+		Model:  "tts-1",
+		Voice:  "alloy",
+		Format: "opus",
+	}
+
+	// Try main client first
+	if client, ok := r.clients[r.mainName]; ok {
+		resp, err := client.Speak(ctx, req)
+		if err == nil {
+			return resp.Audio, nil
+		}
+		if !errors.Is(err, allm.ErrNotSupported) && !errors.Is(err, allm.ErrNoProvider) {
+			return nil, err
+		}
+	}
+
+	// Fall back to any other registered client
+	for name, client := range r.clients {
+		if name == r.mainName {
+			continue
+		}
+		resp, err := client.Speak(ctx, req)
+		if err == nil {
+			return resp.Audio, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%w: text-to-speech", allm.ErrNotSupported)
 }

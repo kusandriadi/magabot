@@ -2,6 +2,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -99,6 +100,20 @@ func (b *Bot) Send(chatID, message string) error {
 	}
 
 	_, err := b.api.SendMessage(groupID, message, opts)
+	return err
+}
+
+// SendVoice sends an OGG Opus audio as a Telegram voice message.
+func (b *Bot) SendVoice(chatID string, audio []byte) error {
+	groupID, threadID := parseChatID(chatID)
+	if groupID == 0 {
+		return fmt.Errorf("invalid chat ID: %s", chatID)
+	}
+	opts := &gotgbot.SendVoiceOpts{}
+	if threadID != 0 {
+		opts.MessageThreadId = threadID
+	}
+	_, err := b.api.SendVoice(groupID, gotgbot.InputFileByReader("voice.ogg", bytes.NewReader(audio)), opts)
 	return err
 }
 

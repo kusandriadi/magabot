@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -345,6 +346,7 @@ func runDaemon() {
 
 		// Add current user message (with reply context and media file paths if present)
 		content := msg.Text
+		isVoiceMsg := false // set to true only if transcription actually succeeds
 
 		// Prepend reply context so the LLM knows what message is being replied to
 		if msg.ReplyTo != nil && msg.ReplyTo.Text != "" {
@@ -360,15 +362,45 @@ func runDaemon() {
 		}
 
 		if len(msg.Media) > 0 {
-			var parts []string
-			parts = append(parts, "User sent files (use Read tool to view them):")
+			var otherMedia []string
+			var transcripts []string
 			for _, path := range msg.Media {
-				parts = append(parts, "  "+path)
+				if isAudioFile(path) {
+					transcript, err := transcribeAudioFile(path)
+					if err != nil {
+						logger.Warn("voice transcription failed", "path", path, "error", err)
+						otherMedia = append(otherMedia, path)
+					} else if transcript != "" {
+						transcripts = append(transcripts, transcript)
+					}
+				} else {
+					otherMedia = append(otherMedia, path)
+				}
 			}
-			if content != "" {
-				parts = append(parts, "", content)
+
+			if len(transcripts) > 0 {
+				transcribed := strings.Join(transcripts, " ")
+				// Replace the voice placeholder with the actual transcription
+				if content == "[Voice Message]" || content == "[Audio Message]" {
+					content = transcribed
+				} else {
+					content = transcribed + "\n\n" + content
+				}
+				msg.Media = otherMedia
+				isVoiceMsg = true // transcription succeeded — reply with voice
 			}
-			content = strings.Join(parts, "\n")
+
+			if len(otherMedia) > 0 {
+				var parts []string
+				parts = append(parts, "User sent files (use Read tool to view them):")
+				for _, path := range otherMedia {
+					parts = append(parts, "  "+path)
+				}
+				if content != "" {
+					parts = append(parts, "", content)
+				}
+				content = strings.Join(parts, "\n")
+			}
 		}
 		userMsg := llm.Message{
 			Role:    "user",
@@ -397,6 +429,11 @@ func runDaemon() {
 		if systemPromptOverride == "" {
 			// No personas configured — use llm.system_prompt with platform-aware formatting
 			systemPromptOverride = llm.BuildSystemPrompt(cfg.LLM.SystemPrompt, msg.Platform)
+		}
+
+		// For voice input: suppress text streaming — we'll send a voice reply at the end
+		if isVoiceMsg {
+			msg.StreamCallback = func(string) {}
 		}
 
 		// Send to LLM (streaming)
@@ -436,18 +473,37 @@ func runDaemon() {
 			return "", nil
 		}
 
-		// Record messages in session
-		sessionMgr.AddMessage(sess, "user", msg.Text)
+		// Record messages in session (use resolved content, which includes transcription if voice)
+		sessionMgr.AddMessage(sess, "user", userMsg.Content)
 		sessionMgr.AddMessage(sess, "assistant", respContent)
 
 		// Persist conversation to database
 		sessionKey := fmt.Sprintf("%s:%s", msg.Platform, msg.ChatID)
 		now := time.Now()
-		if err := store.SaveConversationMessage(sessionKey, "user", msg.Text, now); err != nil {
+		if err := store.SaveConversationMessage(sessionKey, "user", userMsg.Content, now); err != nil {
 			logger.Warn("save conversation message failed", "error", err, "role", "user")
 		}
 		if err := store.SaveConversationMessage(sessionKey, "assistant", respContent, now); err != nil {
 			logger.Warn("save conversation message failed", "error", err, "role", "assistant")
+		}
+
+		// For voice messages: reply with TTS audio. Fall back to text if TTS is unavailable.
+		if isVoiceMsg {
+			ttsText := welcomePrefix + respContent
+			audio, err := llmRouter.Speak(ctx, ttsText)
+			if err != nil {
+				// No OpenAI TTS — try local tts-speak script
+				audio, err = speakText(ttsText)
+			}
+			if err == nil {
+				if voiceErr := rtr.SendVoice(msg.Platform, msg.ChatID, audio); voiceErr != nil {
+					logger.Warn("send voice failed, falling back to text", "error", voiceErr)
+				} else {
+					return "", nil // voice sent — suppress text
+				}
+			} else {
+				logger.Warn("TTS unavailable, falling back to text", "error", err)
+			}
 		}
 
 		return welcomePrefix + respContent, nil
@@ -485,8 +541,9 @@ func runDaemon() {
 
 	if cfg.Platforms.WhatsApp != nil && cfg.Platforms.WhatsApp.Enabled {
 		wa, err := whatsapp.New(&whatsapp.Config{
-			DataDir: cfg.GetPlatformDir("whatsapp"),
-			Logger:  logger.With("platform", "whatsapp"),
+			DataDir:      cfg.GetPlatformDir("whatsapp"),
+			DownloadsDir: filepath.Join(cfg.GetPlatformDir("whatsapp"), "downloads"),
+			Logger:       logger.With("platform", "whatsapp"),
 			OnPairFailure: func() {
 				cfg.Platforms.WhatsApp.Enabled = false
 				if err := cfg.Save(); err != nil {
@@ -522,6 +579,28 @@ func runDaemon() {
 		} else {
 			rtr.Register(wh)
 		}
+	}
+
+	// Start download cleanup goroutine
+	if cfg.Media.RetentionDays > 0 {
+		downloadDirs := []string{
+			filepath.Join(cfg.GetPlatformDir("telegram"), "downloads"),
+			filepath.Join(cfg.GetPlatformDir("whatsapp"), "downloads"),
+		}
+		retention := time.Duration(cfg.Media.RetentionDays) * 24 * time.Hour
+		go func() {
+			cleanOldDownloads(downloadDirs, retention, logger)
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					cleanOldDownloads(downloadDirs, retention, logger)
+				}
+			}
+		}()
 	}
 
 	// Start router
@@ -587,6 +666,71 @@ func runDaemon() {
 	}
 
 	logger.Info("magabot stopped")
+}
+
+// cleanOldDownloads deletes files in dirs that are older than maxAge.
+func cleanOldDownloads(dirs []string, maxAge time.Duration, logger *slog.Logger) {
+	cutoff := time.Now().Add(-maxAge)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue // dir may not exist yet
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			if info.ModTime().Before(cutoff) {
+				path := filepath.Join(dir, entry.Name())
+				if err := os.Remove(path); err == nil {
+					logger.Debug("removed old download", "path", path)
+				}
+			}
+		}
+	}
+}
+
+// localScriptPath returns the full path to a script in ~/.local/bin/.
+func localScriptPath(name string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "bin", name)
+}
+
+// speakText runs the local tts-speak script and returns OGG Opus audio bytes.
+func speakText(text string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, localScriptPath("tts-speak"))
+	cmd.Stdin = strings.NewReader(text)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("tts-speak: %w", err)
+	}
+	return out, nil
+}
+
+// transcribeAudioFile runs the local whisper script on an audio file.
+func transcribeAudioFile(path string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, localScriptPath("transcribe-voice"), path).Output()
+	if err != nil {
+		return "", fmt.Errorf("transcribe-voice: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// isAudioFile returns true if the file extension is a known audio format.
+func isAudioFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".ogg", ".oga", ".mp3", ".m4a", ".wav":
+		return true
+	}
+	return false
 }
 
 // handleCommand handles bot commands
