@@ -12,19 +12,20 @@ import (
 	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/kusa/magabot/internal/platform"
 	"github.com/kusa/magabot/internal/router"
+	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/util"
 )
 
 // Bot represents a Telegram bot
 type Bot struct {
 	platform.Base
-	api          *tgbotapi.BotAPI
+	api          *gotgbot.Bot
 	logger       *slog.Logger
 	downloadsDir string
-	updates      tgbotapi.UpdatesChannel
+	username     string
 	done         chan struct{}
 	wg           sync.WaitGroup
 }
@@ -38,13 +39,10 @@ type Config struct {
 
 // New creates a new Telegram bot
 func New(cfg *Config) (*Bot, error) {
-	api, err := tgbotapi.NewBotAPI(cfg.Token)
+	api, err := gotgbot.NewBot(cfg.Token, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create bot: %w", err)
 	}
-
-	// Security: disable debug mode
-	api.Debug = false
 
 	downloadsDir := cfg.DownloadsDir
 	if downloadsDir != "" {
@@ -68,68 +66,87 @@ func (b *Bot) Name() string {
 
 // Start starts listening for updates (long polling)
 func (b *Bot) Start(ctx context.Context) error {
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	b.updates = b.api.GetUpdatesChan(u)
+	info, err := b.api.GetMe(nil)
+	if err != nil {
+		return fmt.Errorf("get bot info: %w", err)
+	}
+	b.username = info.Username
 
 	b.wg.Add(1)
-	go b.processUpdates(ctx)
+	go b.pollUpdates(ctx)
 
-	b.logger.Info("telegram bot started", "username", b.api.Self.UserName)
+	b.logger.Info("telegram bot started", "username", b.username)
 	return nil
 }
 
 // Stop stops the bot
 func (b *Bot) Stop() error {
 	close(b.done)
-	b.api.StopReceivingUpdates()
 	b.wg.Wait()
 	return nil
 }
 
-// Send sends a message
+// Send sends a message. chatID may be "groupID:threadID" for Forum Topics.
 func (b *Bot) Send(chatID, message string) error {
-	var chatIDInt int64
-	if _, err := fmt.Sscanf(chatID, "%d", &chatIDInt); err != nil {
+	groupID, threadID := parseChatID(chatID)
+	if groupID == 0 {
 		return fmt.Errorf("invalid chat ID: %s", chatID)
 	}
 
-	msg := tgbotapi.NewMessage(chatIDInt, message)
-	msg.ParseMode = "Markdown"
+	opts := &gotgbot.SendMessageOpts{ParseMode: "Markdown"}
+	if threadID != 0 {
+		opts.MessageThreadId = threadID
+	}
 
-	_, err := b.api.Send(msg)
+	_, err := b.api.SendMessage(groupID, message, opts)
 	return err
 }
 
 // SetHandler is provided by platform.Base.
 
-// processUpdates processes incoming updates
-func (b *Bot) processUpdates(ctx context.Context) {
+// pollUpdates runs the long-polling loop
+func (b *Bot) pollUpdates(ctx context.Context) {
 	defer b.wg.Done()
 
+	var offset int64
 	for {
 		select {
 		case <-b.done:
 			return
 		case <-ctx.Done():
 			return
-		case update := <-b.updates:
-			if update.Message == nil {
-				continue
+		default:
+		}
+
+		updates, err := b.api.GetUpdatesWithContext(ctx, &gotgbot.GetUpdatesOpts{
+			Offset:  offset,
+			Timeout: 60,
+		})
+		if err != nil {
+			if ctx.Err() != nil {
+				return
 			}
-			b.handleUpdate(ctx, &update)
+			select {
+			case <-b.done:
+				return
+			default:
+			}
+			b.logger.Warn("get updates failed", "error", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		for i := range updates {
+			offset = updates[i].UpdateId + 1
+			if updates[i].Message != nil {
+				go b.handleUpdate(ctx, updates[i].Message)
+			}
 		}
 	}
 }
 
-// handleUpdate handles a single update
-func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
-	msg := update.Message
-	if msg == nil {
-		return
-	}
-
+// handleUpdate handles a single incoming message
+func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 	text := msg.Text
 	var media []string
 
@@ -137,7 +154,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 	if len(msg.Photo) > 0 {
 		// Get the largest photo (last in array)
 		photo := msg.Photo[len(msg.Photo)-1]
-		if path, err := b.downloadFile(photo.FileID, "photo"); err == nil {
+		if path, err := b.downloadFile(photo.FileId, "photo"); err == nil {
 			media = append(media, path)
 		} else {
 			b.logger.Warn("download photo failed", "error", err)
@@ -151,7 +168,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 
 	// Handle voice messages
 	if msg.Voice != nil {
-		if path, err := b.downloadFile(msg.Voice.FileID, "voice"); err == nil {
+		if path, err := b.downloadFile(msg.Voice.FileId, "voice"); err == nil {
 			media = append(media, path)
 		} else {
 			b.logger.Warn("download voice failed", "error", err)
@@ -172,7 +189,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 
 	// Handle document messages
 	if msg.Document != nil {
-		if path, err := b.downloadFile(msg.Document.FileID, "doc"); err == nil {
+		if path, err := b.downloadFile(msg.Document.FileId, "doc"); err == nil {
 			media = append(media, path)
 		} else {
 			b.logger.Warn("download document failed", "error", err)
@@ -189,15 +206,23 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
+	// For Forum Topics (supergroups with topics enabled), include thread ID in
+	// ChatID so each topic gets its own isolated session.
+	chatID := fmt.Sprintf("%d", msg.Chat.Id)
+	threadID := msg.MessageThreadId
+	if msg.IsTopicMessage && threadID != 0 {
+		chatID = fmt.Sprintf("%d:%d", msg.Chat.Id, threadID)
+	}
+
 	routerMsg := &router.Message{
 		Platform:  "telegram",
-		ChatID:    fmt.Sprintf("%d", msg.Chat.ID),
-		UserID:    fmt.Sprintf("%d", msg.From.ID),
-		Username:  msg.From.UserName,
+		ChatID:    chatID,
+		UserID:    fmt.Sprintf("%d", msg.From.Id),
+		Username:  msg.From.Username,
 		Text:      text,
 		Media:     media,
-		Timestamp: time.Unix(int64(msg.Date), 0),
-		Raw:       update,
+		Timestamp: time.Unix(msg.Date, 0),
+		Raw:       msg,
 	}
 
 	// Extract reply context if this message is a reply
@@ -210,7 +235,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 			var replyUser string
 			var isBot bool
 			if msg.ReplyToMessage.From != nil {
-				replyUser = msg.ReplyToMessage.From.UserName
+				replyUser = msg.ReplyToMessage.From.Username
 				if replyUser == "" {
 					replyUser = msg.ReplyToMessage.From.FirstName
 				}
@@ -238,11 +263,14 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 			return
 		}
 
-		reply := tgbotapi.NewMessage(msg.Chat.ID, newPortion)
+		opts := &gotgbot.SendMessageOpts{}
 		if st.IsFirstChunk() {
-			reply.ReplyToMessageID = msg.MessageID
+			opts.ReplyParameters = &gotgbot.ReplyParameters{MessageId: msg.MessageId}
 		}
-		if _, err := b.api.Send(reply); err != nil {
+		if threadID != 0 {
+			opts.MessageThreadId = threadID
+		}
+		if _, err := b.api.SendMessage(msg.Chat.Id, newPortion, opts); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
@@ -252,8 +280,11 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 	// Start periodic typing indicator (Telegram typing expires after ~5s)
 	typingDone := make(chan struct{})
 	go func() {
-		action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
-		if _, err := b.api.Send(action); err != nil {
+		opts := &gotgbot.SendChatActionOpts{}
+		if threadID != 0 {
+			opts.MessageThreadId = threadID
+		}
+		if _, err := b.api.SendChatAction(msg.Chat.Id, "typing", opts); err != nil {
 			b.logger.Debug("send typing failed", "error", err)
 		}
 		ticker := time.NewTicker(4 * time.Second)
@@ -265,8 +296,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				action := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
-				if _, err := b.api.Send(action); err != nil {
+				if _, err := b.api.SendChatAction(msg.Chat.Id, "typing", opts); err != nil {
 					b.logger.Debug("send typing failed", "error", err)
 				}
 			}
@@ -277,6 +307,16 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 	close(typingDone)
 	if err != nil {
 		b.logger.Warn("handler error", "error", err)
+		// Notify user for non-auth errors so the bot doesn't go silent
+		if err != security.ErrNotAuthorized && err != security.ErrAccountLocked {
+			errOpts := &gotgbot.SendMessageOpts{ReplyParameters: &gotgbot.ReplyParameters{MessageId: msg.MessageId}}
+			if threadID != 0 {
+				errOpts.MessageThreadId = threadID
+			}
+			if _, sendErr := b.api.SendMessage(msg.Chat.Id, "⚠️ "+err.Error(), errOpts); sendErr != nil {
+				b.logger.Debug("send error msg failed", "error", sendErr)
+			}
+		}
 		return
 	}
 
@@ -290,22 +330,33 @@ func (b *Bot) handleUpdate(ctx context.Context, update *tgbotapi.Update) {
 		return
 	}
 
-	reply := tgbotapi.NewMessage(msg.Chat.ID, finalText)
-	reply.ParseMode = "Markdown"
+	opts := &gotgbot.SendMessageOpts{ParseMode: "Markdown"}
 	if !st.Streamed() {
-		reply.ReplyToMessageID = msg.MessageID
+		opts.ReplyParameters = &gotgbot.ReplyParameters{MessageId: msg.MessageId}
 	}
-	if _, err := b.api.Send(reply); err != nil {
+	if threadID != 0 {
+		opts.MessageThreadId = threadID
+	}
+	if _, err := b.api.SendMessage(msg.Chat.Id, finalText, opts); err != nil {
 		if st.Streamed() {
 			// Markdown parse may fail on partial chunk — retry without
-			reply.ParseMode = ""
-			if _, err := b.api.Send(reply); err != nil {
+			opts.ParseMode = ""
+			if _, err := b.api.SendMessage(msg.Chat.Id, finalText, opts); err != nil {
 				b.logger.Error("stream: send final failed", "error", err)
 			}
 		} else {
 			b.logger.Error("send failed", "error", err)
 		}
 	}
+}
+
+// parseChatID parses "groupID" or "groupID:threadID" format.
+func parseChatID(chatID string) (groupID int64, threadID int64) {
+	fmt.Sscanf(chatID, "%d:%d", &groupID, &threadID) //nolint:errcheck
+	if groupID == 0 {
+		fmt.Sscanf(chatID, "%d", &groupID) //nolint:errcheck
+	}
+	return
 }
 
 // maxDownloadSize is the maximum file size for Telegram downloads (20MB matches Telegram's limit)
@@ -326,13 +377,13 @@ func (b *Bot) downloadFile(fileID, prefix string) (string, error) {
 		return "", fmt.Errorf("downloads dir not configured")
 	}
 
-	file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: fileID})
+	file, err := b.api.GetFile(fileID, nil)
 	if err != nil {
 		return "", fmt.Errorf("get file: %w", err)
 	}
 
-	// Build download URL (token is embedded by Telegram API — use dedicated client, never log this URL)
-	fileURL := file.Link(b.api.Token)
+	// Build download URL (token is embedded — use dedicated client, never log this URL)
+	fileURL := file.URL(b.api, nil)
 
 	client := util.NewHTTPClient(60 * time.Second)
 	resp, err := client.Get(fileURL)
@@ -372,9 +423,4 @@ func (b *Bot) downloadFile(fileID, prefix string) (string, error) {
 	}
 
 	return localPath, nil
-}
-
-// GetBotInfo returns bot information
-func (b *Bot) GetBotInfo() *tgbotapi.User {
-	return &b.api.Self
 }
