@@ -257,7 +257,9 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 
 	chatID := evt.Info.Chat.String()
-	userID := evt.Info.Sender.String()
+	// ToNonAD strips the device suffix (e.g. "628...:5@s.whatsapp.net" → "628...@s.whatsapp.net")
+	// so it matches the JID stored in config and correctly identifies DMs vs groups.
+	userID := evt.Info.Sender.ToNonAD().String()
 
 	msg := &router.Message{
 		Platform:  "whatsapp",
@@ -306,7 +308,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 
 	response, err := handler(ctx, msg)
 	if err != nil {
-		b.logger.Debug("handler error", "error", err)
+		b.logger.Warn("handler error", "error", err)
 		return
 	}
 
