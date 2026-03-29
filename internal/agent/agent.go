@@ -369,11 +369,17 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		// Build request with phase-aware model selection
 		req := m.buildRequest(sess, message, media, count)
 
+		// effectiveModel reflects what the CLI provider will actually use:
+		// req.Model if set, otherwise the CLI provider's built-in default ("sonnet").
+		effectiveModel := req.Model
+		if effectiveModel == "" {
+			effectiveModel = "sonnet"
+		}
 		m.logger.Debug("executing agent",
 			"agent", sess.Agent, "dir", sess.Dir,
 			"attempt", attempt, "msg_count", count,
 			"streaming", streaming,
-			"model", req.Model,
+			"model", effectiveModel,
 			"effort", req.Effort,
 			"continue", count > 0,
 			"plan_delegate", m.config.PlanDelegate,
