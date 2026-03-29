@@ -10,6 +10,7 @@ import (
 
 	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/hooks"
+	"github.com/kusa/magabot/internal/util"
 )
 
 func newLogger() *slog.Logger {
@@ -335,7 +336,7 @@ func TestFire_Timeout(t *testing.T) {
 	}
 
 	hooksConfig := []config.HookConfig{
-		{Name: "timeout-hook", Event: "on_start", Command: command, Timeout: 1},
+		{Name: "timeout-hook", Event: "on_start", Command: command, Timeout: util.NewDuration(time.Second)},
 	}
 	m := hooks.NewManager(hooksConfig, newLogger())
 
@@ -355,7 +356,7 @@ func TestFire_LargeOutput(t *testing.T) {
 	}
 
 	hooksConfig := []config.HookConfig{
-		{Name: "large-output", Event: "on_start", Command: command, Timeout: 10},
+		{Name: "large-output", Event: "on_start", Command: command, Timeout: util.NewDuration(10 * time.Second)},
 	}
 	m := hooks.NewManager(hooksConfig, newLogger())
 
