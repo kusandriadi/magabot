@@ -347,12 +347,12 @@ type BackupConfig struct {
 
 // HookConfig defines an event-driven shell command hook.
 type HookConfig struct {
-	Name      string   `yaml:"name"`
-	Event     string   `yaml:"event"` // pre_message, post_response, on_command, on_start, on_stop, on_error
-	Command   string   `yaml:"command"`
+	Name      string        `yaml:"name"`
+	Event     string        `yaml:"event"` // pre_message, post_response, on_command, on_start, on_stop, on_error
+	Command   string        `yaml:"command"`
 	Timeout   util.Duration `yaml:"timeout,omitempty"`   // default "10s"
-	Platforms []string `yaml:"platforms,omitempty"` // empty = all platforms
-	Async     bool     `yaml:"async,omitempty"`     // fire-and-forget
+	Platforms []string      `yaml:"platforms,omitempty"` // empty = all platforms
+	Async     bool          `yaml:"async,omitempty"`     // fire-and-forget
 }
 
 // AgentConfig holds coding agent session settings
@@ -411,14 +411,14 @@ type PluginConfig struct {
 
 // EmbeddingConfig holds embedding/vector settings
 type EmbeddingConfig struct {
-	Enabled      bool   `yaml:"enabled"`              // Enable embedding generation
-	Provider     string `yaml:"provider"`             // openai, voyage, cohere, local
-	APIKey       string `yaml:"api_key"`              // API key for provider // #nosec G117
-	Model        string `yaml:"model"`                // Embedding model name
-	BaseURL      string `yaml:"base_url,omitempty"`   // Custom API base URL
-	Dimensions   int    `yaml:"dimensions,omitempty"` // Output dimensions
-	MaxBatchSize int    `yaml:"max_batch_size"`       // Max texts per batch (default: 100)
-	Timeout      util.Duration `yaml:"timeout"`         // API timeout, e.g. "30s"
+	Enabled      bool          `yaml:"enabled"`              // Enable embedding generation
+	Provider     string        `yaml:"provider"`             // openai, voyage, cohere, local
+	APIKey       string        `yaml:"api_key"`              // API key for provider // #nosec G117
+	Model        string        `yaml:"model"`                // Embedding model name
+	BaseURL      string        `yaml:"base_url,omitempty"`   // Custom API base URL
+	Dimensions   int           `yaml:"dimensions,omitempty"` // Output dimensions
+	MaxBatchSize int           `yaml:"max_batch_size"`       // Max texts per batch (default: 100)
+	Timeout      util.Duration `yaml:"timeout"`              // API timeout, e.g. "30s"
 	// Memory integration
 	AutoEmbed   bool `yaml:"auto_embed"`   // Auto-generate embeddings for memories
 	SearchLimit int  `yaml:"search_limit"` // Default search result limit (default: 10)

@@ -742,7 +742,7 @@ func looksLikeAgentTask(text string) bool {
 
 	// Action verbs that imply modifying something
 	actions := []string{
-		"implement", "implementasi",
+		"implement", "implementasikan",
 		"buat fitur", "bikin fitur", "tambah fitur", "add feature", "create feature",
 		"buat fungsi", "bikin fungsi", "tambah fungsi", "add function", "create function",
 		"buat method", "add method", "create method",
