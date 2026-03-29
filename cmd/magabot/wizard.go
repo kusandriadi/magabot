@@ -864,6 +864,10 @@ func generateWizardConfig(state *WizardState) string {
 	fmt.Fprintf(&b, "  file: \"%s\"\n", logFile)
 	b.WriteString("  redact_messages: true\n\n")
 
+	// Media
+	b.WriteString("media:\n")
+	b.WriteString("  retention_days: 60\n\n")
+
 	// Session
 	b.WriteString("session:\n")
 	b.WriteString("  max_history: 200\n\n")

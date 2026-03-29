@@ -53,6 +53,9 @@ type Config struct {
 	// Storage settings
 	Storage StorageConfig `yaml:"storage"`
 
+	// Media settings (downloaded files retention)
+	Media MediaConfig `yaml:"media"`
+
 	// Paths settings
 	Paths PathsConfig `yaml:"paths"`
 
@@ -314,6 +317,11 @@ type StorageConfig struct {
 	Backup   BackupConfig `yaml:"backup"`
 }
 
+// MediaConfig holds settings for downloaded media files.
+type MediaConfig struct {
+	RetentionDays int `yaml:"retention_days"` // days to keep downloaded files; 0 = keep forever
+}
+
 // PathsConfig holds directory paths
 type PathsConfig struct {
 	DataDir      string `yaml:"data_dir"`      // Base data directory (default: ~/.magabot/data)
@@ -531,6 +539,11 @@ func (c *Config) setDefaults() {
 		c.Paths.DownloadsDir = filepath.Join(c.Paths.DataDir, "downloads")
 	}
 	c.Paths.DownloadsDir = expandPath(c.Paths.DownloadsDir)
+
+	// Media defaults
+	if c.Media.RetentionDays == 0 {
+		c.Media.RetentionDays = 60
+	}
 
 	// Skills defaults
 	if c.Skills.Dir == "" {
