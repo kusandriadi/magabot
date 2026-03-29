@@ -156,7 +156,7 @@ func setupVoice() {
 	fmt.Println()
 
 	if !askYesNo(reader, "Continue?", true) {
-		fmt.Println("Cancelled.")
+		fmt.Println("Canceled.")
 		return
 	}
 
