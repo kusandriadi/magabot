@@ -240,11 +240,16 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 		Raw:       msg,
 	}
 
-	// Extract reply context if this message is a reply
+	// Extract reply context if this message is a reply.
+	// Prefer quoted text (user-selected portion) over full message text.
 	if msg.ReplyToMessage != nil {
 		replyText := msg.ReplyToMessage.Text
 		if replyText == "" {
 			replyText = msg.ReplyToMessage.Caption
+		}
+		// In newer Telegram clients, the user may select a specific portion to quote.
+		if msg.Quote != nil && msg.Quote.Text != "" {
+			replyText = msg.Quote.Text
 		}
 		if replyText != "" {
 			var replyUser string
@@ -256,6 +261,34 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 				}
 				isBot = msg.ReplyToMessage.From.IsBot
 			}
+			routerMsg.ReplyTo = &router.ReplyContext{
+				Text:     replyText,
+				Username: replyUser,
+				IsBot:    isBot,
+			}
+		}
+	} else if msg.ExternalReply != nil {
+		// Reply to a message from a linked channel or different chat.
+		// Full text is unavailable; use the quoted portion if the user selected one.
+		replyText := ""
+		if msg.Quote != nil {
+			replyText = msg.Quote.Text
+		}
+		origin := msg.ExternalReply.Origin.MergeMessageOrigin()
+		replyUser := origin.SenderUserName
+		var isBot bool
+		if origin.SenderUser != nil {
+			replyUser = origin.SenderUser.Username
+			if replyUser == "" {
+				replyUser = origin.SenderUser.FirstName
+			}
+			isBot = origin.SenderUser.IsBot
+		} else if origin.Chat != nil {
+			replyUser = origin.Chat.Title
+		} else if origin.SenderChat != nil {
+			replyUser = origin.SenderChat.Title
+		}
+		if replyText != "" || replyUser != "" {
 			routerMsg.ReplyTo = &router.ReplyContext{
 				Text:     replyText,
 				Username: replyUser,
