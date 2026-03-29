@@ -58,6 +58,7 @@ type Session struct {
 	ChatID       string
 	UserID       string
 	MsgCount     int                         // tracks messages sent (for --continue)
+	StartTime    time.Time                   // when the session was created
 	LastActivity time.Time                   // last Execute() call (for idle timeout)
 	cli          *provider.ClaudeCLIProvider // Claude CLI provider (nil for non-Claude agents)
 }
@@ -169,6 +170,7 @@ func (m *Manager) NewSession(platform, chatID, userID, agent, dir string) (*Sess
 		Platform:     platform,
 		ChatID:       chatID,
 		UserID:       userID,
+		StartTime:    time.Now(),
 		LastActivity: time.Now(),
 	}
 
@@ -560,12 +562,16 @@ func (s *Session) GetLastActivity() time.Time {
 	return s.LastActivity
 }
 
+// GetStartTime returns the session's creation timestamp (thread-safe).
+func (s *Session) GetStartTime() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.StartTime
+}
+
 // idleCleanupLoop periodically sweeps idle sessions.
 func (m *Manager) idleCleanupLoop() {
-	interval := time.Duration(m.config.SessionTimeout) * time.Second / 6
-	if interval < time.Minute {
-		interval = time.Minute
-	}
+	interval := time.Minute
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 

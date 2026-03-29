@@ -144,7 +144,7 @@ func runDaemon() {
 		SystemPrompt:    cfg.LLM.SystemPrompt,
 		MaxInput:        cfg.LLM.MaxInputLength,
 		MaxContextChars: cfg.LLM.MaxContextChars,
-		Timeout:         time.Duration(cfg.LLM.Timeout) * time.Second,
+		Timeout:         cfg.LLM.Timeout.Duration(),
 		RateLimit:       cfg.LLM.RateLimit,
 		Logger:          logger.With("component", "llm"),
 	}
@@ -228,9 +228,9 @@ func runDaemon() {
 
 	// Initialize agent session manager
 	agentMgr := agent.NewManager(agent.Config{
-		Timeout:        cfg.Agent.Timeout,
+		Timeout:        cfg.Agent.Timeout.Seconds(),
 		MaxRetries:     cfg.Agent.MaxRetries,
-		SessionTimeout: cfg.Agent.SessionTimeout,
+		SessionTimeout: cfg.Agent.SessionTimeout.Seconds(),
 		Shortcuts:      cfg.Agent.Shortcuts,
 		DiscoverDepth:  cfg.Agent.DiscoverDepth,
 		PlanDelegate:   cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
@@ -315,6 +315,16 @@ func runDaemon() {
 			return routeToAgent(ctx, msg, agentMgr, func(text string) {
 				_ = rtr.Send(msg.Platform, msg.ChatID, text)
 			}, llmRouter)
+		}
+
+		// If the message looks like a coding implementation task, short-circuit before
+		// calling the LLM — agent mode is required for file edits and the LLM cannot do them.
+		isAdmin := cfg.IsPlatformAdmin(msg.Platform, msg.UserID)
+		if looksLikeAgentTask(msg.Text) {
+			if isAdmin {
+				return "💡 This task requires direct file editing. Start an agent session with `:new <directory>`.", nil
+			}
+			return "⚠️ This request requires agent mode which requires admin access.", nil
 		}
 
 		// Check if first-time user
@@ -722,6 +732,37 @@ func transcribeAudioFile(path string) (string, error) {
 		return "", fmt.Errorf("transcribe-voice: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// looksLikeAgentTask returns true if the message appears to be a request
+// to implement, create, edit, or otherwise modify code/files on the system.
+// These tasks require agent mode since the LLM has no file-editing tools.
+func looksLikeAgentTask(text string) bool {
+	lower := strings.ToLower(text)
+
+	// Action verbs that imply modifying something
+	actions := []string{
+		"implement", "implementasi",
+		"buat fitur", "bikin fitur", "tambah fitur", "add feature", "create feature",
+		"buat fungsi", "bikin fungsi", "tambah fungsi", "add function", "create function",
+		"buat method", "add method", "create method",
+		"buat class", "add class", "create class",
+		"edit file", "ubah file", "modify file", "update file", "change file",
+		"edit kode", "ubah kode", "modify code", "update code", "change code", "edit code",
+		"fix bug", "perbaiki bug", "fix the bug", "debug dan fix",
+		"refactor", "restructure", "reorganize",
+		"hapus file", "delete file", "remove file",
+		"hapus fungsi", "delete function", "remove function",
+		"rename file", "move file", "pindah file",
+		"tulis kode", "write the code", "write code for",
+		"buat script", "bikin script", "create script", "write script",
+	}
+	for _, a := range actions {
+		if strings.Contains(lower, a) {
+			return true
+		}
+	}
+	return false
 }
 
 // isAudioFile returns true if the file extension is a known audio format.
@@ -1585,7 +1626,7 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 
 		switch len(parts) {
 		case 1:
-			return "Usage: :new [agent] <directory>\nAgents: claude, codex", nil
+			dir = "~"
 		case 2:
 			dir = parts[1]
 		default:
@@ -1621,8 +1662,18 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 		if sess == nil {
 			return "No active agent session.", nil
 		}
+		duration := time.Since(sess.GetStartTime()).Truncate(time.Second)
 		idle := time.Since(sess.GetLastActivity()).Truncate(time.Second)
-		return fmt.Sprintf("Agent: %s\nDirectory: %s\nMessages: %d\nIdle: %s", sess.Agent, sess.Dir, sess.GetMsgCount(), idle), nil
+		timeoutInfo := "disabled"
+		if !cfg.Agent.SessionTimeout.IsZero() {
+			remaining := cfg.Agent.SessionTimeout.Duration() - idle
+			if remaining < 0 {
+				remaining = 0
+			}
+			timeoutInfo = fmt.Sprintf("%s (closes in %s)", cfg.Agent.SessionTimeout.Duration(), remaining.Truncate(time.Second))
+		}
+		return fmt.Sprintf("Agent: %s\nDirectory: %s\nMessages: %d\nDuration: %s\nIdle: %s\nIdle timeout: %s",
+			sess.Agent, sess.Dir, sess.GetMsgCount(), duration, idle, timeoutInfo), nil
 
 	default:
 		return fmt.Sprintf("Unknown agent command: %s\nAvailable: :new, :quit, :status", cmd), nil

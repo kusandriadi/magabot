@@ -878,7 +878,7 @@ func generateWizardConfig(state *WizardState) string {
 	b.WriteString("  system_prompt: |\n")
 	b.WriteString("    You are a helpful AI assistant. Be concise and friendly.\n")
 	b.WriteString("  max_input_length: 10000\n")
-	b.WriteString("  timeout: 120\n")
+	b.WriteString("  timeout: 2m\n")
 	b.WriteString("  max_context_chars: 250000\n")
 	b.WriteString("  rate_limit: 10\n\n")
 
@@ -970,9 +970,9 @@ func generateWizardConfig(state *WizardState) string {
 	// Agent
 	b.WriteString("agent:\n")
 	b.WriteString("  plan_delegate: true\n")
-	b.WriteString("  timeout: 300\n")
+	b.WriteString("  timeout: 5m\n")
 	b.WriteString("  max_retries: 2\n")
-	b.WriteString("  session_timeout: 21600\n")
+	b.WriteString("  session_timeout: 6h\n")
 	b.WriteString("  discover_depth: 3\n")
 
 	return b.String()

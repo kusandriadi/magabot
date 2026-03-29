@@ -163,7 +163,7 @@ func shellCommand(command string) (string, []string) {
 // executeHook runs a single hook command with event data on stdin.
 // Returns trimmed stdout and any execution error.
 func (m *Manager) executeHook(h config.HookConfig, data *EventData) (string, error) {
-	timeout := time.Duration(h.Timeout) * time.Second
+	timeout := h.Timeout.Duration()
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}

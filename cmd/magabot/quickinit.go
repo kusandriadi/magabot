@@ -212,7 +212,7 @@ func buildInitConfig(cfg *envConfig) string {
 	fmt.Fprintf(&b, "  default: \"%s\"\n", cfg.defaultProvider())
 	b.WriteString("  system_prompt: \"You are a helpful AI assistant. Be concise and friendly.\"\n")
 	b.WriteString("  max_input_length: 10000\n")
-	b.WriteString("  timeout: 120\n")
+	b.WriteString("  timeout: 2m\n")
 	b.WriteString("  max_context_chars: 250000\n")
 	b.WriteString("  rate_limit: 10\n\n")
 
@@ -309,7 +309,7 @@ func buildInitConfig(cfg *envConfig) string {
 	// Agent Sessions
 	b.WriteString("agent:\n")
 	b.WriteString("  plan_delegate: true\n")
-	b.WriteString("  timeout: 300\n")
+	b.WriteString("  timeout: 5m\n")
 	b.WriteString("  max_retries: 2\n")
 	b.WriteString("  discover_depth: 3\n\n")
 

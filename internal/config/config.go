@@ -189,7 +189,7 @@ type LLMConfig struct {
 	Providers          ProvidersConfig `yaml:"providers,omitempty"` // Alternative structure
 	SystemPrompt       string          `yaml:"system_prompt"`
 	MaxInputLength     int             `yaml:"max_input_length"`
-	Timeout            int             `yaml:"timeout"`           // seconds; idle timeout per chunk during streaming
+	Timeout            util.Duration   `yaml:"timeout"`           // idle timeout per chunk during streaming, e.g. "60s"
 	MaxContextChars    int             `yaml:"max_context_chars"` // max total chars sent to LLM (trims oldest messages)
 	RateLimit          int             `yaml:"rate_limit"`
 	MaxContextTokens   int             `yaml:"max_context_tokens"`
@@ -248,7 +248,7 @@ type CronConfig struct {
 // HeartbeatConfig holds heartbeat settings
 type HeartbeatConfig struct {
 	Enabled  bool          `yaml:"enabled"`
-	Interval time.Duration `yaml:"interval"` // e.g., 30m
+	Interval util.Duration `yaml:"interval"` // e.g. "30m"
 	Targets  []CronTarget  `yaml:"targets"`  // Where to send alerts
 }
 
@@ -262,8 +262,8 @@ type MemoryConfig struct {
 // SessionConfig holds session settings
 type SessionConfig struct {
 	MaxHistory  int           `yaml:"max_history"`  // Max messages per session
-	TaskTimeout time.Duration `yaml:"task_timeout"` // Timeout for background tasks
-	CleanupAge  time.Duration `yaml:"cleanup_age"`  // When to cleanup old sessions
+	TaskTimeout util.Duration `yaml:"task_timeout"` // Timeout for background tasks, e.g. "10m"
+	CleanupAge  util.Duration `yaml:"cleanup_age"`  // When to cleanup old sessions, e.g. "24h"
 }
 
 // CronJob defines a scheduled job
@@ -350,16 +350,16 @@ type HookConfig struct {
 	Name      string   `yaml:"name"`
 	Event     string   `yaml:"event"` // pre_message, post_response, on_command, on_start, on_stop, on_error
 	Command   string   `yaml:"command"`
-	Timeout   int      `yaml:"timeout,omitempty"`   // seconds, default 10
+	Timeout   util.Duration `yaml:"timeout,omitempty"`   // default "10s"
 	Platforms []string `yaml:"platforms,omitempty"` // empty = all platforms
 	Async     bool     `yaml:"async,omitempty"`     // fire-and-forget
 }
 
 // AgentConfig holds coding agent session settings
 type AgentConfig struct {
-	Timeout        int               `yaml:"timeout"`         // seconds per attempt, default 300
+	Timeout        util.Duration     `yaml:"timeout"`         // per-attempt timeout, e.g. "5m"
 	MaxRetries     int               `yaml:"max_retries"`     // auto-retry on timeout, default 2
-	SessionTimeout int               `yaml:"session_timeout"` // idle session timeout in seconds (0 = disabled, default 21600 = 6h)
+	SessionTimeout util.Duration     `yaml:"session_timeout"` // idle session timeout, e.g. "6h" (0 = disabled)
 	Shortcuts      map[string]string `yaml:"shortcuts"`       // directory shortcuts, e.g. "myproject": "~/code/myproject"
 	DiscoverDepth  int               `yaml:"discover_depth"`  // auto-discover search depth (default 3)
 	PlanDelegate   *bool             `yaml:"plan_delegate"`   // plan first, then delegate to subagents (default: true)
@@ -394,7 +394,7 @@ type SubAgentConfig struct {
 	MaxAgents  int           `yaml:"max_agents"`  // Max concurrent agents (default: 50)
 	MaxDepth   int           `yaml:"max_depth"`   // Max nesting depth (default: 5)
 	MaxHistory int           `yaml:"max_history"` // Max messages per agent (default: 100)
-	Timeout    time.Duration `yaml:"timeout"`     // Default task timeout (default: 5m)
+	Timeout    util.Duration `yaml:"timeout"`     // Default task timeout, e.g. "5m"
 	Persist    bool          `yaml:"persist"`     // Persist agent state across restarts
 }
 
@@ -418,7 +418,7 @@ type EmbeddingConfig struct {
 	BaseURL      string `yaml:"base_url,omitempty"`   // Custom API base URL
 	Dimensions   int    `yaml:"dimensions,omitempty"` // Output dimensions
 	MaxBatchSize int    `yaml:"max_batch_size"`       // Max texts per batch (default: 100)
-	Timeout      int    `yaml:"timeout"`              // API timeout in seconds (default: 30)
+	Timeout      util.Duration `yaml:"timeout"`         // API timeout, e.g. "30s"
 	// Memory integration
 	AutoEmbed   bool `yaml:"auto_embed"`   // Auto-generate embeddings for memories
 	SearchLimit int  `yaml:"search_limit"` // Default search result limit (default: 10)
@@ -554,14 +554,14 @@ func (c *Config) setDefaults() {
 	// (already false by default, set explicitly if needed)
 
 	// Agent defaults
-	if c.Agent.Timeout <= 0 {
-		c.Agent.Timeout = 300
+	if c.Agent.Timeout.IsZero() {
+		c.Agent.Timeout = util.NewDuration(5 * time.Minute)
 	}
 	if c.Agent.MaxRetries <= 0 {
 		c.Agent.MaxRetries = 2
 	}
-	if c.Agent.SessionTimeout == 0 {
-		c.Agent.SessionTimeout = 21600 // 6 hours
+	if c.Agent.SessionTimeout.IsZero() {
+		c.Agent.SessionTimeout = util.NewDuration(6 * time.Hour)
 	}
 	// Temperature defaults (0.5 for all providers)
 	for _, p := range []*LLMProviderConfig{
@@ -601,8 +601,8 @@ func (c *Config) setDefaults() {
 	if c.SubAgents.MaxHistory <= 0 {
 		c.SubAgents.MaxHistory = 100
 	}
-	if c.SubAgents.Timeout <= 0 {
-		c.SubAgents.Timeout = 5 * time.Minute
+	if c.SubAgents.Timeout.IsZero() {
+		c.SubAgents.Timeout = util.NewDuration(5 * time.Minute)
 	}
 
 	// Plugin defaults
@@ -618,8 +618,8 @@ func (c *Config) setDefaults() {
 	if c.Embedding.MaxBatchSize <= 0 {
 		c.Embedding.MaxBatchSize = 100
 	}
-	if c.Embedding.Timeout <= 0 {
-		c.Embedding.Timeout = 30
+	if c.Embedding.Timeout.IsZero() {
+		c.Embedding.Timeout = util.NewDuration(30 * time.Second)
 	}
 	if c.Embedding.SearchLimit <= 0 {
 		c.Embedding.SearchLimit = 10
