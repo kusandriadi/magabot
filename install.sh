@@ -120,17 +120,68 @@ verify() {
     fi
 }
 
+# Install voice dependencies (optional)
+install_voice_deps() {
+    echo ""
+    info "Voice Support (optional)"
+    echo "  Enables voice-to-voice: send voice → transcribe → LLM → reply with voice"
+    echo "  Requires: faster-whisper, edge-tts, ffmpeg"
+    echo ""
+    read -r -p "Install voice dependencies? [Y/n] " reply
+    echo
+    if [[ "$reply" =~ ^[Nn]$ ]]; then
+        info "Skipping voice dependencies. Run 'magabot setup voice' later to install."
+        return
+    fi
+
+    # ffmpeg
+    if command -v ffmpeg &> /dev/null; then
+        info "ffmpeg already installed"
+    else
+        info "Installing ffmpeg..."
+        if [ "$OS" = "darwin" ]; then
+            if command -v brew &> /dev/null; then
+                brew install ffmpeg
+            else
+                warn "Homebrew not found. Install manually: brew install ffmpeg"
+            fi
+        else
+            sudo apt-get install -y ffmpeg || warn "Could not install ffmpeg. Install manually: sudo apt install ffmpeg"
+        fi
+    fi
+
+    # pip
+    PIP=$(command -v pip3 2>/dev/null || command -v pip 2>/dev/null)
+    if [ -z "$PIP" ]; then
+        warn "pip not found. Install Python 3 and pip, then run: magabot setup voice"
+        return
+    fi
+
+    info "Installing faster-whisper..."
+    $PIP install faster-whisper || warn "Could not install faster-whisper"
+
+    info "Installing edge-tts..."
+    $PIP install edge-tts || warn "Could not install edge-tts"
+
+    # Install scripts via magabot
+    info "Installing voice scripts..."
+    magabot setup voice --scripts-only 2>/dev/null || true
+
+    info "Voice dependencies installed! First use will download the Whisper model (~1.5 GB)."
+}
+
 # Main
 main() {
     echo "🤖 Magabot Installer"
     echo "===================="
     echo ""
-    
+
     detect_platform
     get_latest_version
     install_binary
     verify
-    
+    install_voice_deps
+
     echo ""
     info "Quick start:"
     echo "  magabot setup    # First-time setup"

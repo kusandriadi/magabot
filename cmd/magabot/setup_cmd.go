@@ -35,6 +35,8 @@ func cmdSetup() {
 		setupPlatform()
 	case "webhook":
 		setupWebhook()
+	case "voice":
+		setupVoice()
 	default:
 		fmt.Printf("Unknown setup target: %s\n\n", subCmd)
 		printSetupUsage()
@@ -51,12 +53,14 @@ Targets:
   llm         Configure LLM providers
   platform    Configure chat platform (Telegram/Discord/Slack/WhatsApp)
   webhook     Configure webhook endpoint
+  voice       Install voice dependencies (faster-whisper, edge-tts, ffmpeg)
 
 Examples:
   magabot setup            # Full wizard
   magabot setup llm        # Setup LLM providers
   magabot setup platform   # Setup chat platform
-  magabot setup webhook    # Setup webhook endpoint`)
+  magabot setup webhook    # Setup webhook endpoint
+  magabot setup voice      # Install voice support`)
 }
 
 // setupPlatform asks which platform to configure
