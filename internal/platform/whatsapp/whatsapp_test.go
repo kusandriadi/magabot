@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -31,13 +32,15 @@ func TestSaveVoice(t *testing.T) {
 		t.Errorf("file content mismatch")
 	}
 
-	// Permissions should be 0600
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("file permissions = %o, want 0600", info.Mode().Perm())
+	// Permissions should be 0600 (skip on Windows — permission bits aren't meaningful)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0600 {
+			t.Errorf("file permissions = %o, want 0600", info.Mode().Perm())
+		}
 	}
 
 	// Filename should have .ogg extension
