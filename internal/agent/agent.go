@@ -358,7 +358,7 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		count := sess.GetMsgCount()
 		sess.cli.SetContinue(count > 0)
 
-		if m.config.PlanDelegate && count == 0 {
+		if m.config.PlanDelegate {
 			sess.cli.SetAppendPrompt(planDelegatePrompt)
 		} else {
 			sess.cli.SetAppendPrompt("")
@@ -371,6 +371,11 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 			"agent", sess.Agent, "dir", sess.Dir,
 			"attempt", attempt, "msg_count", count,
 			"streaming", streaming,
+			"model", req.Model,
+			"effort", req.Effort,
+			"continue", count > 0,
+			"plan_delegate", m.config.PlanDelegate,
+			"append_system_prompt", appendPromptPreview(m.config.PlanDelegate),
 		)
 
 		var partial string
@@ -605,6 +610,18 @@ func (m *Manager) sweepIdleSessions() {
 					sess.Agent, sess.Dir, timeout.Truncate(time.Second)))
 		}
 	}
+}
+
+// appendPromptPreview returns a truncated preview of planDelegatePrompt for logging.
+func appendPromptPreview(enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	const max = 80
+	if len(planDelegatePrompt) <= max {
+		return planDelegatePrompt
+	}
+	return planDelegatePrompt[:max] + "…"
 }
 
 // planDelegatePrompt instructs Claude to plan first, then delegate to subagents.
