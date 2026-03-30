@@ -61,7 +61,7 @@ func (s *ServerStats) readMemory() {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	vals := make(map[string]uint64)
 	scanner := bufio.NewScanner(f)
