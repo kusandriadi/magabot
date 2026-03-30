@@ -269,7 +269,7 @@ func TestExecuteTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err = mgr.Execute(ctx, sess, "Long running task", nil, nil)
+	_, err = mgr.Execute(ctx, sess, "Long running task", nil, nil, nil)
 	// Should timeout or error
 	if err == nil {
 		t.Log("Execute completed (may have returned quickly)")

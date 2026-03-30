@@ -327,19 +327,21 @@ func (m *Manager) CloseSession(platform, chatID string) {
 // Execute runs a message through the agent and returns the output.
 // For Claude agents, uses allm-go ClaudeCLIProvider. For Codex, uses direct exec.
 // On timeout, it automatically retries with --continue up to MaxRetries times.
-func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string)) (string, error) {
+// keepalive, if non-nil, resets the idle timer whenever a value is received —
+// use this to extend the timeout when the caller sends progress messages to the user.
+func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), keepalive <-chan struct{}) (string, error) {
 	sess.Touch()
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	maxRetries := m.config.MaxRetries
 
 	if sess.Agent == AgentClaude && sess.cli != nil {
-		return m.executeClaude(ctx, sess, message, media, onProgress, timeout, maxRetries)
+		return m.executeClaude(ctx, sess, message, media, onProgress, keepalive, timeout, maxRetries)
 	}
 	return m.executeCodex(ctx, sess, message, timeout)
 }
 
 // executeClaude runs a message through Claude CLI via allm-go provider.
-func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), timeout time.Duration, maxRetries int) (string, error) {
+func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), keepalive <-chan struct{}, timeout time.Duration, maxRetries int) (string, error) {
 	streaming := onProgress != nil
 
 	var allOutput []string
@@ -390,7 +392,7 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		var err error
 
 		if streaming {
-			partial, err = m.streamClaude(attemptCtx, sess, req, onProgress, idle, timeout)
+			partial, err = m.streamClaude(attemptCtx, sess, req, onProgress, keepalive, idle, timeout)
 		} else {
 			var resp *allm.Response
 			resp, err = sess.cli.Complete(attemptCtx, req)
@@ -489,8 +491,26 @@ func (m *Manager) buildRequest(sess *Session, message string, media []string, co
 }
 
 // streamClaude reads streaming output from Claude CLI via allm-go.
-func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Request, onProgress func(string), idle *time.Timer, timeout time.Duration) (string, error) {
+func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Request, onProgress func(string), keepalive <-chan struct{}, idle *time.Timer, timeout time.Duration) (string, error) {
 	ch := sess.cli.Stream(ctx, req)
+
+	// When the caller sends a progress message to the user (keepalive signal),
+	// reset the idle timer so we don't time out while actively communicating.
+	if keepalive != nil && idle != nil {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case _, ok := <-keepalive:
+					if !ok {
+						return
+					}
+					idle.Reset(timeout)
+				}
+			}
+		}()
+	}
 
 	var textContent strings.Builder
 	var lastNotify time.Time

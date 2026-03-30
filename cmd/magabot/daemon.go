@@ -1719,6 +1719,11 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		notify(text)
 	}
 
+	// keepalive signals the agent to reset its idle timer whenever we send a
+	// progress message, so the timeout doesn't fire while the bot is actively
+	// communicating with the user.
+	keepalive := make(chan struct{}, 1)
+
 	// Send periodic status updates so user knows agent is still working.
 	// Only fires if no tool-use notification was sent recently.
 	statusDone := make(chan struct{})
@@ -1745,11 +1750,16 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 					t = agent.DefaultTemplates["still_working"]
 				}
 				notify(strings.ReplaceAll(t, "{elapsed}", elapsed.String()))
+				// Signal agent to reset its idle timer.
+				select {
+				case keepalive <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}()
 
-	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify)
+	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify, keepalive)
 	close(statusDone)
 
 	if err != nil {
