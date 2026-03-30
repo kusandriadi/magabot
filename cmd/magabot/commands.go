@@ -13,6 +13,7 @@ import (
 	"github.com/kusa/magabot/internal/config"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/storage"
+	"github.com/kusa/magabot/internal/util"
 	"github.com/kusa/magabot/internal/version"
 	"github.com/mdp/qrterminal/v3"
 	"gopkg.in/yaml.v3"
@@ -103,6 +104,25 @@ func cmdRestart() {
 	cmdStart()
 }
 
+// getProcessPPID returns the parent PID of a process by reading /proc/<pid>/status.
+// Returns 0 if unavailable (non-Linux or permission error).
+func getProcessPPID(pid int) int {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "PPid:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				ppid, _ := strconv.Atoi(fields[1])
+				return ppid
+			}
+		}
+	}
+	return 0
+}
+
 // cmdStatus shows the daemon status
 func cmdStatus() {
 	pid := getPID()
@@ -118,7 +138,12 @@ func cmdStatus() {
 		return
 	}
 
-	fmt.Printf("🟢 Magabot is running (PID: %d)\n", pid)
+	ppid := getProcessPPID(pid)
+	if ppid > 0 {
+		fmt.Printf("🟢 Magabot is running (PID: %d, PPID: %d)\n", pid, ppid)
+	} else {
+		fmt.Printf("🟢 Magabot is running (PID: %d)\n", pid)
+	}
 	fmt.Printf("   Config: %s\n", configFile)
 	fmt.Printf("   Logs:   %s\n", logFile)
 
@@ -138,6 +163,24 @@ func cmdStatus() {
 	fmt.Printf("\n   System:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("   Version:   v%s\n", version.Short())
 	fmt.Printf("   Go:        %s\n", runtime.Version())
+
+	// Server resource usage
+	srv := util.GetServerStats()
+	fmt.Println("\n   Server:")
+	fmt.Printf("     CPU:    load %.2f / %.2f / %.2f (1/5/15m)\n", srv.LoadAvg1, srv.LoadAvg5, srv.LoadAvg15)
+	if srv.MemTotal > 0 {
+		memPct := float64(srv.MemUsed) / float64(srv.MemTotal) * 100
+		fmt.Printf("     Memory: %s / %s (%.0f%%)\n", util.FormatBytes(srv.MemUsed), util.FormatBytes(srv.MemTotal), memPct)
+	}
+	if srv.DiskTotal > 0 {
+		diskPct := float64(srv.DiskUsed) / float64(srv.DiskTotal) * 100
+		fmt.Printf("     Disk:   %s / %s (%.0f%%)\n", util.FormatBytes(srv.DiskUsed), util.FormatBytes(srv.DiskTotal), diskPct)
+	}
+	if srv.HasGPU {
+		gpuMemPct := float64(srv.GPUMemUsed) / float64(srv.GPUMemTotal) * 100
+		fmt.Printf("     GPU:    %s — %s / %s (%.0f%% mem, %d%% util)\n",
+			srv.GPUName, util.FormatBytes(srv.GPUMemUsed), util.FormatBytes(srv.GPUMemTotal), gpuMemPct, srv.GPUUtil)
+	}
 
 	// LLM
 	fmt.Println("\n   LLM:")

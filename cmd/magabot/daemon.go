@@ -282,10 +282,11 @@ func runDaemon() {
 
 	// Set message handler with LLM integration
 	rtr.SetHandler(func(ctx context.Context, msg *router.Message) (string, error) {
-		logger.Info("received message",
-			"platform", msg.Platform,
-			"user", security.HashUserID(msg.Platform, msg.UserID),
-		)
+		logArgs := []any{"platform", msg.Platform, "user", security.HashUserID(msg.Platform, msg.UserID)}
+		if msg.ReplyTo != nil {
+			logArgs = append(logArgs, "reply_to_user", msg.ReplyTo.Username, "reply_to_text", util.Truncate(msg.ReplyTo.Text, 80))
+		}
+		logger.Info("received message", logArgs...)
 
 		// Handle bot commands
 		if strings.HasPrefix(msg.Text, "/") {
@@ -862,6 +863,24 @@ Send any message and I'll reply using AI.
 		sb.WriteString(fmt.Sprintf("  • OS: %s/%s\n", runtime.GOOS, runtime.GOARCH))
 		sb.WriteString(fmt.Sprintf("  • Magabot: v%s\n", version.Short()))
 		sb.WriteString(fmt.Sprintf("  • Go: %s\n", runtime.Version()))
+		sb.WriteString(fmt.Sprintf("  • PID: %d (PPID: %d)\n", os.Getpid(), os.Getppid()))
+
+		srv := util.GetServerStats()
+		sb.WriteString("\n💻 Server:\n")
+		sb.WriteString(fmt.Sprintf("  • CPU: load %.2f / %.2f / %.2f (1/5/15m)\n", srv.LoadAvg1, srv.LoadAvg5, srv.LoadAvg15))
+		if srv.MemTotal > 0 {
+			memPct := float64(srv.MemUsed) / float64(srv.MemTotal) * 100
+			sb.WriteString(fmt.Sprintf("  • Memory: %s / %s (%.0f%%)\n", util.FormatBytes(srv.MemUsed), util.FormatBytes(srv.MemTotal), memPct))
+		}
+		if srv.DiskTotal > 0 {
+			diskPct := float64(srv.DiskUsed) / float64(srv.DiskTotal) * 100
+			sb.WriteString(fmt.Sprintf("  • Disk: %s / %s (%.0f%%)\n", util.FormatBytes(srv.DiskUsed), util.FormatBytes(srv.DiskTotal), diskPct))
+		}
+		if srv.HasGPU {
+			gpuMemPct := float64(srv.GPUMemUsed) / float64(srv.GPUMemTotal) * 100
+			sb.WriteString(fmt.Sprintf("  • GPU: %s — %s / %s (%.0f%% mem, %d%% util)\n",
+				srv.GPUName, util.FormatBytes(srv.GPUMemUsed), util.FormatBytes(srv.GPUMemTotal), gpuMemPct, srv.GPUUtil))
+		}
 
 		sb.WriteString("\n🤖 LLM:\n")
 		sb.WriteString(fmt.Sprintf("  • Provider: %s\n", llmStats["main"]))

@@ -40,7 +40,12 @@ type Config struct {
 
 // New creates a new Telegram bot
 func New(cfg *Config) (*Bot, error) {
-	api, err := gotgbot.NewBot(cfg.Token, nil)
+	api, err := gotgbot.NewBot(cfg.Token, &gotgbot.BotOpts{
+		BotClient: &gotgbot.BaseBotClient{
+			Client:             http.Client{},
+			DefaultRequestOpts: &gotgbot.RequestOpts{Timeout: 70 * time.Second},
+		},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create bot: %w", err)
 	}
@@ -251,6 +256,13 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 		if msg.Quote != nil && msg.Quote.Text != "" {
 			replyText = msg.Quote.Text
 		}
+		b.logger.Debug("reply detected",
+			"chat_id", chatID,
+			"reply_msg_id", msg.ReplyToMessage.MessageId,
+			"reply_text_len", len(replyText),
+			"has_quote", msg.Quote != nil,
+			"reply_from_nil", msg.ReplyToMessage.From == nil,
+		)
 		if replyText != "" {
 			var replyUser string
 			var isBot bool
@@ -270,6 +282,7 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 	} else if msg.ExternalReply != nil {
 		// Reply to a message from a linked channel or different chat.
 		// Full text is unavailable; use the quoted portion if the user selected one.
+		b.logger.Debug("external reply detected", "chat_id", chatID, "has_quote", msg.Quote != nil)
 		replyText := ""
 		if msg.Quote != nil {
 			replyText = msg.Quote.Text
