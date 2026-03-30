@@ -399,14 +399,10 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 		opts.MessageThreadId = threadID
 	}
 	if _, err := b.api.SendMessage(msg.Chat.Id, finalText, opts); err != nil {
-		if st.Streamed() {
-			// Markdown parse may fail on partial chunk — retry without
-			opts.ParseMode = ""
-			if _, err := b.api.SendMessage(msg.Chat.Id, finalText, opts); err != nil {
-				b.logger.Error("stream: send final failed", "error", err)
-			}
-		} else {
-			b.logger.Error("send failed", "error", err)
+		// Markdown parse may fail on LLM output — retry without parse mode
+		opts.ParseMode = ""
+		if _, err2 := b.api.SendMessage(msg.Chat.Id, finalText, opts); err2 != nil {
+			b.logger.Error("send failed (even without parse mode)", "original_error", err, "retry_error", err2)
 		}
 	}
 }
