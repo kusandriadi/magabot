@@ -513,6 +513,8 @@ func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Req
 	}
 
 	var textContent strings.Builder
+	var toolSummary []string
+	toolSeen := map[string]bool{}
 	var lastNotify time.Time
 	var lastMsg string
 	const notifyInterval = 30 * time.Second
@@ -530,13 +532,22 @@ func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Req
 			idle.Reset(timeout)
 		}
 
-		if chunk.ToolUse != nil && onProgress != nil {
-			if time.Since(lastNotify) >= notifyInterval {
-				msg := formatToolUse(chunk.ToolUse.Name, chunk.ToolUse.Input, DefaultTemplates)
-				if msg != lastMsg {
-					onProgress(msg)
-					lastNotify = time.Now()
-					lastMsg = msg
+		if chunk.ToolUse != nil {
+			// Track unique tool actions for the fallback summary
+			entry := summarizeToolUse(chunk.ToolUse.Name, chunk.ToolUse.Input)
+			if entry != "" && !toolSeen[entry] {
+				toolSeen[entry] = true
+				toolSummary = append(toolSummary, entry)
+			}
+
+			if onProgress != nil {
+				if time.Since(lastNotify) >= notifyInterval {
+					msg := formatToolUse(chunk.ToolUse.Name, chunk.ToolUse.Input, DefaultTemplates)
+					if msg != lastMsg {
+						onProgress(msg)
+						lastNotify = time.Now()
+						lastMsg = msg
+					}
 				}
 			}
 		}
@@ -546,7 +557,11 @@ func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Req
 		}
 	}
 
-	return strings.TrimSpace(textContent.String()), nil
+	result := strings.TrimSpace(textContent.String())
+	if result == "" && len(toolSummary) > 0 {
+		return "✅ Done: " + strings.Join(toolSummary, ", ") + ".", nil
+	}
+	return result, nil
 }
 
 // executeCodex runs a message through Codex via direct exec.
@@ -798,4 +813,48 @@ func formatToolUse(name string, input json.RawMessage, templates map[string]stri
 		}
 	}
 	return tpl(templates, "generic")
+}
+
+// summarizeToolUse returns a short human-readable summary of a single tool action,
+// used to build the fallback message when the agent produces no text output.
+func summarizeToolUse(name string, input json.RawMessage) string {
+	switch name {
+	case "Write":
+		var p struct {
+			FilePath string `json:"file_path"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.FilePath != "" {
+			return "created " + filepath.Base(p.FilePath)
+		}
+	case "Edit":
+		var p struct {
+			FilePath string `json:"file_path"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.FilePath != "" {
+			return "edited " + filepath.Base(p.FilePath)
+		}
+	case "Bash":
+		var p struct {
+			Description string `json:"description"`
+			Command     string `json:"command"`
+		}
+		_ = json.Unmarshal(input, &p)
+		if p.Description != "" {
+			desc := p.Description
+			if len(desc) > 60 {
+				desc = desc[:60] + "..."
+			}
+			return "ran: " + strings.ToLower(desc)
+		}
+		if p.Command != "" {
+			cmd := p.Command
+			if len(cmd) > 40 {
+				cmd = cmd[:40] + "..."
+			}
+			return "ran: " + cmd
+		}
+	}
+	return ""
 }

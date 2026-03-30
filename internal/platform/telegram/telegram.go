@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -398,13 +399,42 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 	if threadID != 0 {
 		opts.MessageThreadId = threadID
 	}
-	if _, err := b.api.SendMessage(msg.Chat.Id, finalText, opts); err != nil {
-		// Markdown parse may fail on LLM output — retry without parse mode
-		opts.ParseMode = ""
-		if _, err2 := b.api.SendMessage(msg.Chat.Id, finalText, opts); err2 != nil {
-			b.logger.Error("send failed (even without parse mode)", "original_error", err, "retry_error", err2)
+	for _, chunk := range splitMessage(finalText, telegramMaxLen) {
+		chunkOpts := *opts
+		if _, err := b.api.SendMessage(msg.Chat.Id, chunk, &chunkOpts); err != nil {
+			// Markdown parse may fail on LLM output — retry without parse mode
+			chunkOpts.ParseMode = ""
+			if _, err2 := b.api.SendMessage(msg.Chat.Id, chunk, &chunkOpts); err2 != nil {
+				b.logger.Error("send failed (even without parse mode)", "original_error", err, "retry_error", err2)
+				break
+			}
 		}
 	}
+}
+
+// telegramMaxLen is Telegram's maximum message length in characters.
+const telegramMaxLen = 4096
+
+// splitMessage splits text into chunks of at most maxLen characters,
+// preferring to break at newline boundaries.
+func splitMessage(text string, maxLen int) []string {
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+	var chunks []string
+	for len(text) > 0 {
+		if len(text) <= maxLen {
+			chunks = append(chunks, text)
+			break
+		}
+		split := maxLen
+		if idx := strings.LastIndex(text[:maxLen], "\n"); idx > maxLen/2 {
+			split = idx + 1
+		}
+		chunks = append(chunks, text[:split])
+		text = text[split:]
+	}
+	return chunks
 }
 
 // parseChatID parses "groupID" or "groupID:threadID" format.
