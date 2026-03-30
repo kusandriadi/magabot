@@ -9,98 +9,88 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build (${{ matrix.name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux
-          - goos: linux
-            goarch: amd64
-            runner: ubuntu-latest
-            name: Linux (amd64)
-            cc: gcc
-          - goos: linux
-            goarch: arm64
-            runner: ubuntu-latest
-            name: Linux (arm64)
-            cc: aarch64-linux-gnu-gcc
-            cross_pkg: gcc-aarch64-linux-gnu
-          # macOS
-          - goos: darwin
-            goarch: amd64
-            runner: macos-latest
-            name: macOS (Intel)
-            cc: clang
-          - goos: darwin
-            goarch: arm64
-            runner: macos-latest
-            name: macOS (Apple Silicon)
-            cc: clang
-          # Windows
-          - goos: windows
-            goarch: amd64
-            runner: ubuntu-latest
-            name: Windows (amd64)
-            cc: x86_64-w64-mingw32-gcc
-            cross_pkg: gcc-mingw-w64-x86-64
-
-    runs-on: ${{ matrix.runner }}
-
+  build-linux-windows:
+    name: Build (Linux + Windows)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Install cross-compiler
-        if: matrix.cross_pkg != ''
-        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.cross_pkg }}
+      - name: Install cross-compilers
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
 
       - name: Build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
-          CC: ${{ matrix.cc }}
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           GIT_COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}"
-          EXT=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
-          go build -ldflags="${LDFLAGS}" -o magabot${EXT} ./cmd/magabot
 
-      - name: Generate checksum
-        run: |
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            sha256sum magabot.exe > magabot_${{ matrix.goos }}_${{ matrix.goarch }}.sha256
-          else
-            sha256sum magabot > magabot_${{ matrix.goos }}_${{ matrix.goarch }}.sha256
-          fi
+          GOOS=linux   GOARCH=amd64 CGO_ENABLED=1 CC=gcc                    go build -ldflags="${LDFLAGS}" -o magabot_linux_amd64         ./cmd/magabot
+          GOOS=linux   GOARCH=arm64 CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc  go build -ldflags="${LDFLAGS}" -o magabot_linux_arm64         ./cmd/magabot
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -ldflags="${LDFLAGS}" -o magabot_windows_amd64.exe   ./cmd/magabot
 
-      - name: Package
+      - name: Package and checksum
         run: |
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip magabot_${{ matrix.goos }}_${{ matrix.goarch }}.zip magabot.exe
-          else
-            tar -czf magabot_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz magabot
-          fi
+          sha256sum magabot_linux_amd64       > magabot_linux_amd64.sha256
+          sha256sum magabot_linux_arm64       > magabot_linux_arm64.sha256
+          sha256sum magabot_windows_amd64.exe > magabot_windows_amd64.sha256
+          tar -czf magabot_linux_amd64.tar.gz   magabot_linux_amd64
+          tar -czf magabot_linux_arm64.tar.gz   magabot_linux_arm64
+          zip      magabot_windows_amd64.zip    magabot_windows_amd64.exe
 
       - uses: actions/upload-artifact@v4
         with:
-          name: magabot_${{ matrix.goos }}_${{ matrix.goarch }}
+          name: linux-windows
           path: |
-            magabot_${{ matrix.goos }}_${{ matrix.goarch }}.*
+            magabot_linux_*.tar.gz
+            magabot_linux_*.sha256
+            magabot_windows_*.zip
+            magabot_windows_*.sha256
+
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          LDFLAGS="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}"
+
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=clang go build -ldflags="${LDFLAGS}" -o magabot_darwin_amd64 ./cmd/magabot
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang go build -ldflags="${LDFLAGS}" -o magabot_darwin_arm64 ./cmd/magabot
+
+      - name: Package and checksum
+        run: |
+          shasum -a 256 magabot_darwin_amd64 > magabot_darwin_amd64.sha256
+          shasum -a 256 magabot_darwin_arm64 > magabot_darwin_arm64.sha256
+          tar -czf magabot_darwin_amd64.tar.gz magabot_darwin_amd64
+          tar -czf magabot_darwin_arm64.tar.gz magabot_darwin_arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            magabot_darwin_*.tar.gz
+            magabot_darwin_*.sha256
 
   release:
     name: Create Release
-    needs: build
+    needs: [build-linux-windows, build-macos]
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/download-artifact@v4
         with:
