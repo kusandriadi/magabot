@@ -704,17 +704,20 @@ func setupLLM() {
 		}
 		fmt.Println()
 		fmt.Println("  Available models:")
-		fmt.Printf("    1. %s\n", provider.GLM5)
-		fmt.Printf("    2. %s\n", provider.GLM5Turbo)
-		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Printf("    1. %s\n", provider.GLM5Dot1)
+		fmt.Printf("    2. %s\n", provider.GLM5)
+		fmt.Printf("    3. %s\n", provider.GLM5Turbo)
+		fmt.Printf("    4. %s\n", provider.GLM4Dot7)
+		fmt.Printf("    5. %s\n", provider.GLM4Dot6)
 		fmt.Println()
-		modelChoice := askString(reader, "Choose model [1/2/3]", "1")
+		modelChoice := askString(reader, "Choose model [1/2/3/4/5]", "1")
 		modelMap := map[string]string{
-			"1": provider.GLM5, "2": provider.GLM5Turbo, "3": provider.GLM4Dot7,
+			"1": provider.GLM5Dot1, "2": provider.GLM5, "3": provider.GLM5Turbo,
+			"4": provider.GLM4Dot7, "5": provider.GLM4Dot6,
 		}
 		model := modelMap[modelChoice]
 		if model == "" {
-			model = provider.GLM5
+			model = provider.GLM5Dot1
 		}
 		saveSecret("llm/glm_api_key", key)
 		cfg.LLM.GLM.Enabled = true
