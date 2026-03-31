@@ -571,18 +571,21 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 
 		fmt.Println()
 		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Turbo)
-		fmt.Printf("    2. %s\n", provider.GLM5)
-		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
+		fmt.Printf("    2. %s\n", provider.GLM5Turbo)
+		fmt.Printf("    3. %s\n", provider.GLM5)
+		fmt.Printf("    4. %s\n", provider.GLM4Dot7)
 		fmt.Println()
 		implChoice := askString(reader, "Impl model", "1")
 		switch implChoice {
 		case "2":
-			state.ImplModel = provider.GLM5
+			state.ImplModel = provider.GLM5Turbo
 		case "3":
+			state.ImplModel = provider.GLM5
+		case "4":
 			state.ImplModel = provider.GLM4Dot7
 		default:
-			state.ImplModel = provider.GLM5Turbo
+			state.ImplModel = provider.GLM5Dot1
 		}
 
 	case "kimi":

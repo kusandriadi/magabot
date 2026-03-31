@@ -742,18 +742,21 @@ func setupLLM() {
 
 		fmt.Println()
 		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Turbo)
-		fmt.Printf("    2. %s\n", provider.GLM5)
-		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
+		fmt.Printf("    2. %s\n", provider.GLM5Turbo)
+		fmt.Printf("    3. %s\n", provider.GLM5)
+		fmt.Printf("    4. %s\n", provider.GLM4Dot7)
 		fmt.Println()
 		implChoice := askString(reader, "Impl model", "1")
 		switch implChoice {
 		case "2":
-			cfg.LLM.GLM.ImplModel = provider.GLM5
+			cfg.LLM.GLM.ImplModel = provider.GLM5Turbo
 		case "3":
+			cfg.LLM.GLM.ImplModel = provider.GLM5
+		case "4":
 			cfg.LLM.GLM.ImplModel = provider.GLM4Dot7
 		default:
-			cfg.LLM.GLM.ImplModel = provider.GLM5Turbo
+			cfg.LLM.GLM.ImplModel = provider.GLM5Dot1
 		}
 
 	case "kimi":
