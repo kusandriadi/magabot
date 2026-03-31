@@ -899,7 +899,8 @@ func generateWizardConfig(state *WizardState) string {
 			fmt.Fprintf(&b, "    effort: \"%s\"\n", state.Effort)
 		}
 		b.WriteString("    max_tokens: 200000\n")
-		b.WriteString("    max_retries: 3\n\n")
+		b.WriteString("    temperature: 0.5\n")
+		b.WriteString("    max_retries: 2\n\n")
 	}
 
 	if state.OpenAIEnabled {
@@ -910,7 +911,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 200000\n")
-		b.WriteString("    max_retries: 3\n\n")
+		b.WriteString("    temperature: 0.5\n")
+		b.WriteString("    max_retries: 2\n\n")
 	}
 
 	if state.GLMEnabled {
@@ -921,7 +923,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 200000\n")
-		b.WriteString("    max_retries: 3\n\n")
+		b.WriteString("    temperature: 0.5\n")
+		b.WriteString("    max_retries: 2\n\n")
 	}
 
 	if state.KimiEnabled {
@@ -932,7 +935,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 200000\n")
-		b.WriteString("    max_retries: 3\n\n")
+		b.WriteString("    temperature: 0.5\n")
+		b.WriteString("    max_retries: 2\n\n")
 	}
 
 	if state.MiniMaxEnabled {
@@ -943,7 +947,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 200000\n")
-		b.WriteString("    max_retries: 3\n\n")
+		b.WriteString("    temperature: 0.5\n")
+		b.WriteString("    max_retries: 2\n\n")
 	}
 
 	if state.LocalEnabled {
@@ -952,7 +957,8 @@ func generateWizardConfig(state *WizardState) string {
 		fmt.Fprintf(&b, "    base_url: \"%s\"\n", state.LocalBaseURL)
 		fmt.Fprintf(&b, "    model: \"%s\"\n", state.LocalModel)
 		b.WriteString("    max_tokens: 200000\n")
-		b.WriteString("    max_retries: 3\n\n")
+		b.WriteString("    temperature: 0.5\n")
+		b.WriteString("    max_retries: 2\n\n")
 	}
 
 	// Tools

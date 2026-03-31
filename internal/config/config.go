@@ -213,17 +213,23 @@ type LLMProviderConfig struct {
 	APIKey        string   `yaml:"api_key"`              // #nosec G117 -- config field
 	AuthToken     string   `yaml:"auth_token,omitempty"` // OAuth token (Claude Pro/Max)
 	Model         string   `yaml:"model"`
-	MaxTokens     int      `yaml:"max_tokens"`
-	Temperature   float64  `yaml:"temperature"`
-	BaseURL       string   `yaml:"base_url,omitempty"`
-	CLIPath       string   `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
-	AllowedTools  []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = default: Read,Glob,Grep,WebSearch,WebFetch)
-	MaxRetries    int      `yaml:"max_retries"`
+	MaxTokens     *int      `yaml:"max_tokens,omitempty"`
+	Temperature   *float64  `yaml:"temperature,omitempty"`
+	BaseURL       string    `yaml:"base_url,omitempty"`
+	CLIPath       string    `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
+	AllowedTools  []string  `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = default: Read,Glob,Grep,WebSearch,WebFetch)
+	MaxRetries    *int      `yaml:"max_retries,omitempty"`
 	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
 	PlanModel     string   `yaml:"plan_model,omitempty"`     // Model for agent planning phase
 	ImplModel     string   `yaml:"impl_model,omitempty"`     // Model for agent implementation phase
 }
+
+// IntPtr returns a pointer to the given int value.
+func IntPtr(v int) *int { return &v }
+
+// Float64Ptr returns a pointer to the given float64 value.
+func Float64Ptr(v float64) *float64 { return &v }
 
 // ProvidersConfig holds individual LLM provider configs (alternative structure)
 type ProvidersConfig struct {
@@ -563,13 +569,19 @@ func (c *Config) setDefaults() {
 	if c.Agent.SessionTimeout.IsZero() {
 		c.Agent.SessionTimeout = util.NewDuration(6 * time.Hour)
 	}
-	// Temperature defaults (0.5 for all providers)
+	// Temperature, MaxTokens, MaxRetries defaults for all providers (only if key missing from YAML)
 	for _, p := range []*LLMProviderConfig{
 		&c.LLM.Anthropic, &c.LLM.OpenAI, &c.LLM.GLM,
 		&c.LLM.Local, &c.LLM.Kimi, &c.LLM.MiniMax,
 	} {
-		if p.Enabled && p.Temperature == 0 {
-			p.Temperature = 0.5
+		if p.Enabled && p.Temperature == nil {
+			p.Temperature = Float64Ptr(0.5)
+		}
+		if p.Enabled && p.MaxTokens == nil {
+			p.MaxTokens = IntPtr(200000)
+		}
+		if p.Enabled && p.MaxRetries == nil {
+			p.MaxRetries = IntPtr(2)
 		}
 	}
 

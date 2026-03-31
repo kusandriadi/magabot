@@ -177,8 +177,8 @@ func runDaemon() {
 	if cfg.LLM.Local.Enabled {
 		if err := registerCompatProvider(llmRouter, compatProviderConfig{
 			name: "local", model: cfg.LLM.Local.Model,
-			maxTokens: cfg.LLM.Local.MaxTokens, temperature: cfg.LLM.Local.Temperature,
-			baseURL: cfg.LLM.Local.BaseURL, isLocal: true, maxRetries: cfg.LLM.Local.MaxRetries,
+			maxTokens: derefInt(cfg.LLM.Local.MaxTokens), temperature: derefFloat64(cfg.LLM.Local.Temperature),
+			baseURL: cfg.LLM.Local.BaseURL, isLocal: true, maxRetries: derefInt(cfg.LLM.Local.MaxRetries),
 		}, cfg); err != nil {
 			logger.Error("register local provider failed", "error", err)
 		}
@@ -1451,6 +1451,20 @@ func loadSecrets(cfg *config.Config, logger *slog.Logger) *secrets.Manager {
 // Provider registration helpers with URL validation (SSRF protection - A10)
 
 // compatProviderConfig holds config for OpenAI-compatible providers (GLM, Local)
+func derefInt(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func derefFloat64(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
 type compatProviderConfig struct {
 	name        string
 	apiKey      string
@@ -1531,8 +1545,8 @@ func registerAnthropicCompatProvider(llmRouter *llm.Router, name string, ac conf
 	if ac.Model != "" {
 		clientOpts = append(clientOpts, allm.WithModel(ac.Model))
 	}
-	if ac.MaxRetries > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxRetries(ac.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	if derefInt(ac.MaxRetries) > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxRetries(derefInt(ac.MaxRetries)), allm.WithRetryBaseDelay(1*time.Second))
 	}
 	if cfg.LLM.MaxContextTokens > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxContextTokens(cfg.LLM.MaxContextTokens))
@@ -1576,8 +1590,8 @@ func registerAnthropicCompatProvider(llmRouter *llm.Router, name string, ac conf
 	}
 	opts := []provider.AnthropicOption{
 		provider.WithAnthropicModel(model),
-		provider.WithAnthropicMaxTokens(ac.MaxTokens),
-		provider.WithAnthropicTemperature(ac.Temperature),
+		provider.WithAnthropicMaxTokens(derefInt(ac.MaxTokens)),
+		provider.WithAnthropicTemperature(derefFloat64(ac.Temperature)),
 	}
 	if ac.BaseURL != "" {
 		opts = append(opts, provider.WithAnthropicBaseURL(ac.BaseURL))
@@ -1611,8 +1625,8 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 	}
 	opts := []provider.OpenAIOption{
 		provider.WithOpenAIModel(openaiModel),
-		provider.WithOpenAIMaxTokens(cfg.LLM.OpenAI.MaxTokens),
-		provider.WithOpenAITemperature(cfg.LLM.OpenAI.Temperature),
+		provider.WithOpenAIMaxTokens(derefInt(cfg.LLM.OpenAI.MaxTokens)),
+		provider.WithOpenAITemperature(derefFloat64(cfg.LLM.OpenAI.Temperature)),
 	}
 	if cfg.LLM.OpenAI.BaseURL != "" {
 		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))
@@ -1623,8 +1637,8 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 	if cfg.LLM.OpenAI.Model != "" {
 		clientOpts = append(clientOpts, allm.WithModel(cfg.LLM.OpenAI.Model))
 	}
-	if cfg.LLM.OpenAI.MaxRetries > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.LLM.OpenAI.MaxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	if derefInt(cfg.LLM.OpenAI.MaxRetries) > 0 {
+		clientOpts = append(clientOpts, allm.WithMaxRetries(derefInt(cfg.LLM.OpenAI.MaxRetries)), allm.WithRetryBaseDelay(1*time.Second))
 	}
 	if cfg.LLM.MaxContextTokens > 0 {
 		clientOpts = append(clientOpts, allm.WithMaxContextTokens(cfg.LLM.MaxContextTokens))

@@ -600,6 +600,9 @@ func setupLLM() {
 				cfg.LLM.Anthropic.Enabled = true
 			}
 		}
+		cfg.LLM.Anthropic.MaxTokens = config.IntPtr(200000)
+		cfg.LLM.Anthropic.Temperature = config.Float64Ptr(0.5)
+		cfg.LLM.Anthropic.MaxRetries = config.IntPtr(2)
 
 		fmt.Println()
 		fmt.Println("  Plan model (used for planning phase):")
@@ -658,6 +661,9 @@ func setupLLM() {
 			saveSecret("llm/openai_api_key", key)
 			cfg.LLM.OpenAI.Enabled = true
 		}
+		cfg.LLM.OpenAI.MaxTokens = config.IntPtr(200000)
+		cfg.LLM.OpenAI.Temperature = config.Float64Ptr(0.5)
+		cfg.LLM.OpenAI.MaxRetries = config.IntPtr(2)
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -721,8 +727,12 @@ func setupLLM() {
 		}
 		saveSecret("llm/glm_api_key", key)
 		cfg.LLM.GLM.Enabled = true
+		cfg.LLM.GLM.APIKey = key
 		cfg.LLM.GLM.BaseURL = baseURL
 		cfg.LLM.GLM.Model = model
+		cfg.LLM.GLM.MaxTokens = config.IntPtr(200000)
+		cfg.LLM.GLM.Temperature = config.Float64Ptr(0.5)
+		cfg.LLM.GLM.MaxRetries = config.IntPtr(2)
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -765,6 +775,9 @@ func setupLLM() {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
 		}
+		cfg.LLM.Kimi.MaxTokens = config.IntPtr(200000)
+		cfg.LLM.Kimi.Temperature = config.Float64Ptr(0.5)
+		cfg.LLM.Kimi.MaxRetries = config.IntPtr(2)
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -798,6 +811,9 @@ func setupLLM() {
 			saveSecret("llm/minimax_api_key", key)
 			cfg.LLM.MiniMax.Enabled = true
 		}
+		cfg.LLM.MiniMax.MaxTokens = config.IntPtr(200000)
+		cfg.LLM.MiniMax.Temperature = config.Float64Ptr(0.5)
+		cfg.LLM.MiniMax.MaxRetries = config.IntPtr(2)
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -831,6 +847,9 @@ func setupLLM() {
 		cfg.LLM.Local.Enabled = true
 		cfg.LLM.Local.BaseURL = baseURL
 		cfg.LLM.Local.Model = model
+		cfg.LLM.Local.MaxTokens = config.IntPtr(200000)
+		cfg.LLM.Local.Temperature = config.Float64Ptr(0.5)
+		cfg.LLM.Local.MaxRetries = config.IntPtr(2)
 	}
 
 	if err := cfg.Save(); err != nil {
