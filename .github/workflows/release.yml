@@ -39,9 +39,9 @@ jobs:
           sha256sum magabot_linux_amd64       > magabot_linux_amd64.sha256
           sha256sum magabot_linux_arm64       > magabot_linux_arm64.sha256
           sha256sum magabot_windows_amd64.exe > magabot_windows_amd64.sha256
-          tar -czf magabot_linux_amd64.tar.gz   magabot_linux_amd64
-          tar -czf magabot_linux_arm64.tar.gz   magabot_linux_arm64
-          zip      magabot_windows_amd64.zip    magabot_windows_amd64.exe
+          cp magabot_linux_amd64   magabot && tar -czf magabot_linux_amd64.tar.gz   magabot && rm magabot
+          cp magabot_linux_arm64   magabot && tar -czf magabot_linux_arm64.tar.gz   magabot && rm magabot
+          cp magabot_windows_amd64.exe magabot.exe && zip magabot_windows_amd64.zip magabot.exe && rm magabot.exe
 
       - uses: actions/upload-artifact@v4
         with:
@@ -77,8 +77,8 @@ jobs:
         run: |
           shasum -a 256 magabot_darwin_amd64 > magabot_darwin_amd64.sha256
           shasum -a 256 magabot_darwin_arm64 > magabot_darwin_arm64.sha256
-          tar -czf magabot_darwin_amd64.tar.gz magabot_darwin_amd64
-          tar -czf magabot_darwin_arm64.tar.gz magabot_darwin_arm64
+          cp magabot_darwin_amd64 magabot && tar -czf magabot_darwin_amd64.tar.gz magabot && rm magabot
+          cp magabot_darwin_arm64 magabot && tar -czf magabot_darwin_arm64.tar.gz magabot && rm magabot
 
       - uses: actions/upload-artifact@v4
         with:
