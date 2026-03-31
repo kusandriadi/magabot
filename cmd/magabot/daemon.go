@@ -741,28 +741,49 @@ func transcribeAudioFile(path string) (string, error) {
 func looksLikeAgentTask(text string) bool {
 	lower := strings.ToLower(text)
 
-	// Action verbs that imply modifying something
-	actions := []string{
-		"implement", "implementasikan",
-		"buat fitur", "bikin fitur", "tambah fitur", "add feature", "create feature",
-		"buat fungsi", "bikin fungsi", "tambah fungsi", "add function", "create function",
-		"buat method", "add method", "create method",
-		"buat class", "add class", "create class",
-		"edit file", "ubah file", "modify file", "update file", "change file",
-		"edit kode", "ubah kode", "modify code", "update code", "change code", "edit code",
-		"fix bug", "perbaiki bug", "fix the bug", "debug dan fix",
-		"refactor", "restructure", "reorganize",
-		"hapus file", "delete file", "remove file",
-		"hapus fungsi", "delete function", "remove function",
-		"rename file", "move file", "pindah file",
-		"tulis kode", "write the code", "write code for",
-		"buat script", "bikin script", "create script", "write script",
+	// Modification verbs — imply writing/changing something (EN + ID)
+	verbs := []string{
+		// EN
+		"implement", "create", "add", "edit", "modify", "update", "change",
+		"delete", "remove", "rename", "move", "write", "rewrite", "refactor",
+		"restructure", "reorganize",
+		// ID
+		"implementasikan", "buat", "bikin", "tambah", "tambahin", "ubah",
+		"hapus", "pindah", "tulis", "isi", "perbarui", "ganti", "perbaiki", "benerin",
 	}
-	for _, a := range actions {
-		if strings.Contains(lower, a) {
+
+	// Code/file artifacts — things being acted upon (EN + ID)
+	artifacts := []string{
+		// EN
+		"file", "code", "function", "method", "class", "script", "feature",
+		"module", "config", "database", "schema", "migration", "test", "api", "endpoint",
+		// ID
+		"kode", "fungsi", "fitur", "kelas", "skrip", "modul", "konfigurasi",
+	}
+
+	// Match any verb + any artifact combination
+	for _, v := range verbs {
+		if strings.Contains(lower, v) {
+			for _, a := range artifacts {
+				if strings.Contains(lower, a) {
+					return true
+				}
+			}
+		}
+	}
+
+	// Standalone phrases that always imply code work regardless of artifact
+	standalone := []string{
+		"implement", "implementasikan",
+		"refactor", "restructure", "reorganize",
+		"fix bug", "perbaiki bug", "fix the bug", "debug dan fix",
+	}
+	for _, s := range standalone {
+		if strings.Contains(lower, s) {
 			return true
 		}
 	}
+
 	return false
 }
 

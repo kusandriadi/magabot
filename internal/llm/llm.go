@@ -50,6 +50,10 @@ const (
 	ResponseFormatJSON       = allm.ResponseFormatJSON
 	ResponseFormatJSONSchema = allm.ResponseFormatJSONSchema
 
+	capabilityRules = "\n\nCapability limits:\n" +
+		"- You cannot edit, create, or delete files on disk. Never offer to do so.\n" +
+		"- If asked to perform a task that requires file editing or code implementation, inform the user it requires agent mode."
+
 	responseStyleRules = "\n\nResponse style:\n" +
 		"- Write naturally and conversationally, like a knowledgeable friend, not a corporate chatbot.\n" +
 		"- Vary your sentence structure. Avoid repetitive patterns or robotic phrasing.\n" +
@@ -89,7 +93,7 @@ const (
 		"- Keep responses concise and easy to read on mobile screens."
 
 	// systemPromptRules is kept for backward compatibility in tests.
-	systemPromptRules = responseStyleRules + defaultFormattingRules
+	systemPromptRules = capabilityRules + responseStyleRules + defaultFormattingRules
 )
 
 var (
@@ -251,7 +255,7 @@ func BuildSystemPrompt(basePrompt, platform string) string {
 	if basePrompt == "" {
 		return ""
 	}
-	return basePrompt + responseStyleRules + PlatformFormattingRules(platform)
+	return basePrompt + capabilityRules + responseStyleRules + PlatformFormattingRules(platform)
 }
 
 // buildMessages converts user messages to allm messages with system prompt.

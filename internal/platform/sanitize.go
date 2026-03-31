@@ -16,6 +16,9 @@ var (
 	reTableLine = regexp.MustCompile(`(?m)^\|.+\|$`)
 	// reExcessiveNewlines collapses 3+ consecutive newlines into 2.
 	reExcessiveNewlines = regexp.MustCompile(`\n{3,}`)
+	// reRunTogetherSentences detects sentences/steps concatenated without a line break,
+	// e.g. "sekarang.Sekarang" or "consumers:Now" → adds a blank line between them.
+	reRunTogetherSentences = regexp.MustCompile(`([a-z])([.:])([A-Z])`)
 )
 
 // SanitizeText cleans up common LLM formatting issues for the given platform.
@@ -42,6 +45,9 @@ func SanitizeText(platform, text string) string {
 		}
 		return strings.Join(parts, "  ")
 	})
+	// Insert blank line between run-together sentences/steps (missing newline after period/colon).
+	// e.g. "sekarang.Sekarang" → "sekarang.\n\nSekarang"
+	text = reRunTogetherSentences.ReplaceAllString(text, "$1$2\n\n$3")
 	// Collapse 3+ blank lines into a single blank line.
 	text = reExcessiveNewlines.ReplaceAllString(text, "\n\n")
 	// Chat platforms use single-asterisk bold (*text*), not double-asterisk (**text**).

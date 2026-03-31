@@ -84,6 +84,12 @@ func TestSanitizeText(t *testing.T) {
 			want:     "Analisis selesai.\n\nAda 17 gap ditemukan.",
 		},
 		{
+			name:     "adds newline between run-together sentences",
+			platform: "telegram",
+			input:    "Fixed bug.Now add feature:Deploy and push.",
+			want:     "Fixed bug.\n\nNow add feature:\n\nDeploy and push.",
+		},
+		{
 			name:     "handles mixed issues",
 			platform: "telegram",
 			input:    "## Summary\nAll gaps found.### Next Steps\n**Update** the schema.",
