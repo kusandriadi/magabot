@@ -332,7 +332,7 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 		if threadID != 0 {
 			opts.MessageThreadId = threadID
 		}
-		if _, err := b.api.SendMessage(msg.Chat.Id, platform.SanitizeText("telegram",newPortion), opts); err != nil {
+		if _, err := b.api.SendMessage(msg.Chat.Id, platform.SanitizeText("telegram", newPortion), opts); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
