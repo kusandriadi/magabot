@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -728,6 +729,7 @@ func setupLLM() {
 		saveSecret("llm/glm_api_key", key)
 		cfg.LLM.GLM.Enabled = true
 		cfg.LLM.GLM.APIKey = key
+		cfg.LLM.GLM.Mode = "cli"
 		cfg.LLM.GLM.BaseURL = baseURL
 		cfg.LLM.GLM.Model = model
 		cfg.LLM.GLM.MaxTokens = config.IntPtr(200000)
@@ -775,6 +777,7 @@ func setupLLM() {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
 		}
+			cfg.LLM.Kimi.Mode = "cli"
 		cfg.LLM.Kimi.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.Kimi.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.Kimi.MaxRetries = config.IntPtr(2)
@@ -811,6 +814,7 @@ func setupLLM() {
 			saveSecret("llm/minimax_api_key", key)
 			cfg.LLM.MiniMax.Enabled = true
 		}
+			cfg.LLM.MiniMax.Mode = "cli"
 		cfg.LLM.MiniMax.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.MiniMax.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.MiniMax.MaxRetries = config.IntPtr(2)
@@ -871,12 +875,42 @@ func setupLLM() {
 		switch cfg.LLM.Main {
 		case "anthropic":
 			apiKey = cfg.LLM.Anthropic.APIKey
+
+			// Remove Claude settings env vars (Anthropic uses its own endpoint)
+			if err := updateClaudeSettingsEnv(nil); err != nil {
+				fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+			}
+
 		case "openai":
 			apiKey = cfg.LLM.OpenAI.APIKey
 		case "glm":
 			apiKey = cfg.LLM.GLM.APIKey
+
+			// Update Claude settings to use GLM endpoint
+			if err := updateClaudeSettingsEnv(map[string]string{
+				"ANTHROPIC_AUTH_TOKEN":         cfg.LLM.GLM.APIKey,
+				"ANTHROPIC_BASE_URL":           cfg.LLM.GLM.BaseURL,
+				"API_TIMEOUT_MS":               "3000000",
+				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.GLM.ImplModel,
+				"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.GLM.ImplModel,
+				"ANTHROPIC_DEFAULT_OPUS_MODEL":   cfg.LLM.GLM.PlanModel,
+			}); err != nil {
+				fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+			}
 		case "kimi":
 			apiKey = cfg.LLM.Kimi.APIKey
+
+			// Update Claude settings to use Kimi endpoint
+			if err := updateClaudeSettingsEnv(map[string]string{
+				"ANTHROPIC_AUTH_TOKEN":         cfg.LLM.Kimi.APIKey,
+				"ANTHROPIC_BASE_URL":           "https://api.moonshot.ai/anthropic",
+				"API_TIMEOUT_MS":               "3000000",
+				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.Kimi.ImplModel,
+				"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.Kimi.ImplModel,
+				"ANTHROPIC_DEFAULT_OPUS_MODEL":   cfg.LLM.Kimi.PlanModel,
+			}); err != nil {
+				fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+			}
 		case "minimax":
 			apiKey = cfg.LLM.MiniMax.APIKey
 		}
@@ -917,6 +951,61 @@ func saveSecret(key, value string) {
 	if err := mgr.Set(ctx, fullKey, value); err != nil {
 		fmt.Printf("⚠️  Warning: could not save secret: %v\n", err)
 	}
+}
+// claudeSettingsEnv represents the env keys used in ~/.claude/settings.json
+var claudeEnvKeys = []string{
+	"ANTHROPIC_AUTH_TOKEN",
+	"ANTHROPIC_BASE_URL",
+	"API_TIMEOUT_MS",
+	"ANTHROPIC_DEFAULT_HAIKU_MODEL",
+	"ANTHROPIC_DEFAULT_SONNET_MODEL",
+	"ANTHROPIC_DEFAULT_OPUS_MODEL",
+}
+
+// updateClaudeSettingsEnv writes or removes env vars in ~/.claude/settings.json.
+// Pass non-nil envMap to set values; pass nil to remove all claudeEnvKeys.
+func updateClaudeSettingsEnv(envMap map[string]string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("could not get home dir: %w", err)
+	}
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+
+	// Read existing settings
+	settings := make(map[string]interface{})
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		json.Unmarshal(data, &settings)
+	}
+
+	// Get or create env map
+	env, ok := settings["env"].(map[string]interface{})
+	if !ok {
+		env = make(map[string]interface{})
+	}
+
+	if envMap != nil {
+		// Set values
+		for k, v := range envMap {
+			env[k] = v
+		}
+	} else {
+		// Remove all managed keys
+		for _, k := range claudeEnvKeys {
+			delete(env, k)
+		}
+	}
+
+	settings["env"] = env
+
+	// Ensure .claude directory exists
+	os.MkdirAll(filepath.Join(home, ".claude"), 0755)
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal settings: %w", err)
+	}
+
+	return os.WriteFile(settingsPath, data, 0644)
 }
 
 // waitAndShowQR polls for the WhatsApp QR file, displays it inline,

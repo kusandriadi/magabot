@@ -58,10 +58,13 @@ type WizardState struct {
 	OpenAIKey        string
 	GLMEnabled       bool
 	GLMKey           string
+		GLMBaseURL       string
 	KimiEnabled      bool
 	KimiKey          string
+		KimiBaseURL      string
 	MiniMaxEnabled   bool
 	MiniMaxKey       string
+		MiniMaxBaseURL   string
 	LocalEnabled     bool
 	LocalBaseURL     string
 	LocalModel       string
@@ -552,6 +555,8 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://open.bigmodel.cn/")
 		fmt.Println()
 		state.GLMKey = askPassword(reader, "API key")
+		fmt.Println()
+		state.GLMBaseURL = askString(reader, "Base URL (Anthropic-compatible endpoint)", "https://api.z.ai/api/anthropic")
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -595,6 +600,8 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://platform.moonshot.cn/")
 		fmt.Println()
 		state.KimiKey = askPassword(reader, "API key")
+		fmt.Println()
+		state.KimiBaseURL = askString(reader, "Base URL (Anthropic-compatible endpoint)", "https://api.moonshot.ai/anthropic")
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -629,6 +636,8 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println("  Get API key: https://platform.minimaxi.com/")
 		fmt.Println()
 		state.MiniMaxKey = askPassword(reader, "API key")
+		fmt.Println()
+		state.MiniMaxBaseURL = askString(reader, "Base URL (Anthropic-compatible endpoint)", "https://api.minimax.io/anthropic")
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -918,6 +927,7 @@ func generateWizardConfig(state *WizardState) string {
 	if state.GLMEnabled {
 		b.WriteString("  glm:\n")
 		b.WriteString("    enabled: true\n")
+		b.WriteString("    mode: \"cli\"\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.GLMKey)
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
@@ -930,6 +940,7 @@ func generateWizardConfig(state *WizardState) string {
 	if state.KimiEnabled {
 		b.WriteString("  kimi:\n")
 		b.WriteString("    enabled: true\n")
+		b.WriteString("    mode: \"cli\"\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.KimiKey)
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.KimiK2_5)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
@@ -942,6 +953,7 @@ func generateWizardConfig(state *WizardState) string {
 	if state.MiniMaxEnabled {
 		b.WriteString("  minimax:\n")
 		b.WriteString("    enabled: true\n")
+		b.WriteString("    mode: \"cli\"\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.MiniMaxKey)
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.MiniMaxM2_7)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
@@ -985,6 +997,48 @@ func generateWizardConfig(state *WizardState) string {
 	b.WriteString("  discover_depth: 3\n")
 
 	return b.String()
+}
+
+// updateWizardClaudeSettings updates ~/.claude/settings.json env vars
+// based on the selected LLM provider.
+func updateWizardClaudeSettings(state *WizardState) {
+	var envMap map[string]string
+
+	switch state.LLMDefault {
+	case "anthropic":
+		// Anthropic uses its own endpoint — remove custom env vars
+	case "glm":
+		envMap = map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":          state.GLMKey,
+			"ANTHROPIC_BASE_URL":            state.GLMBaseURL,
+			"API_TIMEOUT_MS":                "3000000",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  state.ImplModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": state.ImplModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   state.PlanModel,
+		}
+	case "kimi":
+		envMap = map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":          state.KimiKey,
+			"ANTHROPIC_BASE_URL":            state.KimiBaseURL,
+			"API_TIMEOUT_MS":                "3000000",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  state.ImplModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": state.ImplModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   state.PlanModel,
+		}
+	case "minimax":
+		envMap = map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":          state.MiniMaxKey,
+			"ANTHROPIC_BASE_URL":            state.MiniMaxBaseURL,
+			"API_TIMEOUT_MS":                "3000000",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  state.ImplModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": state.ImplModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   state.PlanModel,
+		}
+	}
+
+	if err := updateClaudeSettingsEnv(envMap); err != nil {
+		fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+	}
 }
 
 func storeSecretsInVault(state *WizardState) {

@@ -163,7 +163,7 @@ llm:
   #   mode: "cli"           — uses `claude` CLI command (Pro/Max subscription, no key needed)
   glm:
     enabled: false
-    mode: "api"      # "api" or "cli"
+    mode: "cli"      # "api" or "cli"
     api_key: ""  # or env: GLM_API_KEY
     model: "glm-4"
     max_tokens: 4096
@@ -184,7 +184,7 @@ llm:
   #   mode: "cli"           — uses `claude` CLI command (Pro/Max subscription, no key needed)
   kimi:
     enabled: false
-    mode: "api"      # "api" or "cli"
+    mode: "cli"      # "api" or "cli"
     api_key: ""  # or env: KIMI_API_KEY
     model: "moonshot-v1-8k"
     max_tokens: 4096
@@ -204,7 +204,7 @@ llm:
   #   mode: "cli"           — uses `claude` CLI command (Pro/Max subscription, no key needed)
   minimax:
     enabled: false
-    mode: "api"      # "api" or "cli"
+    mode: "cli"      # "api" or "cli"
     api_key: ""  # or env: MINIMAX_API_KEY
     model: "abab6.5-chat"
     max_tokens: 4096
