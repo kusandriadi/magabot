@@ -996,7 +996,11 @@ func updateClaudeSettingsEnv(envMap map[string]string) error {
 		}
 	}
 
-	settings["env"] = env
+	if len(env) == 0 {
+		delete(settings, "env")
+	} else {
+		settings["env"] = env
+	}
 
 	// Ensure .claude directory exists
 	_ = os.MkdirAll(filepath.Join(home, ".claude"), 0755)
