@@ -58,10 +58,13 @@ type WizardState struct {
 	OpenAIKey        string
 	GLMEnabled       bool
 	GLMKey           string
+	GLMMode          string // "api" or "cli"
 	KimiEnabled      bool
 	KimiKey          string
+	KimiMode         string // "api" or "cli"
 	MiniMaxEnabled   bool
 	MiniMaxKey       string
+	MiniMaxMode      string // "api" or "cli"
 	LocalEnabled     bool
 	LocalBaseURL     string
 	LocalModel       string
@@ -86,14 +89,26 @@ func testLLMConnection(state *WizardState) {
 			return
 		}
 		apiKey = state.AnthropicKey
-	case "openai":
-		apiKey = state.OpenAIKey
 	case "glm":
+		if state.GLMMode == "cli" {
+			fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
+			return
+		}
 		apiKey = state.GLMKey
 	case "kimi":
+		if state.KimiMode == "cli" {
+			fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
+			return
+		}
 		apiKey = state.KimiKey
 	case "minimax":
+		if state.MiniMaxMode == "cli" {
+			fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
+			return
+		}
 		apiKey = state.MiniMaxKey
+	case "openai":
+		apiKey = state.OpenAIKey
 	case "local":
 		fmt.Println("⏭️  Skipping connection test for local provider")
 		return
@@ -549,9 +564,21 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.GLMEnabled = true
 		fmt.Println("🇨🇳 Zhipu GLM Configuration")
 		fmt.Println("───────────────────────────")
-		fmt.Println("  Get API key: https://open.bigmodel.cn/")
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key")
+		fmt.Println("    2. Claude Code CLI (Pro/Max subscription)")
 		fmt.Println()
-		state.GLMKey = askPassword(reader, "API key")
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
+			state.GLMMode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
+		} else {
+			state.GLMMode = "api"
+			fmt.Println("  Get API key: https://open.bigmodel.cn/")
+			fmt.Println()
+			state.GLMKey = askPassword(reader, "API key")
+		}
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -592,9 +619,21 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.KimiEnabled = true
 		fmt.Println("🌙 Moonshot Kimi Configuration")
 		fmt.Println("──────────────────────────────")
-		fmt.Println("  Get API key: https://platform.moonshot.cn/")
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key")
+		fmt.Println("    2. Claude Code CLI (Pro/Max subscription)")
 		fmt.Println()
-		state.KimiKey = askPassword(reader, "API key")
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
+			state.KimiMode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
+		} else {
+			state.KimiMode = "api"
+			fmt.Println("  Get API key: https://platform.moonshot.cn/")
+			fmt.Println()
+			state.KimiKey = askPassword(reader, "API key")
+		}
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -626,9 +665,21 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.MiniMaxEnabled = true
 		fmt.Println("⚡ MiniMax Configuration")
 		fmt.Println("────────────────────────")
-		fmt.Println("  Get API key: https://platform.minimaxi.com/")
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key")
+		fmt.Println("    2. Claude Code CLI (Pro/Max subscription)")
 		fmt.Println()
-		state.MiniMaxKey = askPassword(reader, "API key")
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
+			state.MiniMaxMode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
+		} else {
+			state.MiniMaxMode = "api"
+			fmt.Println("  Get API key: https://platform.minimaxi.com/")
+			fmt.Println()
+			state.MiniMaxKey = askPassword(reader, "API key")
+		}
 
 		fmt.Println()
 		fmt.Println("  Plan model:")
@@ -918,7 +969,10 @@ func generateWizardConfig(state *WizardState) string {
 	if state.GLMEnabled {
 		b.WriteString("  glm:\n")
 		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.GLMKey)
+		fmt.Fprintf(&b, "    mode: \"%s\"\n", state.GLMMode)
+		if state.GLMKey != "" {
+			fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.GLMKey)
+		}
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
@@ -930,7 +984,10 @@ func generateWizardConfig(state *WizardState) string {
 	if state.KimiEnabled {
 		b.WriteString("  kimi:\n")
 		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.KimiKey)
+		fmt.Fprintf(&b, "    mode: \"%s\"\n", state.KimiMode)
+		if state.KimiKey != "" {
+			fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.KimiKey)
+		}
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.KimiK2_5)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
@@ -942,7 +999,10 @@ func generateWizardConfig(state *WizardState) string {
 	if state.MiniMaxEnabled {
 		b.WriteString("  minimax:\n")
 		b.WriteString("    enabled: true\n")
-		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.MiniMaxKey)
+		fmt.Fprintf(&b, "    mode: \"%s\"\n", state.MiniMaxMode)
+		if state.MiniMaxKey != "" {
+			fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.MiniMaxKey)
+		}
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.MiniMaxM2_7)
 		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
 		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)

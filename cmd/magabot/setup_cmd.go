@@ -698,15 +698,31 @@ func setupLLM() {
 		}
 
 	case "glm":
-		key := askString(reader, "GLM API Key", "")
-		if key == "" {
-			fmt.Println("  ❌ API key is required for GLM")
-			return
-		}
-		baseURL := askString(reader, "Base URL (Anthropic-compatible endpoint)", "")
-		if baseURL == "" {
-			fmt.Println("  ❌ Base URL is required for GLM")
-			return
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key")
+		fmt.Println("    2. Claude Code CLI (Pro/Max subscription)")
+		fmt.Println()
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
+			cfg.LLM.GLM.Enabled = true
+			cfg.LLM.GLM.Mode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
+		} else {
+			key := askString(reader, "GLM API Key", "")
+			if key == "" {
+				fmt.Println("  ❌ API key is required for GLM")
+				return
+			}
+			baseURL := askString(reader, "Base URL (Anthropic-compatible endpoint)", "")
+			if baseURL == "" {
+				fmt.Println("  ❌ Base URL is required for GLM")
+				return
+			}
+			saveSecret("llm/glm_api_key", key)
+			cfg.LLM.GLM.Enabled = true
+			cfg.LLM.GLM.APIKey = key
+			cfg.LLM.GLM.BaseURL = baseURL
 		}
 		fmt.Println()
 		fmt.Println("  Available models:")
@@ -725,10 +741,6 @@ func setupLLM() {
 		if model == "" {
 			model = provider.GLM5Dot1
 		}
-		saveSecret("llm/glm_api_key", key)
-		cfg.LLM.GLM.Enabled = true
-		cfg.LLM.GLM.APIKey = key
-		cfg.LLM.GLM.BaseURL = baseURL
 		cfg.LLM.GLM.Model = model
 		cfg.LLM.GLM.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.GLM.Temperature = config.Float64Ptr(0.5)
@@ -770,10 +782,22 @@ func setupLLM() {
 		}
 
 	case "kimi":
-		key := askString(reader, "Kimi API Key", "")
-		if key != "" {
-			saveSecret("llm/kimi_api_key", key)
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key")
+		fmt.Println("    2. Claude Code CLI (Pro/Max subscription)")
+		fmt.Println()
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
 			cfg.LLM.Kimi.Enabled = true
+			cfg.LLM.Kimi.Mode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
+		} else {
+			key := askString(reader, "Kimi API Key", "")
+			if key != "" {
+				saveSecret("llm/kimi_api_key", key)
+				cfg.LLM.Kimi.Enabled = true
+			}
 		}
 		cfg.LLM.Kimi.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.Kimi.Temperature = config.Float64Ptr(0.5)
@@ -806,10 +830,22 @@ func setupLLM() {
 		}
 
 	case "minimax":
-		key := askString(reader, "MiniMax API Key", "")
-		if key != "" {
-			saveSecret("llm/minimax_api_key", key)
+		fmt.Println("  Authentication method:")
+		fmt.Println("    1. API Key")
+		fmt.Println("    2. Claude Code CLI (Pro/Max subscription)")
+		fmt.Println()
+		authMethod := askString(reader, "Choose [1/2]", "1")
+
+		if authMethod == "2" {
 			cfg.LLM.MiniMax.Enabled = true
+			cfg.LLM.MiniMax.Mode = "cli"
+			fmt.Println("  ✅ Claude CLI mode enabled (uses your claude login session)")
+		} else {
+			key := askString(reader, "MiniMax API Key", "")
+			if key != "" {
+				saveSecret("llm/minimax_api_key", key)
+				cfg.LLM.MiniMax.Enabled = true
+			}
 		}
 		cfg.LLM.MiniMax.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.MiniMax.Temperature = config.Float64Ptr(0.5)
@@ -864,7 +900,11 @@ func setupLLM() {
 	fmt.Println()
 	fmt.Println("🔄 Testing connection to", cfg.LLM.Main, "...")
 
-	if cfg.LLM.Main == "anthropic" && cfg.LLM.Anthropic.Mode == "cli" {
+	isCLI := (cfg.LLM.Main == "anthropic" && cfg.LLM.Anthropic.Mode == "cli") ||
+		(cfg.LLM.Main == "glm" && cfg.LLM.GLM.Mode == "cli") ||
+		(cfg.LLM.Main == "kimi" && cfg.LLM.Kimi.Mode == "cli") ||
+		(cfg.LLM.Main == "minimax" && cfg.LLM.MiniMax.Mode == "cli")
+	if isCLI {
 		fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
 	} else {
 		var apiKey string
