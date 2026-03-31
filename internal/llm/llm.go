@@ -63,9 +63,11 @@ const (
 		"- You may use horizontal lines (————) as section separators."
 
 	telegramFormattingRules = "\n\nFormatting rules (for Telegram chat):\n" +
-		"- NEVER use markdown headers (# ## ###). Use bold text instead.\n" +
-		"- NEVER use **text** for bold. Telegram does not support double asterisks. Use plain text emphasis or CAPS for emphasis.\n" +
+		"- NEVER use markdown headers (# ## ###). Use bold text (*text*) for section titles instead.\n" +
+		"- NEVER use **text** for bold. Telegram uses single asterisks: *text*.\n" +
 		"- NEVER use markdown tables. Use numbered lists or bullet points instead.\n" +
+		"- Always separate paragraphs and steps with a blank line (two newlines). Never run sentences together without a line break.\n" +
+		"- When narrating multiple steps or actions, put each step on its own line with a blank line between them.\n" +
 		"- Prefer numbered lists and bullet points for structured information.\n" +
 		"- Emojis are encouraged where relevant — use them to make responses more visual and scannable.\n" +
 		"- You may use horizontal lines (————) as section separators.\n" +
