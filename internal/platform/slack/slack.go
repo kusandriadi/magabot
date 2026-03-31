@@ -208,7 +208,7 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 		}
 
 		if _, _, err := b.api.PostMessage(ev.Channel,
-			slack.MsgOptionText(newPortion, false),
+			slack.MsgOptionText(platform.SanitizeText("slack", newPortion), false),
 			slack.MsgOptionTS(ev.TimeStamp),
 		); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
@@ -232,6 +232,7 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 	if !shouldSend {
 		return
 	}
+	finalText = platform.SanitizeText("slack", finalText)
 
 	if _, _, err := b.api.PostMessage(ev.Channel,
 		slack.MsgOptionText(finalText, false),
@@ -265,7 +266,7 @@ func (b *Bot) handleSlashCommand(ctx context.Context, cmd *slack.SlashCommand) {
 	}
 
 	if response != "" {
-		if _, _, err := b.api.PostMessage(cmd.ChannelID, slack.MsgOptionText(response, false)); err != nil {
+		if _, _, err := b.api.PostMessage(cmd.ChannelID, slack.MsgOptionText(platform.SanitizeText("slack", response), false)); err != nil {
 			b.logger.Error("send slash response failed", "channel", cmd.ChannelID, "error", err)
 		}
 	}

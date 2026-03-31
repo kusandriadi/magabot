@@ -371,7 +371,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		}
 
 		if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
-			Conversation: proto.String(newPortion),
+			Conversation: proto.String(platform.SanitizeText("whatsapp", newPortion)),
 		}); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
@@ -399,6 +399,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	if !shouldSend {
 		return
 	}
+	finalText = platform.SanitizeText("whatsapp", finalText)
 
 	if st.Streamed() {
 		// Send remainder as new message
@@ -411,7 +412,7 @@ func (b *Bot) handleMessage(evt *events.Message) {
 		}
 	} else {
 		// No streaming (command, agent, etc.) — send as before
-		if err := b.Send(chatID, response); err != nil {
+		if err := b.Send(chatID, finalText); err != nil {
 			b.logger.Error("send reply failed", "error", err)
 		}
 	}

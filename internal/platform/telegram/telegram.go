@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -333,7 +332,7 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 		if threadID != 0 {
 			opts.MessageThreadId = threadID
 		}
-		if _, err := b.api.SendMessage(msg.Chat.Id, sanitizeTelegramText(newPortion), opts); err != nil {
+		if _, err := b.api.SendMessage(msg.Chat.Id, platform.SanitizeText("telegram",newPortion), opts); err != nil {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
@@ -392,7 +391,7 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 	if !shouldSend {
 		return
 	}
-	finalText = sanitizeTelegramText(finalText)
+	finalText = platform.SanitizeText("telegram",finalText)
 
 	opts := &gotgbot.SendMessageOpts{ParseMode: "Markdown"}
 	if !st.Streamed() {
@@ -437,43 +436,6 @@ func splitMessage(text string, maxLen int) []string {
 		text = text[split:]
 	}
 	return chunks
-}
-
-var (
-	// reMarkdownHeader matches markdown headers (e.g. "### Title") at start of a line.
-	reMarkdownHeader = regexp.MustCompile(`(?m)^#{1,6}\s+`)
-	// reInlineHeader matches markdown headers that appear mid-text without a preceding newline.
-	reInlineHeader = regexp.MustCompile(`([^\n])(#{1,6} )`)
-	// reDoubleAsterisk matches **bold** markdown (not supported by Telegram).
-	reDoubleAsterisk = regexp.MustCompile(`\*\*(.+?)\*\*`)
-	// reTableLine matches lines that look like markdown table rows (|col|col|).
-	reTableLine = regexp.MustCompile(`(?m)^\|.+\|$`)
-	// reExcessiveNewlines collapses 3+ consecutive newlines into 2.
-	reExcessiveNewlines = regexp.MustCompile(`\n{3,}`)
-)
-
-// sanitizeTelegramText cleans up common LLM formatting mistakes that render
-// poorly in Telegram: literal markdown headers, double-asterisk bold, and
-// table pipe characters.
-func sanitizeTelegramText(text string) string {
-	// Insert a blank line before any ### header that immediately follows other text.
-	text = reInlineHeader.ReplaceAllString(text, "$1\n\n")
-	// Strip the leading # characters from headers at the start of a line.
-	text = reMarkdownHeader.ReplaceAllString(text, "")
-	// Convert **bold** to *bold* (Telegram Markdown uses single asterisks).
-	text = reDoubleAsterisk.ReplaceAllString(text, "*$1*")
-	// Remove table rows — replace with the cell content joined by spaces.
-	text = reTableLine.ReplaceAllStringFunc(text, func(line string) string {
-		line = strings.Trim(line, "|")
-		parts := strings.Split(line, "|")
-		for i, p := range parts {
-			parts[i] = strings.TrimSpace(p)
-		}
-		return strings.Join(parts, "  ")
-	})
-	// Collapse 3+ blank lines into a single blank line.
-	text = reExcessiveNewlines.ReplaceAllString(text, "\n\n")
-	return strings.TrimSpace(text)
 }
 
 // parseChatID parses "groupID" or "groupID:threadID" format.
