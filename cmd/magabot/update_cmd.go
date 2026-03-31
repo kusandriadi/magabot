@@ -214,8 +214,9 @@ func stopIfRunning() error {
 		return fmt.Errorf("failed to stop process %d: %w", pid, err)
 	}
 
-	// Wait for process to actually exit (max 10 seconds)
-	for i := 0; i < 100; i++ {
+	// Wait for process to actually exit (max 30 seconds).
+	// The daemon's own shutdown can take up to ~15s (hooks + router stop + backup).
+	for i := 0; i < 300; i++ {
 		if !processExists(pid) {
 			break
 		}
@@ -223,7 +224,14 @@ func stopIfRunning() error {
 	}
 
 	if processExists(pid) {
-		return fmt.Errorf("process %d did not exit in time", pid)
+		// Escalate to SIGKILL
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill()
+			time.Sleep(500 * time.Millisecond)
+		}
+		if processExists(pid) {
+			return fmt.Errorf("process %d did not exit in time", pid)
+		}
 	}
 
 	_ = os.Remove(pidFile)

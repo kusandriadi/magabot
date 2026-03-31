@@ -86,8 +86,9 @@ func cmdRestart() {
 		os.Exit(1)
 	}
 
-	// Wait for process to actually exit (max 10 seconds)
-	for i := 0; i < 100; i++ {
+	// Wait for process to actually exit (max 30 seconds).
+	// The daemon's own shutdown can take up to ~15s (hooks + router stop + backup).
+	for i := 0; i < 300; i++ {
 		if !processExists(pid) {
 			break
 		}
@@ -95,8 +96,15 @@ func cmdRestart() {
 	}
 
 	if processExists(pid) {
-		fmt.Fprintf(os.Stderr, "❌ Process %d did not exit in time\n", pid)
-		os.Exit(1)
+		// Escalate to SIGKILL
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill()
+			time.Sleep(500 * time.Millisecond)
+		}
+		if processExists(pid) {
+			fmt.Fprintf(os.Stderr, "❌ Process %d did not exit in time\n", pid)
+			os.Exit(1)
+		}
 	}
 
 	_ = os.Remove(pidFile)
