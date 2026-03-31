@@ -180,6 +180,44 @@ func TestStripANSI(t *testing.T) {
 	}
 }
 
+func TestFormatToolUseBash(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "plain command",
+			input: `{"command":"go test ./..."}`,
+			want:  "Running a command: go test ./...",
+		},
+		{
+			name:  "heredoc command strips << marker",
+			input: `{"command":"cat << 'EOFREPORT'\n===content===\nEOFREPORT"}`,
+			want:  "Running a command: cat",
+		},
+		{
+			name:  "description takes priority",
+			input: `{"command":"cat << 'EOF'","description":"write the report file"}`,
+			want:  "Hold on, I need to write the report file",
+		},
+		{
+			name:  "long command truncated",
+			input: `{"command":"go test -v -count=1 -run TestSomethingVeryLongNameThatExceedsLimit ./internal/..."}`,
+			want:  "Running a command: go test -v -count=1 -run TestSomethingVeryLongName...",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatToolUse("Bash", []byte(tt.input), DefaultTemplates)
+			if got != tt.want {
+				t.Errorf("formatToolUse(Bash, %s)\n got:  %q\n want: %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExecuteCanceledContext(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	m := NewManager(Config{Timeout: 10, AllowedDirs: []string{home}}, nil)

@@ -790,6 +790,15 @@ func formatToolUse(name string, input json.RawMessage, templates map[string]stri
 		}
 		if p.Command != "" {
 			cmd := p.Command
+			// Take only the first line (heredoc content is on subsequent lines).
+			if idx := strings.IndexByte(cmd, '\n'); idx > 0 {
+				cmd = cmd[:idx]
+			}
+			// Strip heredoc operator (e.g. << 'EOF', <<"EOF") so we don't show
+			// "cat << 'EOFREPORT'" — just show the command itself.
+			if idx := strings.Index(cmd, "<<"); idx > 0 {
+				cmd = strings.TrimSpace(cmd[:idx])
+			}
 			if len(cmd) > 50 {
 				cmd = cmd[:50] + "..."
 			}
