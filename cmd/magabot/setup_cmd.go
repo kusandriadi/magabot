@@ -777,7 +777,7 @@ func setupLLM() {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
 		}
-			cfg.LLM.Kimi.Mode = "cli"
+		cfg.LLM.Kimi.Mode = "cli"
 		cfg.LLM.Kimi.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.Kimi.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.Kimi.MaxRetries = config.IntPtr(2)
@@ -814,7 +814,7 @@ func setupLLM() {
 			saveSecret("llm/minimax_api_key", key)
 			cfg.LLM.MiniMax.Enabled = true
 		}
-			cfg.LLM.MiniMax.Mode = "cli"
+		cfg.LLM.MiniMax.Mode = "cli"
 		cfg.LLM.MiniMax.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.MiniMax.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.MiniMax.MaxRetries = config.IntPtr(2)
@@ -888,9 +888,9 @@ func setupLLM() {
 
 			// Update Claude settings to use GLM endpoint
 			if err := updateClaudeSettingsEnv(map[string]string{
-				"ANTHROPIC_AUTH_TOKEN":         cfg.LLM.GLM.APIKey,
-				"ANTHROPIC_BASE_URL":           cfg.LLM.GLM.BaseURL,
-				"API_TIMEOUT_MS":               "3000000",
+				"ANTHROPIC_AUTH_TOKEN":           cfg.LLM.GLM.APIKey,
+				"ANTHROPIC_BASE_URL":             cfg.LLM.GLM.BaseURL,
+				"API_TIMEOUT_MS":                 "3000000",
 				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.GLM.ImplModel,
 				"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.GLM.ImplModel,
 				"ANTHROPIC_DEFAULT_OPUS_MODEL":   cfg.LLM.GLM.PlanModel,
@@ -902,9 +902,9 @@ func setupLLM() {
 
 			// Update Claude settings to use Kimi endpoint
 			if err := updateClaudeSettingsEnv(map[string]string{
-				"ANTHROPIC_AUTH_TOKEN":         cfg.LLM.Kimi.APIKey,
-				"ANTHROPIC_BASE_URL":           "https://api.moonshot.ai/anthropic",
-				"API_TIMEOUT_MS":               "3000000",
+				"ANTHROPIC_AUTH_TOKEN":           cfg.LLM.Kimi.APIKey,
+				"ANTHROPIC_BASE_URL":             "https://api.moonshot.ai/anthropic",
+				"API_TIMEOUT_MS":                 "3000000",
 				"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.Kimi.ImplModel,
 				"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.Kimi.ImplModel,
 				"ANTHROPIC_DEFAULT_OPUS_MODEL":   cfg.LLM.Kimi.PlanModel,
@@ -952,6 +952,7 @@ func saveSecret(key, value string) {
 		fmt.Printf("⚠️  Warning: could not save secret: %v\n", err)
 	}
 }
+
 // claudeSettingsEnv represents the env keys used in ~/.claude/settings.json
 var claudeEnvKeys = []string{
 	"ANTHROPIC_AUTH_TOKEN",
@@ -974,7 +975,7 @@ func updateClaudeSettingsEnv(envMap map[string]string) error {
 	// Read existing settings
 	settings := make(map[string]interface{})
 	if data, err := os.ReadFile(settingsPath); err == nil {
-		json.Unmarshal(data, &settings)
+		_ = json.Unmarshal(data, &settings)
 	}
 
 	// Get or create env map
@@ -998,7 +999,7 @@ func updateClaudeSettingsEnv(envMap map[string]string) error {
 	settings["env"] = env
 
 	// Ensure .claude directory exists
-	os.MkdirAll(filepath.Join(home, ".claude"), 0755)
+	_ = os.MkdirAll(filepath.Join(home, ".claude"), 0755)
 
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {

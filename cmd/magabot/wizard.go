@@ -58,13 +58,13 @@ type WizardState struct {
 	OpenAIKey        string
 	GLMEnabled       bool
 	GLMKey           string
-		GLMBaseURL       string
+	GLMBaseURL       string
 	KimiEnabled      bool
 	KimiKey          string
-		KimiBaseURL      string
+	KimiBaseURL      string
 	MiniMaxEnabled   bool
 	MiniMaxKey       string
-		MiniMaxBaseURL   string
+	MiniMaxBaseURL   string
 	LocalEnabled     bool
 	LocalBaseURL     string
 	LocalModel       string
@@ -997,48 +997,6 @@ func generateWizardConfig(state *WizardState) string {
 	b.WriteString("  discover_depth: 3\n")
 
 	return b.String()
-}
-
-// updateWizardClaudeSettings updates ~/.claude/settings.json env vars
-// based on the selected LLM provider.
-func updateWizardClaudeSettings(state *WizardState) {
-	var envMap map[string]string
-
-	switch state.LLMDefault {
-	case "anthropic":
-		// Anthropic uses its own endpoint — remove custom env vars
-	case "glm":
-		envMap = map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":          state.GLMKey,
-			"ANTHROPIC_BASE_URL":            state.GLMBaseURL,
-			"API_TIMEOUT_MS":                "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  state.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": state.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   state.PlanModel,
-		}
-	case "kimi":
-		envMap = map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":          state.KimiKey,
-			"ANTHROPIC_BASE_URL":            state.KimiBaseURL,
-			"API_TIMEOUT_MS":                "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  state.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": state.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   state.PlanModel,
-		}
-	case "minimax":
-		envMap = map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":          state.MiniMaxKey,
-			"ANTHROPIC_BASE_URL":            state.MiniMaxBaseURL,
-			"API_TIMEOUT_MS":                "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  state.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": state.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   state.PlanModel,
-		}
-	}
-
-	if err := updateClaudeSettingsEnv(envMap); err != nil {
-		fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
-	}
 }
 
 func storeSecretsInVault(state *WizardState) {
