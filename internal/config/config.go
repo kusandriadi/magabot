@@ -213,12 +213,12 @@ type LLMProviderConfig struct {
 	APIKey        string   `yaml:"api_key"`              // #nosec G117 -- config field
 	AuthToken     string   `yaml:"auth_token,omitempty"` // OAuth token (Claude Pro/Max)
 	Model         string   `yaml:"model"`
-	MaxTokens     *int      `yaml:"max_tokens,omitempty"`
-	Temperature   *float64  `yaml:"temperature,omitempty"`
-	BaseURL       string    `yaml:"base_url,omitempty"`
-	CLIPath       string    `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
-	AllowedTools  []string  `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = default: Read,Glob,Grep,WebSearch,WebFetch)
-	MaxRetries    *int      `yaml:"max_retries,omitempty"`
+	MaxTokens     *int     `yaml:"max_tokens,omitempty"`
+	Temperature   *float64 `yaml:"temperature,omitempty"`
+	BaseURL       string   `yaml:"base_url,omitempty"`
+	CLIPath       string   `yaml:"cli_path,omitempty"`      // Path to claude binary (default: "claude")
+	AllowedTools  []string `yaml:"allowed_tools,omitempty"` // Allowed tools for CLI mode (empty = default: Read,Glob,Grep,WebSearch,WebFetch)
+	MaxRetries    *int     `yaml:"max_retries,omitempty"`
 	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
 	PlanModel     string   `yaml:"plan_model,omitempty"`     // Model for agent planning phase
