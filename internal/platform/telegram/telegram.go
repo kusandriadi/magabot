@@ -391,7 +391,7 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 	if !shouldSend {
 		return
 	}
-	finalText = platform.SanitizeText("telegram",finalText)
+	finalText = platform.SanitizeText("telegram", finalText)
 
 	opts := &gotgbot.SendMessageOpts{ParseMode: "Markdown"}
 	if !st.Streamed() {
