@@ -336,6 +336,12 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 			b.logger.Debug("stream: send failed", "error", err)
 			return
 		}
+		// Re-send typing since SendMessage clears it
+		typingOpts := &gotgbot.SendChatActionOpts{}
+		if threadID != 0 {
+			typingOpts.MessageThreadId = threadID
+		}
+		_, _ = b.api.SendChatAction(msg.Chat.Id, "typing", typingOpts)
 		st.MarkSent(len(text))
 	}
 

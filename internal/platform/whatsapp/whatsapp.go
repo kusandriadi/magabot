@@ -351,6 +351,11 @@ func (b *Bot) handleMessage(evt *events.Message) {
 
 	ctx := context.Background()
 
+	// Mark incoming message as read
+	if client != nil && client.IsConnected() {
+		_ = client.MarkRead(ctx, []types.MessageID{evt.Info.ID}, time.Now(), evt.Info.Chat, evt.Info.Sender)
+	}
+
 	// Send typing indicator
 	if client != nil && client.IsConnected() {
 		_ = client.SendChatPresence(ctx, evt.Info.Chat, types.ChatPresenceComposing, types.ChatPresenceMediaText)
