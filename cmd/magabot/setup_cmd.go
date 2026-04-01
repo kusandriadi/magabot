@@ -901,7 +901,6 @@ func setupLLM() {
 		case "anthropic":
 			apiKey = cfg.LLM.Anthropic.APIKey
 
-
 		case "openai":
 			apiKey = cfg.LLM.OpenAI.APIKey
 		case "glm":
