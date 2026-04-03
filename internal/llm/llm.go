@@ -115,8 +115,8 @@ type usageTracker struct {
 
 // UsageStats holds usage statistics for display.
 type UsageStats struct {
-	HourlyCount int
-	WeeklyCount int
+	HourlyCount   int
+	WeeklyCount   int
 	NextHourReset time.Time
 	NextWeekReset time.Time
 }
