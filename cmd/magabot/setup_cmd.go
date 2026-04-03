@@ -590,7 +590,7 @@ func setupLLMMain() {
 	reader := bufio.NewReader(os.Stdin)
 	choice := askString(reader, "Select provider", "")
 	if choice == "" {
-		fmt.Println("Cancelled.")
+		fmt.Println("Canceled.")
 		return
 	}
 
