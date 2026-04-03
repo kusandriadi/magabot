@@ -185,6 +185,42 @@ func (m *Manager) Get(name string) (*Skill, bool) {
 	return skill, ok
 }
 
+// AddSkill registers a skill programmatically (e.g. built-in skills).
+func (m *Manager) AddSkill(skill *Skill) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Compile regex patterns
+	for _, pattern := range skill.Triggers.Patterns {
+		re, err := regexp.Compile(pattern)
+		if err == nil {
+			m.compiledRe[skill.Name+":"+pattern] = re
+		}
+	}
+	m.skills[skill.Name] = skill
+}
+
+// IsSkillCommand returns true if the message starts with a /command
+// that matches a skill's command trigger.
+func (m *Manager) IsSkillCommand(message string) bool {
+	fields := strings.Fields(message)
+	if len(fields) == 0 {
+		return false
+	}
+	cmdLower := strings.ToLower(fields[0])
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, skill := range m.skills {
+		for _, cmd := range skill.Triggers.Commands {
+			if cmdLower == cmd {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // List returns all loaded skills
 func (m *Manager) List() []*Skill {
 	m.mu.RLock()

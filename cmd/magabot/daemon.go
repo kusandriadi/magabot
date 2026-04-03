@@ -26,6 +26,7 @@ import (
 	"github.com/kusa/magabot/internal/platform/whatsapp"
 	"github.com/kusa/magabot/internal/router"
 	"github.com/kusa/magabot/internal/secrets"
+	"github.com/kusa/magabot/internal/skills"
 	"github.com/kusa/magabot/internal/security"
 	"github.com/kusa/magabot/internal/session"
 	"github.com/kusa/magabot/internal/storage"
@@ -226,6 +227,22 @@ func runDaemon() {
 	hooksMgr := hooks.NewManager(mergeHooksConfig(cfg, logger), logger.With("component", "hooks"))
 	rtr.SetHooks(hooksMgr)
 
+	// Initialize skills manager
+	skillsMgr := skills.NewManager(cfg.Skills.Dir)
+	if err := skillsMgr.LoadAll(); err != nil {
+		logger.Warn("failed to load skills", "error", err)
+	}
+	for _, s := range skills.BuiltinSkills() {
+		skillsMgr.AddSkill(s)
+	}
+	logger.Info("skills loaded", "count", len(skillsMgr.List()), "dir", cfg.Skills.Dir)
+
+	var skillsWatcher *skills.Watcher
+	if cfg.Skills.AutoReload {
+		skillsWatcher = skills.NewWatcher(skillsMgr, logger.With("component", "skills"))
+		skillsWatcher.Start()
+	}
+
 	// Initialize agent session manager
 	// Resolve plan/impl models from the active main provider (not just Anthropic).
 	agentPlanModel, agentImplModel, agentCLIPath := resolveAgentModels(cfg)
@@ -291,8 +308,8 @@ func runDaemon() {
 		}
 		logger.Info("received message", logArgs...)
 
-		// Handle bot commands
-		if strings.HasPrefix(msg.Text, "/") {
+		// Handle bot commands (skip if matched by a skill command trigger)
+		if strings.HasPrefix(msg.Text, "/") && !skillsMgr.IsSkillCommand(msg.Text) {
 			return handleCommand(msg, llmRouter, store, cfg, adminHandler, memoryHandler, sessionHandler, sessionMgr, confirmMgr, logger)
 		}
 
@@ -318,7 +335,7 @@ func runDaemon() {
 		if agentMgr.HasSession(msg.Platform, msg.ChatID) {
 			return routeToAgent(ctx, msg, agentMgr, func(text string) {
 				_ = rtr.Send(msg.Platform, msg.ChatID, text)
-			}, llmRouter)
+			}, llmRouter, skillsMgr)
 		}
 
 		// If the message looks like a coding implementation task, short-circuit before
@@ -443,6 +460,14 @@ func runDaemon() {
 		if systemPromptOverride == "" {
 			// No personas configured — use llm.system_prompt with platform-aware formatting
 			systemPromptOverride = llm.BuildSystemPrompt(cfg.LLM.SystemPrompt, msg.Platform)
+		}
+
+		// Inject skill prompts into system prompt
+		if alwaysPrompts := skillsMgr.GetSystemPrompts(); alwaysPrompts != "" {
+			systemPromptOverride += "\n\n" + alwaysPrompts
+		}
+		if matchedPrompts := skillsMgr.GetMatchedPrompts(msg.Text); matchedPrompts != "" {
+			systemPromptOverride += "\n\n" + matchedPrompts
 		}
 
 		// For voice input: suppress text streaming — we'll send a voice reply at the end
@@ -654,6 +679,9 @@ func runDaemon() {
 	}
 
 	logger.Info("shutting down...")
+	if skillsWatcher != nil {
+		skillsWatcher.Stop()
+	}
 	agentMgr.Stop()
 
 	// Fire on_stop hooks (synchronous, give hooks a chance to run)
@@ -1803,7 +1831,7 @@ func handleAgentCommand(msg *router.Message, agentMgr *agent.Manager, cfg *confi
 }
 
 // routeToAgent sends a regular message to the active agent session.
-func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Manager, notify func(string), llmRouter *llm.Router) (string, error) {
+func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Manager, notify func(string), llmRouter *llm.Router, skillsMgr *skills.Manager) (string, error) {
 	sess := agentMgr.GetSession(msg.Platform, msg.ChatID)
 	if sess == nil {
 		return "", nil
@@ -1862,6 +1890,14 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		}
 	}()
 
+	// Inject skill context into agent message
+	agentMsg := msg.Text
+	if skillsMgr != nil {
+		if matched := skillsMgr.GetMatchedPrompts(agentMsg); matched != "" {
+			agentMsg = fmt.Sprintf("[Skill context]\n%s\n\n%s", matched, agentMsg)
+		}
+	}
+
 	// Stream text content incrementally as new messages.
 	// We own the StreamTracker so we can flush remaining text after Execute.
 	textSt := util.NewStreamTracker(3 * time.Second)
@@ -1874,7 +1910,7 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		textSt.MarkSent(len(accumulated))
 	}
 
-	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify, onText, keepalive)
+	output, err := agentMgr.Execute(ctx, sess, agentMsg, msg.Media, wrappedNotify, onText, keepalive)
 	close(statusDone)
 
 	// Flush any remaining text that wasn't sent during streaming.
