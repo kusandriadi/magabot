@@ -44,6 +44,7 @@ type Config struct {
 	GetCLISettings CLISettings       // optional: returns current effort for Claude CLI
 	PlanDelegate   bool              // plan first, then delegate to subagents
 	OnSessionClose NotifyFunc        // optional: called when a session is auto-closed
+	OnUsage        func(int, int)    // optional: called with (inputTokens, outputTokens) after each request
 	CLIPath        string            // path to claude binary (default: "claude")
 	PlanModel      string            // model for planning phase (overrides default during plan)
 	ImplModel      string            // model for implementation phase (overrides default during impl)
@@ -328,19 +329,21 @@ func (m *Manager) CloseSession(platform, chatID string) {
 // On timeout, it automatically retries with --continue up to MaxRetries times.
 // keepalive, if non-nil, resets the idle timer whenever a value is received —
 // use this to extend the timeout when the caller sends progress messages to the user.
-func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), keepalive <-chan struct{}) (string, error) {
+// onText, if non-nil, is called with accumulated text content during streaming
+// so the caller can deliver partial results incrementally.
+func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), onText func(string), keepalive <-chan struct{}) (string, error) {
 	sess.Touch()
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	maxRetries := m.config.MaxRetries
 
 	if sess.Agent == AgentClaude && sess.cli != nil {
-		return m.executeClaude(ctx, sess, message, media, onProgress, keepalive, timeout, maxRetries)
+		return m.executeClaude(ctx, sess, message, media, onProgress, onText, keepalive, timeout, maxRetries)
 	}
 	return m.executeCodex(ctx, sess, message, timeout)
 }
 
 // executeClaude runs a message through Claude CLI via allm-go provider.
-func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), keepalive <-chan struct{}, timeout time.Duration, maxRetries int) (string, error) {
+func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), onText func(string), keepalive <-chan struct{}, timeout time.Duration, maxRetries int) (string, error) {
 	streaming := onProgress != nil
 
 	var allOutput []string
@@ -422,7 +425,7 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		var err error
 
 		if streaming {
-			partial, err = m.streamClaude(attemptCtx, sess, req, onProgress, keepalive, idle, timeout)
+			partial, err = m.streamClaude(attemptCtx, sess, req, onProgress, onText, keepalive, idle, timeout)
 		} else {
 			var resp *allm.Response
 			resp, err = sess.cli.Complete(attemptCtx, req)
@@ -539,7 +542,9 @@ func (m *Manager) buildRequest(sess *Session, message string, media []string, co
 }
 
 // streamClaude reads streaming output from Claude CLI via allm-go.
-func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Request, onProgress func(string), keepalive <-chan struct{}, idle *time.Timer, timeout time.Duration) (string, error) {
+// onText, if non-nil, is called with accumulated text on each content chunk
+// so the caller can deliver partial results to the user incrementally.
+func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Request, onProgress func(string), onText func(string), keepalive <-chan struct{}, idle *time.Timer, timeout time.Duration) (string, error) {
 	ch := sess.cli.Stream(ctx, req)
 
 	// When the caller sends a progress message to the user (keepalive signal),
@@ -572,6 +577,9 @@ func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Req
 			return textContent.String(), chunk.Error
 		}
 		if chunk.Done {
+			if chunk.Usage != nil && m.config.OnUsage != nil {
+				m.config.OnUsage(chunk.Usage.InputTokens, chunk.Usage.OutputTokens)
+			}
 			break
 		}
 
@@ -602,6 +610,10 @@ func (m *Manager) streamClaude(ctx context.Context, sess *Session, req *allm.Req
 
 		if chunk.Content != "" {
 			textContent.WriteString(chunk.Content)
+			// Stream accumulated text to caller for incremental delivery
+			if onText != nil {
+				onText(textContent.String())
+			}
 		}
 	}
 

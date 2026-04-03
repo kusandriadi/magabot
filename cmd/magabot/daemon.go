@@ -242,6 +242,7 @@ func runDaemon() {
 		OnSessionClose: func(platform, chatID, message string) {
 			_ = rtr.Send(platform, chatID, message)
 		},
+		OnUsage: llmRouter.TrackUsage,
 		GetCLISettings: func() string {
 			if cli := llmRouter.CLIProvider(); cli != nil {
 				return cli.Effort()
@@ -1861,19 +1862,38 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		}
 	}()
 
-	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify, keepalive)
+	// Stream text content incrementally as new messages.
+	// We own the StreamTracker so we can flush remaining text after Execute.
+	textSt := util.NewStreamTracker(3 * time.Second)
+	onText := func(accumulated string) {
+		newPortion, ok := textSt.ShouldSend(accumulated)
+		if !ok {
+			return
+		}
+		wrappedNotify(newPortion)
+		textSt.MarkSent(len(accumulated))
+	}
+
+	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify, onText, keepalive)
 	close(statusDone)
+
+	// Flush any remaining text that wasn't sent during streaming.
+	if remainder, ok := textSt.FinalText(output); ok {
+		remainder = strings.TrimSpace(remainder)
+		if remainder != "" {
+			notify(remainder)
+		}
+	}
 
 	if err != nil {
 		if output != "" {
-			return fmt.Sprintf("%s\n\n⚠️ %v", output, err), nil
+			// Text already streamed — only send the error notice
+			return fmt.Sprintf("⚠️ %v", err), nil
 		}
 		return fmt.Sprintf("Agent error: %v", err), nil
 	}
-	if output == "" {
-		return "(no output)", nil
-	}
-	return output, nil
+	// All text was delivered during streaming; nothing left to send.
+	return "", nil
 }
 
 // resolveAgentModels returns (planModel, implModel, cliPath) for the agent

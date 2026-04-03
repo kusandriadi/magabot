@@ -591,6 +591,13 @@ func (r *Router) Usage() UsageStats {
 	return r.usage.stats()
 }
 
+// TrackUsage records a request and its token usage from an external source
+// (e.g. agent sessions that bypass StreamChat).
+func (r *Router) TrackUsage(inputTokens, outputTokens int) {
+	r.usage.track()
+	r.usage.trackTokens(inputTokens, outputTokens)
+}
+
 // Simple rate limiter with bounded memory
 type rateLimiter struct {
 	requests  map[string][]time.Time
