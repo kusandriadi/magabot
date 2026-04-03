@@ -424,6 +424,20 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		}
 
 		if !timedOut {
+			// Session corruption: invalid thinking block signature.
+			// This happens when the model changes mid-session or the
+			// session data is corrupted. Reset session and retry once
+			// without --continue so the CLI starts a fresh conversation.
+			if strings.Contains(err.Error(), "Invalid signature in thinking block") {
+				m.logger.Warn("invalid thinking block signature, resetting session",
+					"agent", sess.Agent, "attempt", attempt,
+				)
+				sess.mu.Lock()
+				sess.MsgCount = 0
+				sess.mu.Unlock()
+				continue
+			}
+
 			combined := strings.Join(allOutput, "\n")
 			if combined != "" {
 				return combined, fmt.Errorf("agent %s: %s", sess.Agent, err)
