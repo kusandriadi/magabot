@@ -107,11 +107,11 @@ var (
 // usageTracker tracks global LLM request counts and token consumption
 // over hourly and weekly windows.
 type usageTracker struct {
-	mu            sync.Mutex
-	hourlyCount   int
-	weeklyCount   int
-	hourStart     time.Time
-	weekStart     time.Time
+	mu             sync.Mutex
+	hourlyCount    int
+	weeklyCount    int
+	hourStart      time.Time
+	weekStart      time.Time
 	hourlyTokenIn  int
 	hourlyTokenOut int
 	weeklyTokenIn  int
