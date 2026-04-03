@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -325,16 +324,18 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 			return
 		}
 
-		opts := &gotgbot.SendMessageOpts{}
-		if st.IsFirstChunk() {
-			opts.ReplyParameters = &gotgbot.ReplyParameters{MessageId: msg.MessageId}
-		}
-		if threadID != 0 {
-			opts.MessageThreadId = threadID
-		}
-		if _, err := b.api.SendMessage(msg.Chat.Id, platform.SanitizeText("telegram", newPortion), opts); err != nil {
-			b.logger.Debug("stream: send failed", "error", err)
-			return
+		for i, chunk := range platform.SplitMessage(platform.SanitizeText("telegram", newPortion), telegramMaxLen) {
+			opts := &gotgbot.SendMessageOpts{}
+			if st.IsFirstChunk() && i == 0 {
+				opts.ReplyParameters = &gotgbot.ReplyParameters{MessageId: msg.MessageId}
+			}
+			if threadID != 0 {
+				opts.MessageThreadId = threadID
+			}
+			if _, err := b.api.SendMessage(msg.Chat.Id, chunk, opts); err != nil {
+				b.logger.Debug("stream: send failed", "error", err)
+				return
+			}
 		}
 		// Re-send typing since SendMessage clears it
 		typingOpts := &gotgbot.SendChatActionOpts{}
@@ -406,7 +407,7 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 	if threadID != 0 {
 		opts.MessageThreadId = threadID
 	}
-	for _, chunk := range splitMessage(finalText, telegramMaxLen) {
+	for _, chunk := range platform.SplitMessage(finalText, telegramMaxLen) {
 		chunkOpts := *opts
 		if _, err := b.api.SendMessage(msg.Chat.Id, chunk, &chunkOpts); err != nil {
 			// Markdown parse may fail on LLM output — retry without parse mode
@@ -421,28 +422,6 @@ func (b *Bot) handleUpdate(ctx context.Context, msg *gotgbot.Message) {
 
 // telegramMaxLen is Telegram's maximum message length in characters.
 const telegramMaxLen = 4096
-
-// splitMessage splits text into chunks of at most maxLen characters,
-// preferring to break at newline boundaries.
-func splitMessage(text string, maxLen int) []string {
-	if len(text) <= maxLen {
-		return []string{text}
-	}
-	var chunks []string
-	for len(text) > 0 {
-		if len(text) <= maxLen {
-			chunks = append(chunks, text)
-			break
-		}
-		split := maxLen
-		if idx := strings.LastIndex(text[:maxLen], "\n"); idx > maxLen/2 {
-			split = idx + 1
-		}
-		chunks = append(chunks, text[:split])
-		text = text[split:]
-	}
-	return chunks
-}
 
 // parseChatID parses "groupID" or "groupID:threadID" format.
 func parseChatID(chatID string) (groupID int64, threadID int64) {

@@ -57,3 +57,25 @@ func SanitizeText(platform, text string) string {
 	}
 	return strings.TrimSpace(text)
 }
+
+// SplitMessage splits text into chunks of at most maxLen characters,
+// preferring to break at newline boundaries.
+func SplitMessage(text string, maxLen int) []string {
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+	var chunks []string
+	for len(text) > 0 {
+		if len(text) <= maxLen {
+			chunks = append(chunks, text)
+			break
+		}
+		split := maxLen
+		if idx := strings.LastIndex(text[:maxLen], "\n"); idx > maxLen/2 {
+			split = idx + 1
+		}
+		chunks = append(chunks, text[:split])
+		text = text[split:]
+	}
+	return chunks
+}

@@ -140,6 +140,10 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 }
 
 // handleMessage handles an incoming message
+
+// slackMaxLen is the max message length for splitting long responses.
+const slackMaxLen = 4096
+
 func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 	handler := b.GetHandler()
 	if handler == nil {
@@ -207,12 +211,14 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 			return
 		}
 
-		if _, _, err := b.api.PostMessage(ev.Channel,
-			slack.MsgOptionText(platform.SanitizeText("slack", newPortion), false),
-			slack.MsgOptionTS(ev.TimeStamp),
-		); err != nil {
-			b.logger.Debug("stream: send failed", "error", err)
-			return
+		for _, chunk := range platform.SplitMessage(platform.SanitizeText("slack", newPortion), slackMaxLen) {
+			if _, _, err := b.api.PostMessage(ev.Channel,
+				slack.MsgOptionText(chunk, false),
+				slack.MsgOptionTS(ev.TimeStamp),
+			); err != nil {
+				b.logger.Debug("stream: send failed", "error", err)
+				return
+			}
 		}
 		st.MarkSent(len(text))
 	}
@@ -234,11 +240,13 @@ func (b *Bot) handleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
 	}
 	finalText = platform.SanitizeText("slack", finalText)
 
-	if _, _, err := b.api.PostMessage(ev.Channel,
-		slack.MsgOptionText(finalText, false),
-		slack.MsgOptionTS(ev.TimeStamp),
-	); err != nil {
-		b.logger.Error("send message failed", "channel", ev.Channel, "error", err)
+	for _, chunk := range platform.SplitMessage(finalText, slackMaxLen) {
+		if _, _, err := b.api.PostMessage(ev.Channel,
+			slack.MsgOptionText(chunk, false),
+			slack.MsgOptionTS(ev.TimeStamp),
+		); err != nil {
+			b.logger.Error("send chunk failed", "channel", ev.Channel, "error", err)
+		}
 	}
 }
 

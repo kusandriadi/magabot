@@ -600,6 +600,17 @@ func (r *Router) MainProvider() string {
 	return r.mainName
 }
 
+// SetMain switches the active provider. Returns an error if the provider is not registered.
+func (r *Router) SetMain(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.clients[name]; !ok {
+		return fmt.Errorf("provider %q not registered", name)
+	}
+	r.mainName = name
+	return nil
+}
+
 // SetModel sets the model on the main client
 func (r *Router) SetModel(model string) {
 	r.mu.RLock()

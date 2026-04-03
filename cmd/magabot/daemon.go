@@ -852,19 +852,20 @@ Send any message and I'll reply using AI.
  1. /start — Welcome message
  2. /status — Bot status
  3. /model — Current model & switch
- 4. /effort — Set effort level (low/medium/high/max)
- 5. /prompt — Custom system prompt
- 6. /persona — Switch AI persona
- 7. /fallback — Set fallback model
- 8. /budget — Budget limit per request
- 9. /clear — Clear conversation history
-10. /help — This help
+ 4. /llm — Switch LLM provider
+ 5. /effort — Set effort level (low/medium/high/max)
+ 6. /prompt — Custom system prompt
+ 7. /persona — Switch AI persona
+ 8. /fallback — Set fallback model
+ 9. /budget — Budget limit per request
+10. /clear — Clear conversation history
+11. /help — This help
 
 🔧 Admin:
-11. /restart — Restart bot
-12. /config — Configuration
-13. /memory — Memory management
-14. /task — Background tasks
+12. /restart — Restart bot
+13. /config — Configuration
+14. /memory — Memory management
+15. /task — Background tasks
 
 🤖 Agent Sessions:
 • :new [agent] <dir> — Start coding agent
@@ -1027,6 +1028,66 @@ Send any message and I'll reply using AI.
 			}
 		}
 		return fmt.Sprintf("✅ Model switched to `%s`", selectedID), nil
+
+	case "/llm":
+		providers := llmRouter.Providers()
+		if len(providers) == 0 {
+			return "❌ No LLM providers registered", nil
+		}
+
+		currentMain := llmRouter.MainProvider()
+
+		// No args: show current + list
+		if len(args) == 0 {
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("🤖 *Active:* `%s`\n\n📋 Available providers:\n", currentMain))
+			for i, p := range providers {
+				marker := ""
+				if p == currentMain {
+					marker = " ← active"
+				}
+				sb.WriteString(fmt.Sprintf("`%d.` `%s`%s\n", i+1, p, marker))
+			}
+			sb.WriteString("\n_Switch: /llm <number> or /llm <name>_")
+			return sb.String(), nil
+		}
+
+		// With args: switch provider
+		selection := strings.Join(args, " ")
+		var selectedName string
+
+		var idx int
+		if n, err := fmt.Sscanf(selection, "%d", &idx); n == 1 && err == nil {
+			if idx < 1 || idx > len(providers) {
+				return fmt.Sprintf("❌ Invalid number. Choose 1-%d", len(providers)), nil
+			}
+			selectedName = providers[idx-1]
+		} else {
+			for _, p := range providers {
+				if strings.EqualFold(p, selection) {
+					selectedName = p
+					break
+				}
+			}
+			if selectedName == "" {
+				return fmt.Sprintf("❌ Provider '%s' not found. Use /llm to see available providers.", selection), nil
+			}
+		}
+
+		if selectedName == currentMain {
+			return fmt.Sprintf("`%s` is already the active provider.", selectedName), nil
+		}
+
+		if err := llmRouter.SetMain(selectedName); err != nil {
+			return fmt.Sprintf("❌ %v", err), nil
+		}
+		if err := cfg.PatchYAMLField("llm.main", selectedName); err != nil {
+			logger.Warn("persist llm.main failed", "error", err)
+		}
+		switchMainUpdateEnv(cfg, selectedName)
+		saveRestartNotify(msg.Platform, msg.ChatID, "llm-switch")
+		adminH.ScheduleRestart(3, nil)
+		return fmt.Sprintf("✅ Active provider switched to `%s`\n🔄 Restarting in 3 seconds...", selectedName), nil
 
 	case "/effort":
 		cli := llmRouter.CLIProvider()

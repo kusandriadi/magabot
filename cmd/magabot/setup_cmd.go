@@ -31,7 +31,11 @@ func cmdSetup() {
 
 	switch subCmd {
 	case "llm":
-		setupLLM()
+		if len(os.Args) > 3 && strings.ToLower(os.Args[3]) == "main" {
+			setupLLMMain()
+		} else {
+			setupLLM()
+		}
 	case "platform":
 		setupPlatform()
 	case "webhook":
@@ -52,6 +56,7 @@ Usage: magabot setup [target]
 Targets:
   (none)      Run full interactive wizard
   llm         Configure LLM providers
+  llm main    Switch active LLM provider
   platform    Configure chat platform (Telegram/Discord/Slack/WhatsApp)
   webhook     Configure webhook endpoint
   voice       Install voice dependencies (faster-whisper, edge-tts, ffmpeg)
@@ -59,6 +64,7 @@ Targets:
 Examples:
   magabot setup            # Full wizard
   magabot setup llm        # Setup LLM providers
+  magabot setup llm main   # Switch active LLM provider
   magabot setup platform   # Setup chat platform
   magabot setup webhook    # Setup webhook endpoint
   magabot setup voice      # Install voice support`)
@@ -538,6 +544,95 @@ func setupWebhook() {
 	askRestart(reader)
 }
 
+// setupLLMMain switches the active LLM provider
+func setupLLMMain() {
+	cfg := loadOrCreateConfig()
+
+	type providerEntry struct {
+		name string
+		cfg  config.LLMProviderConfig
+	}
+	var enabled []providerEntry
+	all := []providerEntry{
+		{"anthropic", cfg.LLM.Anthropic},
+		{"openai", cfg.LLM.OpenAI},
+		{"glm", cfg.LLM.GLM},
+		{"kimi", cfg.LLM.Kimi},
+		{"minimax", cfg.LLM.MiniMax},
+		{"local", cfg.LLM.Local},
+	}
+	for _, p := range all {
+		if p.cfg.Enabled {
+			enabled = append(enabled, p)
+		}
+	}
+
+	if len(enabled) == 0 {
+		fmt.Println("❌ No enabled LLM providers. Run `magabot setup llm` first.")
+		return
+	}
+
+	fmt.Println("\n🤖 Switch Active LLM Provider")
+	fmt.Println("─────────────────────────────")
+	fmt.Println()
+	fmt.Printf("Current main: %s\n\n", cfg.LLM.Main)
+
+	fmt.Println("Enabled providers:")
+	for i, p := range enabled {
+		current := ""
+		if p.name == cfg.LLM.Main {
+			current = " (current)"
+		}
+		fmt.Printf("  %d. %s%s\n", i+1, p.name, current)
+	}
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+	choice := askString(reader, "Select provider", "")
+	if choice == "" {
+		fmt.Println("Cancelled.")
+		return
+	}
+
+	var idx int
+	if n, err := fmt.Sscanf(choice, "%d", &idx); n == 1 && err == nil {
+		if idx < 1 || idx > len(enabled) {
+			fmt.Printf("❌ Invalid choice. Pick 1-%d\n", len(enabled))
+			return
+		}
+	} else {
+		// Try matching by name
+		found := false
+		for i, p := range enabled {
+			if strings.EqualFold(p.name, choice) {
+				idx = i + 1
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Printf("❌ Unknown provider: %s\n", choice)
+			return
+		}
+	}
+
+	selected := enabled[idx-1]
+	if selected.name == cfg.LLM.Main {
+		fmt.Printf("%s is already the active provider.\n", selected.name)
+		return
+	}
+
+	cfg.LLM.Main = selected.name
+	if err := cfg.PatchYAMLField("llm.main", selected.name); err != nil {
+		fmt.Printf("❌ Failed to save config: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Active provider switched to %s\n", selected.name)
+	switchMainUpdateEnv(cfg, selected.name)
+	restartDaemon()
+}
+
 // setupLLM configures all LLM providers
 func setupLLM() {
 	reader := bufio.NewReader(os.Stdin)
@@ -546,6 +641,7 @@ func setupLLM() {
 	fmt.Println()
 
 	cfg := loadOrCreateConfig()
+	hadMain := cfg.LLM.Main != ""
 
 	fmt.Println("Which LLM provider do you want as default?")
 	fmt.Println("  1. anthropic  - Claude (recommended)")
@@ -573,13 +669,22 @@ func setupLLM() {
 	}
 	cfg.LLM.Main = llmProvider
 
-	// Reset all provider configs so old settings don't leak through
-	cfg.LLM.Anthropic = config.LLMProviderConfig{}
-	cfg.LLM.OpenAI = config.LLMProviderConfig{}
-	cfg.LLM.GLM = config.LLMProviderConfig{}
-	cfg.LLM.Local = config.LLMProviderConfig{}
-	cfg.LLM.Kimi = config.LLMProviderConfig{}
-	cfg.LLM.MiniMax = config.LLMProviderConfig{}
+	// Reset only the selected provider config so old settings don't leak through.
+	// Other providers are preserved so users can switch main without losing configs.
+	switch llmProvider {
+	case "anthropic":
+		cfg.LLM.Anthropic = config.LLMProviderConfig{}
+	case "openai":
+		cfg.LLM.OpenAI = config.LLMProviderConfig{}
+	case "glm":
+		cfg.LLM.GLM = config.LLMProviderConfig{}
+	case "kimi":
+		cfg.LLM.Kimi = config.LLMProviderConfig{}
+	case "minimax":
+		cfg.LLM.MiniMax = config.LLMProviderConfig{}
+	case "local":
+		cfg.LLM.Local = config.LLMProviderConfig{}
+	}
 
 	fmt.Println()
 	switch llmProvider {
@@ -924,10 +1029,59 @@ func setupLLM() {
 		}
 	}
 
-	askRestart(reader)
+	if !hadMain {
+		askRestart(reader)
+	}
 }
 
 // Helper functions
+
+// switchMainUpdateEnv updates ~/.claude/settings.json env vars based on the new main provider.
+// For anthropic: removes env vars. For CLI-mode providers (glm, kimi, minimax): sets env vars.
+func switchMainUpdateEnv(cfg *config.Config, mainProvider string) {
+	switch mainProvider {
+	case "anthropic":
+		if err := updateClaudeSettingsEnv(nil); err != nil {
+			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+		}
+	case "glm":
+		ac := cfg.LLM.GLM
+		if err := updateClaudeSettingsEnv(map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":           ac.APIKey,
+			"ANTHROPIC_BASE_URL":             ac.BaseURL,
+			"API_TIMEOUT_MS":                 "3000000",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  ac.ImplModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": ac.ImplModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   ac.PlanModel,
+		}); err != nil {
+			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+		}
+	case "kimi":
+		kc := cfg.LLM.Kimi
+		if err := updateClaudeSettingsEnv(map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":           kc.APIKey,
+			"ANTHROPIC_BASE_URL":             "https://api.moonshot.ai/anthropic",
+			"API_TIMEOUT_MS":                 "3000000",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  kc.ImplModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": kc.ImplModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   kc.PlanModel,
+		}); err != nil {
+			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+		}
+	case "minimax":
+		mc := cfg.LLM.MiniMax
+		if err := updateClaudeSettingsEnv(map[string]string{
+			"ANTHROPIC_AUTH_TOKEN":           mc.APIKey,
+			"ANTHROPIC_BASE_URL":             mc.BaseURL,
+			"API_TIMEOUT_MS":                 "3000000",
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  mc.ImplModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": mc.ImplModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   mc.PlanModel,
+		}); err != nil {
+			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
+		}
+	}
+}
 
 func loadOrCreateConfig() *config.Config {
 	cfg, err := config.Load(configFile)
@@ -1135,7 +1289,24 @@ func restartDaemon() {
 
 	// Full restart
 	cmdStop()
-	time.Sleep(1 * time.Second)
+	fmt.Print("⏳ Waiting for process to exit")
+	for i := 0; i < 300; i++ {
+		if pid > 0 && !processExists(pid) {
+			break
+		}
+		if i%10 == 0 {
+			fmt.Print(".")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	fmt.Println()
+
+	if pid > 0 && processExists(pid) {
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill()
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
 	cmdStart()
 }
 

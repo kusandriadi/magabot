@@ -21,10 +21,39 @@ import (
 
 // cmdStart starts the magabot daemon
 func cmdStart() {
-	// Check if already running
+	// If already running, stop it first and wait for it to fully exit
 	if isRunning() {
-		fmt.Println("⚠️  Magabot is already running")
-		return
+		pid := getPID()
+		fmt.Printf("🛑 Magabot is already running (PID: %d), stopping...\n", pid)
+		if err := stopProcess(pid); err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Failed to stop existing process: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Print("⏳ Waiting for process to exit")
+		for i := 0; i < 300; i++ {
+			if !processExists(pid) {
+				break
+			}
+			if i%10 == 0 {
+				fmt.Print(".")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		fmt.Println()
+
+		if processExists(pid) {
+			// Escalate to SIGKILL
+			if p, err := os.FindProcess(pid); err == nil {
+				_ = p.Kill()
+				time.Sleep(500 * time.Millisecond)
+			}
+			if processExists(pid) {
+				fmt.Fprintf(os.Stderr, "❌ Process %d did not exit in time\n", pid)
+				os.Exit(1)
+			}
+		}
+		_ = os.Remove(pidFile)
+		fmt.Println("✅ Existing process stopped")
 	}
 
 	// Check if config exists

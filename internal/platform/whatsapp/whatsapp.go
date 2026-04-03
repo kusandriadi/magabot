@@ -284,6 +284,10 @@ func (b *Bot) eventHandler(evt interface{}) {
 }
 
 // handleMessage processes an incoming WhatsApp message
+
+// whatsAppMaxLen is the max message length for splitting long responses.
+const whatsAppMaxLen = 4096
+
 func (b *Bot) handleMessage(evt *events.Message) {
 	handler := b.GetHandler()
 	if handler == nil {
@@ -375,11 +379,13 @@ func (b *Bot) handleMessage(evt *events.Message) {
 			return
 		}
 
-		if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
-			Conversation: proto.String(platform.SanitizeText("whatsapp", newPortion)),
-		}); err != nil {
-			b.logger.Debug("stream: send failed", "error", err)
-			return
+		for _, chunk := range platform.SplitMessage(platform.SanitizeText("whatsapp", newPortion), whatsAppMaxLen) {
+			if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
+				Conversation: proto.String(chunk),
+			}); err != nil {
+				b.logger.Debug("stream: send failed", "error", err)
+				return
+			}
 		}
 		st.MarkSent(len(text))
 	}
@@ -406,19 +412,14 @@ func (b *Bot) handleMessage(evt *events.Message) {
 	}
 	finalText = platform.SanitizeText("whatsapp", finalText)
 
-	if st.Streamed() {
-		// Send remainder as new message
+	// Split and send remaining text
+	for _, chunk := range platform.SplitMessage(finalText, whatsAppMaxLen) {
 		if client != nil && client.IsConnected() {
 			if _, err := client.SendMessage(ctx, jid, &waE2E.Message{
-				Conversation: proto.String(finalText),
+				Conversation: proto.String(chunk),
 			}); err != nil {
-				b.logger.Error("stream: send final failed", "error", err)
+				b.logger.Error("send chunk failed", "error", err)
 			}
-		}
-	} else {
-		// No streaming (command, agent, etc.) — send as before
-		if err := b.Send(chatID, finalText); err != nil {
-			b.logger.Error("send reply failed", "error", err)
 		}
 	}
 }
