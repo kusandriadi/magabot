@@ -206,6 +206,30 @@ type LLMConfig struct {
 	MiniMax   LLMProviderConfig `yaml:"minimax,omitempty"`
 }
 
+// KimiDefaultBaseURL is the default Anthropic-compatible endpoint for Kimi.
+const KimiDefaultBaseURL = "https://api.moonshot.ai/anthropic"
+
+// GetProviderConfig returns a pointer to the LLMProviderConfig for the named
+// provider, or nil if the name is unrecognized.
+func (l *LLMConfig) GetProviderConfig(name string) *LLMProviderConfig {
+	switch name {
+	case "anthropic":
+		return &l.Anthropic
+	case "openai":
+		return &l.OpenAI
+	case "glm":
+		return &l.GLM
+	case "local":
+		return &l.Local
+	case "kimi":
+		return &l.Kimi
+	case "minimax":
+		return &l.MiniMax
+	default:
+		return nil
+	}
+}
+
 // LLMProviderConfig holds config for a single LLM provider
 type LLMProviderConfig struct {
 	Enabled       bool     `yaml:"enabled"`
@@ -583,6 +607,11 @@ func (c *Config) setDefaults() {
 		if p.Enabled && p.MaxRetries == nil {
 			p.MaxRetries = IntPtr(2)
 		}
+	}
+
+	// Set default BaseURL for Kimi if not explicitly configured
+	if c.LLM.Kimi.Enabled && c.LLM.Kimi.BaseURL == "" {
+		c.LLM.Kimi.BaseURL = KimiDefaultBaseURL
 	}
 
 	if c.Agent.PlanDelegate == nil {

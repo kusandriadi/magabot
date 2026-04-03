@@ -104,21 +104,34 @@ var (
 	ErrTimeout        = allm.ErrTimeout
 )
 
-// usageTracker tracks global LLM request counts over hourly and weekly windows.
+// usageTracker tracks global LLM request counts and token consumption
+// over hourly and weekly windows.
 type usageTracker struct {
-	mu          sync.Mutex
-	hourlyCount int
-	weeklyCount int
-	hourStart   time.Time
-	weekStart   time.Time
+	mu            sync.Mutex
+	hourlyCount   int
+	weeklyCount   int
+	hourStart     time.Time
+	weekStart     time.Time
+	hourlyTokenIn  int
+	hourlyTokenOut int
+	weeklyTokenIn  int
+	weeklyTokenOut int
+	totalTokenIn   int
+	totalTokenOut  int
 }
 
 // UsageStats holds usage statistics for display.
 type UsageStats struct {
-	HourlyCount   int
-	WeeklyCount   int
-	NextHourReset time.Time
-	NextWeekReset time.Time
+	HourlyCount    int
+	WeeklyCount    int
+	NextHourReset  time.Time
+	NextWeekReset  time.Time
+	HourlyTokenIn  int
+	HourlyTokenOut int
+	WeeklyTokenIn  int
+	WeeklyTokenOut int
+	TotalTokenIn   int
+	TotalTokenOut  int
 }
 
 func newUsageTracker() *usageTracker {
@@ -145,23 +158,45 @@ func (u *usageTracker) track() {
 	defer u.mu.Unlock()
 
 	now := time.Now()
+	u.resetIfExpired(now)
+	u.hourlyCount++
+	u.weeklyCount++
+}
 
-	// Reset hourly window if expired
+func (u *usageTracker) trackTokens(inputTokens, outputTokens int) {
+	if inputTokens == 0 && outputTokens == 0 {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	now := time.Now()
+	u.resetIfExpired(now)
+	u.hourlyTokenIn += inputTokens
+	u.hourlyTokenOut += outputTokens
+	u.weeklyTokenIn += inputTokens
+	u.weeklyTokenOut += outputTokens
+	u.totalTokenIn += inputTokens
+	u.totalTokenOut += outputTokens
+}
+
+// resetIfExpired resets hourly/weekly windows if expired. Must be called with mu held.
+func (u *usageTracker) resetIfExpired(now time.Time) {
 	hourBoundary := u.hourStart.Add(time.Hour)
 	if now.After(hourBoundary) || now.Equal(hourBoundary) {
 		u.hourStart = now.Truncate(time.Hour)
 		u.hourlyCount = 0
+		u.hourlyTokenIn = 0
+		u.hourlyTokenOut = 0
 	}
 
-	// Reset weekly window if expired
 	weekBoundary := u.weekStart.Add(7 * 24 * time.Hour)
 	if now.After(weekBoundary) || now.Equal(weekBoundary) {
 		u.weekStart = truncateToWeek(now)
 		u.weeklyCount = 0
+		u.weeklyTokenIn = 0
+		u.weeklyTokenOut = 0
 	}
-
-	u.hourlyCount++
-	u.weeklyCount++
 }
 
 func (u *usageTracker) stats() UsageStats {
@@ -169,25 +204,19 @@ func (u *usageTracker) stats() UsageStats {
 	defer u.mu.Unlock()
 
 	now := time.Now()
-
-	// Check if resets are needed (lazy reset on read)
-	hourBoundary := u.hourStart.Add(time.Hour)
-	if now.After(hourBoundary) || now.Equal(hourBoundary) {
-		u.hourStart = now.Truncate(time.Hour)
-		u.hourlyCount = 0
-	}
-
-	weekBoundary := u.weekStart.Add(7 * 24 * time.Hour)
-	if now.After(weekBoundary) || now.Equal(weekBoundary) {
-		u.weekStart = truncateToWeek(now)
-		u.weeklyCount = 0
-	}
+	u.resetIfExpired(now)
 
 	return UsageStats{
-		HourlyCount:   u.hourlyCount,
-		WeeklyCount:   u.weeklyCount,
-		NextHourReset: u.hourStart.Add(time.Hour),
-		NextWeekReset: u.weekStart.Add(7 * 24 * time.Hour),
+		HourlyCount:    u.hourlyCount,
+		WeeklyCount:    u.weeklyCount,
+		NextHourReset:  u.hourStart.Add(time.Hour),
+		NextWeekReset:  u.weekStart.Add(7 * 24 * time.Hour),
+		HourlyTokenIn:  u.hourlyTokenIn,
+		HourlyTokenOut: u.hourlyTokenOut,
+		WeeklyTokenIn:  u.weeklyTokenIn,
+		WeeklyTokenOut: u.weeklyTokenOut,
+		TotalTokenIn:   u.totalTokenIn,
+		TotalTokenOut:  u.totalTokenOut,
 	}
 }
 
@@ -314,6 +343,8 @@ func (r *Router) chat(ctx context.Context, messages []allm.Message) (*Response, 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", ErrProviderFailed, r.mainName, err)
 	}
+
+	r.usage.trackTokens(resp.InputTokens, resp.OutputTokens)
 
 	if resp.RequestID != "" {
 		r.logger.Debug("llm response", "provider", r.mainName, "request_id", resp.RequestID, "tokens_in", resp.InputTokens, "tokens_out", resp.OutputTokens)
@@ -475,6 +506,11 @@ func (r *Router) StreamChat(ctx context.Context, userID string, messages []Messa
 					}
 				}
 				idle.Reset(r.timeout)
+
+				// Track token usage from the final stream chunk
+				if chunk.Done && chunk.Usage != nil {
+					r.usage.trackTokens(chunk.Usage.InputTokens, chunk.Usage.OutputTokens)
+				}
 
 				select {
 				case out <- chunk:

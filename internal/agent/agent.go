@@ -58,6 +58,8 @@ type Session struct {
 	ChatID       string
 	UserID       string
 	MsgCount     int                         // tracks messages sent (for --continue)
+	LastModel    string                      // model used in the last execution (for detecting model switches)
+	LastResponse string                      // response from the last execution (for context carry-over on model switch)
 	StartTime    time.Time                   // when the session was created
 	LastActivity time.Time                   // last Execute() call (for idle timeout)
 	cli          *provider.ClaudeCLIProvider // Claude CLI provider (nil for non-Claude agents)
@@ -308,10 +310,7 @@ func (m *Manager) GetSession(platform, chatID string) *Session {
 
 // HasSession returns true if there is an active session for the chat.
 func (m *Manager) HasSession(platform, chatID string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	_, ok := m.sessions[sessionKey(platform, chatID)]
-	return ok
+	return m.GetSession(platform, chatID) != nil
 }
 
 // CloseSession removes an active agent session.
@@ -360,7 +359,6 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 
 		// Configure provider for this attempt
 		count := sess.GetMsgCount()
-		sess.cli.SetContinue(count > 0)
 
 		if m.config.PlanDelegate {
 			sess.cli.SetAppendPrompt(planDelegatePrompt)
@@ -377,13 +375,45 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		if effectiveModel == "" {
 			effectiveModel = "sonnet"
 		}
+
+		// Detect model switch (e.g. plan=opus → impl=sonnet).
+		// Claude CLI sessions are model-specific: --continue with a different
+		// model silently loses context. When the model changes, start a fresh
+		// session and carry over the previous response as inline context.
+		sess.mu.Lock()
+		lastModel := sess.LastModel
+		lastResp := sess.LastResponse
+		sess.mu.Unlock()
+
+		modelChanged := count > 0 && lastModel != "" && lastModel != effectiveModel
+		if modelChanged {
+			sess.cli.SetContinue(false)
+			if lastResp != "" {
+				// Truncate context to avoid exceeding input limits
+				const maxCtx = 8000
+				prevCtx := lastResp
+				if len(prevCtx) > maxCtx {
+					prevCtx = prevCtx[:maxCtx] + "\n... (truncated)"
+				}
+				// Prepend previous response so the new model has context
+				contextPrefix := fmt.Sprintf("Previous conversation context (from %s):\n---\n%s\n---\n\n", lastModel, prevCtx)
+				req.Messages[0].Content = contextPrefix + req.Messages[0].Content
+			}
+			m.logger.Info("model changed, starting fresh session with context carry-over",
+				"from_model", lastModel, "to_model", effectiveModel,
+			)
+		} else {
+			sess.cli.SetContinue(count > 0)
+		}
+
 		m.logger.Debug("executing agent",
 			"agent", sess.Agent, "dir", sess.Dir,
 			"attempt", attempt, "msg_count", count,
 			"streaming", streaming,
 			"model", effectiveModel,
 			"effort", req.Effort,
-			"continue", count > 0,
+			"continue", count > 0 && !modelChanged,
+			"model_changed", modelChanged,
 			"plan_delegate", m.config.PlanDelegate,
 			"append_system_prompt", appendPromptPreview(m.config.PlanDelegate),
 		)
@@ -409,6 +439,10 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 
 		sess.mu.Lock()
 		sess.MsgCount++
+		sess.LastModel = effectiveModel
+		if partial != "" {
+			sess.LastResponse = partial
+		}
 		sess.mu.Unlock()
 		if partial != "" {
 			allOutput = append(allOutput, partial)
@@ -762,32 +796,29 @@ func tpl(templates map[string]string, key string) string {
 	return DefaultTemplates[key]
 }
 
+// extractFilePath extracts the "file_path" field from a JSON tool input.
+func extractFilePath(input json.RawMessage) string {
+	var p struct {
+		FilePath string `json:"file_path"`
+	}
+	_ = json.Unmarshal(input, &p)
+	return p.FilePath
+}
+
 // formatToolUse formats a tool-use event using the given templates.
 func formatToolUse(name string, input json.RawMessage, templates map[string]string) string {
 	switch name {
 	case "Read":
-		var p struct {
-			FilePath string `json:"file_path"`
-		}
-		_ = json.Unmarshal(input, &p)
-		if p.FilePath != "" {
-			return strings.ReplaceAll(tpl(templates, "read_file"), "{file}", filepath.Base(p.FilePath))
+		if fp := extractFilePath(input); fp != "" {
+			return strings.ReplaceAll(tpl(templates, "read_file"), "{file}", filepath.Base(fp))
 		}
 	case "Edit":
-		var p struct {
-			FilePath string `json:"file_path"`
-		}
-		_ = json.Unmarshal(input, &p)
-		if p.FilePath != "" {
-			return strings.ReplaceAll(tpl(templates, "edit_file"), "{file}", filepath.Base(p.FilePath))
+		if fp := extractFilePath(input); fp != "" {
+			return strings.ReplaceAll(tpl(templates, "edit_file"), "{file}", filepath.Base(fp))
 		}
 	case "Write":
-		var p struct {
-			FilePath string `json:"file_path"`
-		}
-		_ = json.Unmarshal(input, &p)
-		if p.FilePath != "" {
-			return strings.ReplaceAll(tpl(templates, "write_file"), "{file}", filepath.Base(p.FilePath))
+		if fp := extractFilePath(input); fp != "" {
+			return strings.ReplaceAll(tpl(templates, "write_file"), "{file}", filepath.Base(fp))
 		}
 	case "Bash":
 		var p struct {
@@ -843,20 +874,12 @@ func formatToolUse(name string, input json.RawMessage, templates map[string]stri
 func summarizeToolUse(name string, input json.RawMessage) string {
 	switch name {
 	case "Write":
-		var p struct {
-			FilePath string `json:"file_path"`
-		}
-		_ = json.Unmarshal(input, &p)
-		if p.FilePath != "" {
-			return "created " + filepath.Base(p.FilePath)
+		if fp := extractFilePath(input); fp != "" {
+			return "created " + filepath.Base(fp)
 		}
 	case "Edit":
-		var p struct {
-			FilePath string `json:"file_path"`
-		}
-		_ = json.Unmarshal(input, &p)
-		if p.FilePath != "" {
-			return "edited " + filepath.Base(p.FilePath)
+		if fp := extractFilePath(input); fp != "" {
+			return "edited " + filepath.Base(fp)
 		}
 	case "Bash":
 		var p struct {

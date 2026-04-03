@@ -929,7 +929,7 @@ func setupLLM() {
 		// Update Claude settings to use Kimi endpoint
 		if err := updateClaudeSettingsEnv(map[string]string{
 			"ANTHROPIC_AUTH_TOKEN":           key,
-			"ANTHROPIC_BASE_URL":             "https://api.moonshot.ai/anthropic",
+			"ANTHROPIC_BASE_URL":             config.KimiDefaultBaseURL,
 			"API_TIMEOUT_MS":                 "3000000",
 			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.Kimi.ImplModel,
 			"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.Kimi.ImplModel,
@@ -1002,20 +1002,8 @@ func setupLLM() {
 		fmt.Println("⏭️  Skipping connection test (CLI mode — uses claude login session)")
 	} else {
 		var apiKey string
-		switch cfg.LLM.Main {
-		case "anthropic":
-			apiKey = cfg.LLM.Anthropic.APIKey
-
-		case "openai":
-			apiKey = cfg.LLM.OpenAI.APIKey
-		case "glm":
-			apiKey = cfg.LLM.GLM.APIKey
-
-		case "kimi":
-			apiKey = cfg.LLM.Kimi.APIKey
-
-		case "minimax":
-			apiKey = cfg.LLM.MiniMax.APIKey
+		if pc := cfg.LLM.GetProviderConfig(cfg.LLM.Main); pc != nil {
+			apiKey = pc.APIKey
 		}
 
 		if apiKey != "" {
@@ -1044,42 +1032,27 @@ func switchMainUpdateEnv(cfg *config.Config, mainProvider string) {
 		if err := updateClaudeSettingsEnv(nil); err != nil {
 			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
 		}
-	case "glm":
-		ac := cfg.LLM.GLM
-		if err := updateClaudeSettingsEnv(map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":           ac.APIKey,
-			"ANTHROPIC_BASE_URL":             ac.BaseURL,
-			"API_TIMEOUT_MS":                 "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  ac.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": ac.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   ac.PlanModel,
-		}); err != nil {
-			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
-		}
-	case "kimi":
-		kc := cfg.LLM.Kimi
-		if err := updateClaudeSettingsEnv(map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":           kc.APIKey,
-			"ANTHROPIC_BASE_URL":             "https://api.moonshot.ai/anthropic",
-			"API_TIMEOUT_MS":                 "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  kc.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": kc.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   kc.PlanModel,
-		}); err != nil {
-			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
-		}
-	case "minimax":
-		mc := cfg.LLM.MiniMax
-		if err := updateClaudeSettingsEnv(map[string]string{
-			"ANTHROPIC_AUTH_TOKEN":           mc.APIKey,
-			"ANTHROPIC_BASE_URL":             mc.BaseURL,
-			"API_TIMEOUT_MS":                 "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  mc.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": mc.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   mc.PlanModel,
-		}); err != nil {
-			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
-		}
+		return
+	case "glm", "kimi", "minimax":
+		// These providers use Anthropic-compatible endpoints via Claude CLI
+	default:
+		return // openai, local, etc. don't use Claude settings env
+	}
+
+	pc := cfg.LLM.GetProviderConfig(mainProvider)
+	if pc == nil {
+		return
+	}
+
+	if err := updateClaudeSettingsEnv(map[string]string{
+		"ANTHROPIC_AUTH_TOKEN":           pc.APIKey,
+		"ANTHROPIC_BASE_URL":             pc.BaseURL,
+		"API_TIMEOUT_MS":                 "3000000",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  pc.ImplModel,
+		"ANTHROPIC_DEFAULT_SONNET_MODEL": pc.ImplModel,
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   pc.PlanModel,
+	}); err != nil {
+		fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
 	}
 }
 

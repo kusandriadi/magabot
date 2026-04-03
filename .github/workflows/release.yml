@@ -30,9 +30,18 @@ jobs:
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}"
 
-          GOOS=linux   GOARCH=amd64 CGO_ENABLED=1 CC=gcc                    go build -ldflags="${LDFLAGS}" -o magabot_linux_amd64         ./cmd/magabot
-          GOOS=linux   GOARCH=arm64 CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc  go build -ldflags="${LDFLAGS}" -o magabot_linux_arm64         ./cmd/magabot
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -ldflags="${LDFLAGS}" -o magabot_windows_amd64.exe   ./cmd/magabot
+          GOOS=linux   GOARCH=amd64 CGO_ENABLED=1 CC=gcc                    go build -trimpath -ldflags="${LDFLAGS}" -o magabot_linux_amd64         ./cmd/magabot
+          GOOS=linux   GOARCH=arm64 CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc  go build -trimpath -ldflags="${LDFLAGS}" -o magabot_linux_arm64         ./cmd/magabot
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -trimpath -ldflags="${LDFLAGS}" -o magabot_windows_amd64.exe   ./cmd/magabot
+
+      - name: Install UPX
+        run: sudo apt-get update && sudo apt-get install -y upx-ucl
+
+      - name: Compress binaries with UPX
+        run: |
+          upx --best --lzma magabot_linux_amd64
+          upx --best --lzma magabot_linux_arm64
+          upx --best --lzma magabot_windows_amd64.exe
 
       - name: Package and checksum
         run: |
@@ -70,8 +79,8 @@ jobs:
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}"
 
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=clang go build -ldflags="${LDFLAGS}" -o magabot_darwin_amd64 ./cmd/magabot
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang go build -ldflags="${LDFLAGS}" -o magabot_darwin_arm64 ./cmd/magabot
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=clang go build -trimpath -ldflags="${LDFLAGS}" -o magabot_darwin_amd64 ./cmd/magabot
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang go build -trimpath -ldflags="${LDFLAGS}" -o magabot_darwin_arm64 ./cmd/magabot
 
       - name: Package and checksum
         run: |

@@ -666,6 +666,20 @@ func (s *VectorStore) addWithEmbedding(id, content string, embedding []float32, 
 	return err
 }
 
+// decodeEntry unmarshals raw embedding and metadata JSON into an Entry.
+// Metadata errors are logged but not fatal.
+func (s *VectorStore) decodeEntry(entry *Entry, embData []byte, metaData string) error {
+	if err := json.Unmarshal(embData, &entry.Embedding); err != nil {
+		return fmt.Errorf("unmarshal embedding: %w", err)
+	}
+	if metaData != "" {
+		if err := json.Unmarshal([]byte(metaData), &entry.Metadata); err != nil {
+			s.logger.Warn("failed to unmarshal metadata", "id", entry.ID, "error", err)
+		}
+	}
+	return nil
+}
+
 // Get retrieves an entry by ID.
 func (s *VectorStore) Get(id string) (*Entry, error) {
 	s.mu.RLock()
@@ -690,14 +704,8 @@ func (s *VectorStore) Get(id string) (*Entry, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(embData, &entry.Embedding); err != nil {
-		return nil, fmt.Errorf("unmarshal embedding: %w", err)
-	}
-
-	if metaData != "" {
-		if err := json.Unmarshal([]byte(metaData), &entry.Metadata); err != nil {
-			s.logger.Warn("failed to unmarshal metadata", "id", id, "error", err)
-		}
+	if err := s.decodeEntry(&entry, embData, metaData); err != nil {
+		return nil, err
 	}
 
 	return &entry, nil
@@ -773,12 +781,8 @@ func (s *VectorStore) SearchByVector(queryVector []float32, limit int) ([]Search
 			continue
 		}
 
-		if err := json.Unmarshal(embData, &entry.Embedding); err != nil {
+		if err := s.decodeEntry(&entry, embData, metaData); err != nil {
 			continue
-		}
-
-		if metaData != "" {
-			_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
 		similarity := float32(allm.CosineSimilarity(queryVector, entry.Embedding))
@@ -861,12 +865,8 @@ func (s *VectorStore) List(offset, limit int) ([]*Entry, error) {
 			continue
 		}
 
-		if err := json.Unmarshal(embData, &entry.Embedding); err != nil {
+		if err := s.decodeEntry(&entry, embData, metaData); err != nil {
 			continue
-		}
-
-		if metaData != "" {
-			_ = json.Unmarshal([]byte(metaData), &entry.Metadata)
 		}
 
 		entries = append(entries, &entry)

@@ -227,6 +227,8 @@ func runDaemon() {
 	rtr.SetHooks(hooksMgr)
 
 	// Initialize agent session manager
+	// Resolve plan/impl models from the active main provider (not just Anthropic).
+	agentPlanModel, agentImplModel, agentCLIPath := resolveAgentModels(cfg)
 	agentMgr := agent.NewManager(agent.Config{
 		Timeout:        cfg.Agent.Timeout.Seconds(),
 		MaxRetries:     cfg.Agent.MaxRetries,
@@ -234,9 +236,9 @@ func runDaemon() {
 		Shortcuts:      cfg.Agent.Shortcuts,
 		DiscoverDepth:  cfg.Agent.DiscoverDepth,
 		PlanDelegate:   cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
-		CLIPath:        cfg.LLM.Anthropic.CLIPath,
-		PlanModel:      cfg.LLM.Anthropic.PlanModel,
-		ImplModel:      cfg.LLM.Anthropic.ImplModel,
+		CLIPath:        agentCLIPath,
+		PlanModel:      agentPlanModel,
+		ImplModel:      agentImplModel,
 		OnSessionClose: func(platform, chatID, message string) {
 			_ = rtr.Send(platform, chatID, message)
 		},
@@ -796,6 +798,18 @@ func isAudioFile(path string) bool {
 	return false
 }
 
+// formatTokenCount formats a token count in a human-readable way (e.g. "1.2k", "3.4M").
+func formatTokenCount(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
 // formatDuration formats a duration in a human-readable way (e.g. "2h 15m", "3d 12h").
 func formatDuration(d time.Duration) string {
 	if d <= 0 {
@@ -926,19 +940,7 @@ Send any message and I'll reply using AI.
 		sb.WriteString("\n🤖 LLM:\n")
 		sb.WriteString(fmt.Sprintf("  • Provider: %s\n", llmStats["main"]))
 		// Show plan/impl model for the active provider
-		var activeCfg *config.LLMProviderConfig
-		switch cfg.LLM.Main {
-		case "anthropic":
-			activeCfg = &cfg.LLM.Anthropic
-		case "openai":
-			activeCfg = &cfg.LLM.OpenAI
-		case "glm":
-			activeCfg = &cfg.LLM.GLM
-		case "kimi":
-			activeCfg = &cfg.LLM.Kimi
-		case "minimax":
-			activeCfg = &cfg.LLM.MiniMax
-		}
+		activeCfg := cfg.LLM.GetProviderConfig(cfg.LLM.Main)
 		if activeCfg != nil {
 			if activeCfg.PlanModel != "" {
 				sb.WriteString(fmt.Sprintf("  • Plan Model: %s\n", activeCfg.PlanModel))
@@ -962,8 +964,16 @@ Send any message and I'll reply using AI.
 
 		usage := llmRouter.Usage()
 		now := time.Now()
-		sb.WriteString(fmt.Sprintf("  • Hourly: %d requests (resets in %s)\n", usage.HourlyCount, formatDuration(usage.NextHourReset.Sub(now))))
-		sb.WriteString(fmt.Sprintf("  • Weekly: %d requests (resets in %s)\n", usage.WeeklyCount, formatDuration(usage.NextWeekReset.Sub(now))))
+		sb.WriteString(fmt.Sprintf("  • Hourly: %d reqs, %s tokens in / %s out (resets in %s)\n",
+			usage.HourlyCount, formatTokenCount(usage.HourlyTokenIn), formatTokenCount(usage.HourlyTokenOut),
+			formatDuration(usage.NextHourReset.Sub(now))))
+		sb.WriteString(fmt.Sprintf("  • Weekly: %d reqs, %s tokens in / %s out (resets in %s)\n",
+			usage.WeeklyCount, formatTokenCount(usage.WeeklyTokenIn), formatTokenCount(usage.WeeklyTokenOut),
+			formatDuration(usage.NextWeekReset.Sub(now))))
+		if usage.TotalTokenIn > 0 || usage.TotalTokenOut > 0 {
+			sb.WriteString(fmt.Sprintf("  • Total: %s tokens in / %s out\n",
+				formatTokenCount(usage.TotalTokenIn), formatTokenCount(usage.TotalTokenOut)))
+		}
 
 		sb.WriteString("\n📡 Platforms:\n")
 		userCounts, _ := stats["users"].(map[string]int64)
@@ -1550,6 +1560,28 @@ func derefFloat64(p *float64) float64 {
 	return *p
 }
 
+// buildClientOptions constructs the common allm.Option slice for context window,
+// retry, truncation, and input length settings shared across all provider registrations.
+func buildClientOptions(model string, maxRetries int, llmCfg *config.LLMConfig) []allm.Option {
+	var opts []allm.Option
+	if model != "" {
+		opts = append(opts, allm.WithModel(model))
+	}
+	if maxRetries > 0 {
+		opts = append(opts, allm.WithMaxRetries(maxRetries), allm.WithRetryBaseDelay(1*time.Second))
+	}
+	if llmCfg.MaxContextTokens > 0 {
+		opts = append(opts, allm.WithMaxContextTokens(llmCfg.MaxContextTokens))
+	}
+	if llmCfg.TruncationStrategy != "" {
+		opts = append(opts, allm.WithTruncationStrategy(llmCfg.TruncationStrategy))
+	}
+	if llmCfg.MaxInputLength > 0 {
+		opts = append(opts, allm.WithMaxInputLen(llmCfg.MaxInputLength))
+	}
+	return opts
+}
+
 type compatProviderConfig struct {
 	name        string
 	apiKey      string
@@ -1596,24 +1628,7 @@ func registerCompatProvider(llmRouter *llm.Router, cfg compatProviderConfig, llm
 		p = cfg.constructor(cfg.apiKey, opts...)
 	}
 
-	// Create client with retry, context window, and input validation options
-	clientOpts := []allm.Option{}
-	if cfg.model != "" {
-		clientOpts = append(clientOpts, allm.WithModel(cfg.model))
-	}
-	if cfg.maxRetries > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxRetries(cfg.maxRetries), allm.WithRetryBaseDelay(1*time.Second))
-	}
-	if llmCfg.LLM.MaxContextTokens > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxContextTokens(llmCfg.LLM.MaxContextTokens))
-	}
-	if llmCfg.LLM.TruncationStrategy != "" {
-		clientOpts = append(clientOpts, allm.WithTruncationStrategy(llmCfg.LLM.TruncationStrategy))
-	}
-	if llmCfg.LLM.MaxInputLength > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxInputLen(llmCfg.LLM.MaxInputLength))
-	}
-
+	clientOpts := buildClientOptions(cfg.model, cfg.maxRetries, &llmCfg.LLM)
 	llmRouter.Register(cfg.name, allm.New(p, clientOpts...))
 	return nil
 }
@@ -1625,23 +1640,7 @@ func registerAnthropicProvider(llmRouter *llm.Router, cfg *config.Config) error 
 // registerAnthropicCompatProvider registers any provider that uses the Anthropic-compatible API.
 // Used by Anthropic, GLM, Kimi, and MiniMax.
 func registerAnthropicCompatProvider(llmRouter *llm.Router, name string, ac config.LLMProviderConfig, cfg *config.Config) error {
-	// Create client with retry, context window, and input validation options
-	clientOpts := []allm.Option{}
-	if ac.Model != "" {
-		clientOpts = append(clientOpts, allm.WithModel(ac.Model))
-	}
-	if derefInt(ac.MaxRetries) > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxRetries(derefInt(ac.MaxRetries)), allm.WithRetryBaseDelay(1*time.Second))
-	}
-	if cfg.LLM.MaxContextTokens > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxContextTokens(cfg.LLM.MaxContextTokens))
-	}
-	if cfg.LLM.TruncationStrategy != "" {
-		clientOpts = append(clientOpts, allm.WithTruncationStrategy(cfg.LLM.TruncationStrategy))
-	}
-	if cfg.LLM.MaxInputLength > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxInputLen(cfg.LLM.MaxInputLength))
-	}
+	clientOpts := buildClientOptions(ac.Model, derefInt(ac.MaxRetries), &cfg.LLM)
 
 	// CLI mode: use claude command, no API key needed
 	// Auto-switch to CLI mode when auth_token is set (backward compat)
@@ -1717,24 +1716,7 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 		opts = append(opts, provider.WithOpenAIBaseURL(cfg.LLM.OpenAI.BaseURL))
 	}
 
-	// Create client with retry, context window, and input validation options
-	clientOpts := []allm.Option{}
-	if cfg.LLM.OpenAI.Model != "" {
-		clientOpts = append(clientOpts, allm.WithModel(cfg.LLM.OpenAI.Model))
-	}
-	if derefInt(cfg.LLM.OpenAI.MaxRetries) > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxRetries(derefInt(cfg.LLM.OpenAI.MaxRetries)), allm.WithRetryBaseDelay(1*time.Second))
-	}
-	if cfg.LLM.MaxContextTokens > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxContextTokens(cfg.LLM.MaxContextTokens))
-	}
-	if cfg.LLM.TruncationStrategy != "" {
-		clientOpts = append(clientOpts, allm.WithTruncationStrategy(cfg.LLM.TruncationStrategy))
-	}
-	if cfg.LLM.MaxInputLength > 0 {
-		clientOpts = append(clientOpts, allm.WithMaxInputLen(cfg.LLM.MaxInputLength))
-	}
-
+	clientOpts := buildClientOptions(cfg.LLM.OpenAI.Model, derefInt(cfg.LLM.OpenAI.MaxRetries), &cfg.LLM)
 	llmRouter.Register("openai", allm.New(provider.OpenAI(cfg.LLM.OpenAI.APIKey, opts...), clientOpts...))
 	return nil
 }
@@ -1894,6 +1876,17 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	return output, nil
 }
 
+// resolveAgentModels returns (planModel, implModel, cliPath) for the agent
+// based on the active main LLM provider. This ensures GLM, Kimi, MiniMax etc.
+// get their own plan/impl models instead of always falling back to Anthropic.
+func resolveAgentModels(cfg *config.Config) (planModel, implModel, cliPath string) {
+	pc := cfg.LLM.GetProviderConfig(cfg.LLM.Main)
+	if pc == nil {
+		pc = &cfg.LLM.Anthropic
+	}
+	return pc.PlanModel, pc.ImplModel, pc.CLIPath
+}
+
 // mergeHooksConfig loads hooks from config-hooks.yml and merges with inline config hooks.
 // File hooks take precedence over inline hooks with the same name.
 func mergeHooksConfig(cfg *config.Config, logger *slog.Logger) []config.HookConfig {
@@ -1936,15 +1929,9 @@ func restoreLLMSettings(llmRouter *llm.Router, cfg *config.Config, logger *slog.
 	}
 
 	// Determine which provider config to read from
-	providerName := llmRouter.MainProvider()
-	var pc *config.LLMProviderConfig
-	switch providerName {
-	case "anthropic":
-		pc = &cfg.LLM.Anthropic
-	case "glm":
-		pc = &cfg.LLM.GLM
-	default:
-		return // effort/fallback only apply to CLI providers
+	pc := cfg.LLM.GetProviderConfig(llmRouter.MainProvider())
+	if pc == nil {
+		return
 	}
 
 	if pc.Effort != "" {

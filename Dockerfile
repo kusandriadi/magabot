@@ -4,7 +4,7 @@
 # Stage 1: Build
 FROM golang:1.22-alpine AS builder
 
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+RUN apk add --no-cache gcc musl-dev sqlite-dev upx
 
 WORKDIR /build
 
@@ -18,8 +18,10 @@ RUN VERSION=$(cat VERSION 2>/dev/null || echo 'docker') && \
     GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') && \
     BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
     CGO_ENABLED=1 GOOS=linux go build \
+    -trimpath \
     -ldflags="-s -w -X github.com/kusa/magabot/internal/version.Version=${VERSION} -X github.com/kusa/magabot/internal/version.GitCommit=${GIT_COMMIT} -X github.com/kusa/magabot/internal/version.BuildTime=${BUILD_TIME}" \
-    -o magabot ./cmd/magabot
+    -o magabot ./cmd/magabot && \
+    upx --best --lzma magabot
 
 # Stage 2: Runtime
 FROM alpine:3.19
