@@ -796,6 +796,25 @@ func isAudioFile(path string) bool {
 	return false
 }
 
+// formatDuration formats a duration in a human-readable way (e.g. "2h 15m", "3d 12h").
+func formatDuration(d time.Duration) string {
+	if d <= 0 {
+		return "now"
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
+}
+
 // handleCommand handles bot commands
 func handleCommand(msg *router.Message, llmRouter *llm.Router, store *storage.Store, cfg *config.Config, adminH *bot.AdminHandler, memoryH *bot.MemoryHandler, sessionH *bot.SessionHandler, sessionMgr *session.Manager, confirmMgr *bot.ConfirmationManager, logger *slog.Logger) (string, error) {
 	parts := strings.Fields(msg.Text)
@@ -940,6 +959,11 @@ Send any message and I'll reply using AI.
 				sb.WriteString(fmt.Sprintf("  • Budget: $%.2f/req\n", budget))
 			}
 		}
+
+		usage := llmRouter.Usage()
+		now := time.Now()
+		sb.WriteString(fmt.Sprintf("  • Hourly: %d requests (resets in %s)\n", usage.HourlyCount, formatDuration(usage.NextHourReset.Sub(now))))
+		sb.WriteString(fmt.Sprintf("  • Weekly: %d requests (resets in %s)\n", usage.WeeklyCount, formatDuration(usage.NextWeekReset.Sub(now))))
 
 		sb.WriteString("\n📡 Platforms:\n")
 		userCounts, _ := stats["users"].(map[string]int64)

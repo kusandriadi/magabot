@@ -104,6 +104,93 @@ var (
 	ErrTimeout        = allm.ErrTimeout
 )
 
+// usageTracker tracks global LLM request counts over hourly and weekly windows.
+type usageTracker struct {
+	mu          sync.Mutex
+	hourlyCount int
+	weeklyCount int
+	hourStart   time.Time
+	weekStart   time.Time
+}
+
+// UsageStats holds usage statistics for display.
+type UsageStats struct {
+	HourlyCount int
+	WeeklyCount int
+	NextHourReset time.Time
+	NextWeekReset time.Time
+}
+
+func newUsageTracker() *usageTracker {
+	now := time.Now()
+	return &usageTracker{
+		hourStart: now.Truncate(time.Hour),
+		weekStart: truncateToWeek(now),
+	}
+}
+
+// truncateToWeek returns the start of the ISO week (Monday 00:00) for the given time.
+func truncateToWeek(t time.Time) time.Time {
+	weekday := t.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	daysSinceMonday := int(weekday - time.Monday)
+	monday := t.AddDate(0, 0, -daysSinceMonday)
+	return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, monday.Location())
+}
+
+func (u *usageTracker) track() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	now := time.Now()
+
+	// Reset hourly window if expired
+	hourBoundary := u.hourStart.Add(time.Hour)
+	if now.After(hourBoundary) || now.Equal(hourBoundary) {
+		u.hourStart = now.Truncate(time.Hour)
+		u.hourlyCount = 0
+	}
+
+	// Reset weekly window if expired
+	weekBoundary := u.weekStart.Add(7 * 24 * time.Hour)
+	if now.After(weekBoundary) || now.Equal(weekBoundary) {
+		u.weekStart = truncateToWeek(now)
+		u.weeklyCount = 0
+	}
+
+	u.hourlyCount++
+	u.weeklyCount++
+}
+
+func (u *usageTracker) stats() UsageStats {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	now := time.Now()
+
+	// Check if resets are needed (lazy reset on read)
+	hourBoundary := u.hourStart.Add(time.Hour)
+	if now.After(hourBoundary) || now.Equal(hourBoundary) {
+		u.hourStart = now.Truncate(time.Hour)
+		u.hourlyCount = 0
+	}
+
+	weekBoundary := u.weekStart.Add(7 * 24 * time.Hour)
+	if now.After(weekBoundary) || now.Equal(weekBoundary) {
+		u.weekStart = truncateToWeek(now)
+		u.weeklyCount = 0
+	}
+
+	return UsageStats{
+		HourlyCount:   u.hourlyCount,
+		WeeklyCount:   u.weeklyCount,
+		NextHourReset: u.hourStart.Add(time.Hour),
+		NextWeekReset: u.weekStart.Add(7 * 24 * time.Hour),
+	}
+}
+
 // Router manages LLM clients
 type Router struct {
 	clients         map[string]*allm.Client
@@ -113,6 +200,7 @@ type Router struct {
 	maxContextChars int
 	timeout         time.Duration
 	rateLimiter     *rateLimiter
+	usage           *usageTracker
 	logger          *slog.Logger
 	mu              sync.RWMutex
 	promptCaching   bool
@@ -157,6 +245,7 @@ func NewRouter(cfg *Config) *Router {
 		maxContextChars: cfg.MaxContextChars,
 		timeout:         cfg.Timeout,
 		rateLimiter:     newRateLimiter(cfg.RateLimit),
+		usage:           newUsageTracker(),
 		logger:          logger,
 	}
 }
@@ -193,6 +282,8 @@ func (r *Router) EnablePromptCaching() {
 func (r *Router) QuickChat(ctx context.Context, prompt string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+
+	r.usage.track()
 
 	messages := []allm.Message{
 		{Role: "user", Content: prompt},
@@ -335,6 +426,8 @@ func (r *Router) StreamChat(ctx context.Context, userID string, messages []Messa
 		return nil, ErrRateLimited
 	}
 
+	r.usage.track()
+
 	// Copy messages to avoid mutating caller's slice during sanitization
 	sanitized := make([]Message, len(messages))
 	copy(sanitized, messages)
@@ -455,6 +548,11 @@ func (r *Router) Stats() map[string]interface{} {
 	stats["available"] = available
 
 	return stats
+}
+
+// Usage returns current hourly and weekly LLM request counts with next reset windows.
+func (r *Router) Usage() UsageStats {
+	return r.usage.stats()
 }
 
 // Simple rate limiter with bounded memory

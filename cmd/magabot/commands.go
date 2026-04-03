@@ -203,21 +203,7 @@ func cmdStatus() {
 
 	// Server resource usage
 	srv := util.GetServerStats()
-	fmt.Println("\n   Server:")
-	fmt.Printf("     CPU:    load %.2f / %.2f / %.2f (1/5/15m)\n", srv.LoadAvg1, srv.LoadAvg5, srv.LoadAvg15)
-	if srv.MemTotal > 0 {
-		memPct := float64(srv.MemUsed) / float64(srv.MemTotal) * 100
-		fmt.Printf("     Memory: %s / %s (%.0f%%)\n", util.FormatBytes(srv.MemUsed), util.FormatBytes(srv.MemTotal), memPct)
-	}
-	if srv.DiskTotal > 0 {
-		diskPct := float64(srv.DiskUsed) / float64(srv.DiskTotal) * 100
-		fmt.Printf("     Disk:   %s / %s (%.0f%%)\n", util.FormatBytes(srv.DiskUsed), util.FormatBytes(srv.DiskTotal), diskPct)
-	}
-	if srv.HasGPU {
-		gpuMemPct := float64(srv.GPUMemUsed) / float64(srv.GPUMemTotal) * 100
-		fmt.Printf("     GPU:    %s — %s / %s (%.0f%% mem, %d%% util)\n",
-			srv.GPUName, util.FormatBytes(srv.GPUMemUsed), util.FormatBytes(srv.GPUMemTotal), gpuMemPct, srv.GPUUtil)
-	}
+	fmt.Print(util.FormatServerStatsCLI(srv))
 
 	// LLM
 	fmt.Println("\n   LLM:")

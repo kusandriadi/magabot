@@ -697,3 +697,187 @@ func TestBuildSystemPrompt_Empty(t *testing.T) {
 		t.Errorf("BuildSystemPrompt with empty base should return empty, got %q", result)
 	}
 }
+
+func TestUsageTracker_Track(t *testing.T) {
+	u := newUsageTracker()
+
+	u.track()
+	u.track()
+	u.track()
+
+	s := u.stats()
+	if s.HourlyCount != 3 {
+		t.Errorf("HourlyCount = %d, want 3", s.HourlyCount)
+	}
+	if s.WeeklyCount != 3 {
+		t.Errorf("WeeklyCount = %d, want 3", s.WeeklyCount)
+	}
+}
+
+func TestUsageTracker_HourlyReset(t *testing.T) {
+	u := newUsageTracker()
+
+	// Set hourStart to 2 hours ago and both counters high
+	u.mu.Lock()
+	u.hourStart = time.Now().Add(-2 * time.Hour)
+	u.hourlyCount = 100
+	u.weeklyCount = 50
+	u.mu.Unlock()
+
+	// track() should reset the hourly counter only
+	u.track()
+
+	s := u.stats()
+	if s.HourlyCount != 1 {
+		t.Errorf("HourlyCount after reset = %d, want 1", s.HourlyCount)
+	}
+	// Weekly should keep its count + 1
+	if s.WeeklyCount != 51 {
+		t.Errorf("WeeklyCount = %d, want 51", s.WeeklyCount)
+	}
+}
+
+func TestUsageTracker_WeeklyReset(t *testing.T) {
+	u := newUsageTracker()
+
+	// Set weekStart to 8 days ago
+	u.mu.Lock()
+	u.weekStart = time.Now().Add(-8 * 24 * time.Hour)
+	u.weeklyCount = 500
+	u.mu.Unlock()
+
+	u.track()
+
+	s := u.stats()
+	if s.WeeklyCount != 1 {
+		t.Errorf("WeeklyCount after reset = %d, want 1", s.WeeklyCount)
+	}
+	// Hourly should be 1 (first request in current hour)
+	if s.HourlyCount != 1 {
+		t.Errorf("HourlyCount = %d, want 1", s.HourlyCount)
+	}
+}
+
+func TestUsageTracker_StatsLazyReset(t *testing.T) {
+	u := newUsageTracker()
+
+	u.track()
+	u.track()
+
+	// Force the hour to expire
+	u.mu.Lock()
+	u.hourStart = time.Now().Add(-2 * time.Hour)
+	u.mu.Unlock()
+
+	// Reading stats should trigger lazy reset
+	s := u.stats()
+	if s.HourlyCount != 0 {
+		t.Errorf("HourlyCount after lazy reset = %d, want 0", s.HourlyCount)
+	}
+}
+
+func TestUsageTracker_NextResetTimes(t *testing.T) {
+	u := newUsageTracker()
+	s := u.stats()
+
+	// NextHourReset should be in the future
+	if s.NextHourReset.Before(time.Now()) {
+		t.Error("NextHourReset should be in the future")
+	}
+	// NextWeekReset should be in the future
+	if s.NextWeekReset.Before(time.Now()) {
+		t.Error("NextWeekReset should be in the future")
+	}
+	// NextHourReset should be within the next hour
+	hourFromNow := time.Now().Add(time.Hour)
+	if s.NextHourReset.After(hourFromNow.Add(time.Minute)) {
+		t.Errorf("NextHourReset = %v, should be within ~1 hour from now", s.NextHourReset)
+	}
+}
+
+func TestUsageTracker_Concurrent(t *testing.T) {
+	u := newUsageTracker()
+	done := make(chan struct{})
+
+	for i := 0; i < 100; i++ {
+		go func() {
+			u.track()
+			_ = u.stats()
+			done <- struct{}{}
+		}()
+	}
+
+	for i := 0; i < 100; i++ {
+		<-done
+	}
+
+	s := u.stats()
+	if s.HourlyCount != 100 {
+		t.Errorf("HourlyCount after 100 concurrent tracks = %d, want 100", s.HourlyCount)
+	}
+	if s.WeeklyCount != 100 {
+		t.Errorf("WeeklyCount after 100 concurrent tracks = %d, want 100", s.WeeklyCount)
+	}
+}
+
+func TestTruncateToWeek(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected string // just check the date part
+	}{
+		{"Wednesday", time.Date(2026, 3, 25, 14, 30, 0, 0, time.UTC), "2026-03-23"},
+		{"Monday exact", time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC), "2026-03-23"},
+		{"Sunday", time.Date(2026, 3, 29, 23, 59, 0, 0, time.UTC), "2026-03-23"},
+		{"Saturday", time.Date(2026, 3, 28, 12, 0, 0, 0, time.UTC), "2026-03-23"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateToWeek(tt.input)
+			got := result.Format("2006-01-02")
+			if got != tt.expected {
+				t.Errorf("truncateToWeek(%v) = %s, want %s", tt.input, got, tt.expected)
+			}
+			// Should be Monday
+			if result.Weekday() != time.Monday {
+				t.Errorf("truncateToWeek result weekday = %s, want Monday", result.Weekday())
+			}
+			// Should be midnight
+			if result.Hour() != 0 || result.Minute() != 0 || result.Second() != 0 {
+				t.Errorf("truncateToWeek result should be midnight, got %v", result)
+			}
+		})
+	}
+}
+
+func TestRouter_Usage(t *testing.T) {
+	mock := allmtest.NewMockProvider("test",
+		allmtest.WithResponse(&allm.Response{Content: "OK"}),
+	)
+
+	router := NewRouter(&Config{Main: "test", RateLimit: 100})
+	router.Register("test", allm.New(mock))
+
+	// Initial usage should be zero
+	u := router.Usage()
+	if u.HourlyCount != 0 || u.WeeklyCount != 0 {
+		t.Fatalf("Initial usage should be zero, got hourly=%d weekly=%d", u.HourlyCount, u.WeeklyCount)
+	}
+
+	// Make a request via StreamChat
+	ch, err := router.StreamChat(context.Background(), "user1", []Message{{Role: "user", Content: "hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range ch {
+	}
+
+	u = router.Usage()
+	if u.HourlyCount != 1 {
+		t.Errorf("HourlyCount after 1 StreamChat = %d, want 1", u.HourlyCount)
+	}
+	if u.WeeklyCount != 1 {
+		t.Errorf("WeeklyCount after 1 StreamChat = %d, want 1", u.WeeklyCount)
+	}
+}
