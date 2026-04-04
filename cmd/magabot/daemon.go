@@ -244,8 +244,7 @@ func runDaemon() {
 	}
 
 	// Initialize agent session manager
-	// Resolve plan/impl models from the active main provider (not just Anthropic).
-	agentPlanModel, agentImplModel, agentCLIPath := resolveAgentModels(cfg)
+	agentCLIPath := resolveAgentCLIPath(cfg)
 	agentMgr := agent.NewManager(agent.Config{
 		Timeout:        cfg.Agent.Timeout.Seconds(),
 		MaxRetries:     cfg.Agent.MaxRetries,
@@ -254,8 +253,6 @@ func runDaemon() {
 		DiscoverDepth:  cfg.Agent.DiscoverDepth,
 		PlanDelegate:   cfg.Agent.PlanDelegate != nil && *cfg.Agent.PlanDelegate,
 		CLIPath:        agentCLIPath,
-		PlanModel:      agentPlanModel,
-		ImplModel:      agentImplModel,
 		OnSessionClose: func(platform, chatID, message string) {
 			_ = rtr.Send(platform, chatID, message)
 		},
@@ -968,15 +965,8 @@ Send any message and I'll reply using AI.
 
 		sb.WriteString("\n🤖 LLM:\n")
 		sb.WriteString(fmt.Sprintf("  • Provider: %s\n", llmStats["main"]))
-		// Show plan/impl model for the active provider
 		activeCfg := cfg.LLM.GetProviderConfig(cfg.LLM.Main)
 		if activeCfg != nil {
-			if activeCfg.PlanModel != "" {
-				sb.WriteString(fmt.Sprintf("  • Plan Model: %s\n", activeCfg.PlanModel))
-			}
-			if activeCfg.ImplModel != "" {
-				sb.WriteString(fmt.Sprintf("  • Impl Model: %s\n", activeCfg.ImplModel))
-			}
 			if activeCfg.Effort != "" {
 				sb.WriteString(fmt.Sprintf("  • Effort: %s\n", activeCfg.Effort))
 			}
@@ -1697,12 +1687,8 @@ func registerAnthropicCompatProvider(llmRouter *llm.Router, name string, ac conf
 		}
 	}
 
-	model := ac.Model
-	if model == "" {
-		model = ac.ImplModel
-	}
 	opts := []provider.AnthropicOption{
-		provider.WithAnthropicModel(model),
+		provider.WithAnthropicModel(ac.Model),
 		provider.WithAnthropicMaxTokens(derefInt(ac.MaxTokens)),
 		provider.WithAnthropicTemperature(derefFloat64(ac.Temperature)),
 	}
@@ -1732,12 +1718,8 @@ func registerOpenAIProvider(llmRouter *llm.Router, cfg *config.Config) error {
 		}
 	}
 
-	openaiModel := cfg.LLM.OpenAI.Model
-	if openaiModel == "" {
-		openaiModel = cfg.LLM.OpenAI.ImplModel
-	}
 	opts := []provider.OpenAIOption{
-		provider.WithOpenAIModel(openaiModel),
+		provider.WithOpenAIModel(cfg.LLM.OpenAI.Model),
 		provider.WithOpenAIMaxTokens(derefInt(cfg.LLM.OpenAI.MaxTokens)),
 		provider.WithOpenAITemperature(derefFloat64(cfg.LLM.OpenAI.Temperature)),
 	}
@@ -1931,15 +1913,13 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 	return "", nil
 }
 
-// resolveAgentModels returns (planModel, implModel, cliPath) for the agent
-// based on the active main LLM provider. This ensures GLM, Kimi, MiniMax etc.
-// get their own plan/impl models instead of always falling back to Anthropic.
-func resolveAgentModels(cfg *config.Config) (planModel, implModel, cliPath string) {
+// resolveAgentCLIPath returns the CLI path for the agent based on the active main provider.
+func resolveAgentCLIPath(cfg *config.Config) string {
 	pc := cfg.LLM.GetProviderConfig(cfg.LLM.Main)
 	if pc == nil {
 		pc = &cfg.LLM.Anthropic
 	}
-	return pc.PlanModel, pc.ImplModel, pc.CLIPath
+	return pc.CLIPath
 }
 
 // mergeHooksConfig loads hooks from config-hooks.yml and merges with inline config hooks.

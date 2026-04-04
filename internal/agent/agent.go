@@ -46,8 +46,6 @@ type Config struct {
 	OnSessionClose NotifyFunc        // optional: called when a session is auto-closed
 	OnUsage        func(int, int)    // optional: called with (inputTokens, outputTokens) after each request
 	CLIPath        string            // path to claude binary (default: "claude")
-	PlanModel      string            // model for planning phase (overrides default during plan)
-	ImplModel      string            // model for implementation phase (overrides default during impl)
 }
 
 // Session represents an active agent session tied to a chat.
@@ -489,15 +487,6 @@ func (m *Manager) buildRequest(sess *Session, message string, media []string, co
 		Messages: []allm.Message{
 			{Role: allm.RoleUser, Content: message},
 		},
-	}
-
-	// Phase-aware model selection:
-	// planning phase (count == 0) → PlanModel
-	// implementation phase (count > 0) → ImplModel
-	if m.config.PlanDelegate && count == 0 && m.config.PlanModel != "" {
-		req.Model = m.config.PlanModel
-	} else if m.config.ImplModel != "" {
-		req.Model = m.config.ImplModel
 	}
 
 	// Effort from /effort command

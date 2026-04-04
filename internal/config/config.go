@@ -245,8 +245,6 @@ type LLMProviderConfig struct {
 	MaxRetries    *int     `yaml:"max_retries,omitempty"`
 	Effort        string   `yaml:"effort,omitempty"`         // CLI effort level: low, medium, high, max
 	FallbackModel string   `yaml:"fallback_model,omitempty"` // CLI fallback model
-	PlanModel     string   `yaml:"plan_model,omitempty"`     // Model for agent planning phase
-	ImplModel     string   `yaml:"impl_model,omitempty"`     // Model for agent implementation phase
 }
 
 // IntPtr returns a pointer to the given int value.
@@ -392,7 +390,7 @@ type AgentConfig struct {
 	SessionTimeout util.Duration     `yaml:"session_timeout"` // idle session timeout, e.g. "6h" (0 = disabled)
 	Shortcuts      map[string]string `yaml:"shortcuts"`       // directory shortcuts, e.g. "myproject": "~/code/myproject"
 	DiscoverDepth  int               `yaml:"discover_depth"`  // auto-discover search depth (default 3)
-	PlanDelegate   *bool             `yaml:"plan_delegate"`   // plan first, then delegate to subagents (default: true)
+	PlanDelegate   *bool             `yaml:"plan_delegate"`   // plan first, then delegate to subagents (default: true; uses single model)
 }
 
 // HooksFile is the top-level structure for config-hooks.yml

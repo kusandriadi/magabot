@@ -209,12 +209,6 @@ func cmdStatus() {
 	fmt.Println("\n   LLM:")
 	fmt.Printf("     Provider: %s\n", cfg.LLM.Main)
 	if cfg.LLM.Anthropic.Enabled {
-		if cfg.LLM.Anthropic.PlanModel != "" {
-			fmt.Printf("     Plan:     %s\n", cfg.LLM.Anthropic.PlanModel)
-		}
-		if cfg.LLM.Anthropic.ImplModel != "" {
-			fmt.Printf("     Impl:     %s\n", cfg.LLM.Anthropic.ImplModel)
-		}
 		if cfg.LLM.Anthropic.Effort != "" {
 			fmt.Printf("     Effort:   %s\n", cfg.LLM.Anthropic.Effort)
 		}

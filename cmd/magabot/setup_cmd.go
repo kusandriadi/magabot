@@ -714,35 +714,22 @@ func setupLLM() {
 			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
 		}
 		fmt.Println()
-		fmt.Println("  Plan model (used for planning phase):")
+		fmt.Println("  Model:")
 		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicOpus)
-		fmt.Printf("    2. %s\n", provider.AnthropicSonnet)
-		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
+		fmt.Printf("    2. %s (Opus for planning, Sonnet for execution)\n", provider.AnthropicOpusPlan)
+		fmt.Printf("    3. %s\n", provider.AnthropicSonnet)
+		fmt.Printf("    4. %s\n", provider.AnthropicHaiku)
 		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
+		modelChoice := askString(reader, "Model", "1")
+		switch modelChoice {
 		case "2":
-			cfg.LLM.Anthropic.PlanModel = provider.AnthropicSonnet
+			cfg.LLM.Anthropic.Model = provider.AnthropicOpusPlan
 		case "3":
-			cfg.LLM.Anthropic.PlanModel = provider.AnthropicHaiku
+			cfg.LLM.Anthropic.Model = provider.AnthropicSonnet
+		case "4":
+			cfg.LLM.Anthropic.Model = provider.AnthropicHaiku
 		default:
-			cfg.LLM.Anthropic.PlanModel = provider.AnthropicOpus
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model (used for coding):")
-		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicSonnet)
-		fmt.Printf("    2. %s\n", provider.AnthropicOpus)
-		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			cfg.LLM.Anthropic.ImplModel = provider.AnthropicOpus
-		case "3":
-			cfg.LLM.Anthropic.ImplModel = provider.AnthropicHaiku
-		default:
-			cfg.LLM.Anthropic.ImplModel = provider.AnthropicSonnet
+			cfg.LLM.Anthropic.Model = provider.AnthropicOpus
 		}
 
 		fmt.Println()
@@ -774,38 +761,6 @@ func setupLLM() {
 		cfg.LLM.OpenAI.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.OpenAI.MaxRetries = config.IntPtr(2)
 
-		fmt.Println()
-		fmt.Println("  Plan model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
-		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
-		fmt.Printf("    3. %s\n", provider.OpenAIO3)
-		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
-		case "2":
-			cfg.LLM.OpenAI.PlanModel = provider.OpenAIGPT5Mini
-		case "3":
-			cfg.LLM.OpenAI.PlanModel = provider.OpenAIO3
-		default:
-			cfg.LLM.OpenAI.PlanModel = provider.OpenAIGPT5
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
-		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
-		fmt.Printf("    3. %s\n", provider.OpenAIGPT4_1)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			cfg.LLM.OpenAI.ImplModel = provider.OpenAIGPT5Mini
-		case "3":
-			cfg.LLM.OpenAI.ImplModel = provider.OpenAIGPT4_1
-		default:
-			cfg.LLM.OpenAI.ImplModel = provider.OpenAIGPT5
-		}
-
 	case "glm":
 		key := askString(reader, "GLM API Key", "")
 		if key == "" {
@@ -819,16 +774,13 @@ func setupLLM() {
 		}
 		fmt.Println()
 		fmt.Println("  Available models:")
-		fmt.Printf("    1. %s\n", provider.GLM5Dot1)
+		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
 		fmt.Printf("    2. %s\n", provider.GLM5)
 		fmt.Printf("    3. %s\n", provider.GLM5Turbo)
-		fmt.Printf("    4. %s\n", provider.GLM4Dot7)
-		fmt.Printf("    5. %s\n", provider.GLM4Dot6)
 		fmt.Println()
-		modelChoice := askString(reader, "Choose model [1/2/3/4/5]", "1")
+		modelChoice := askString(reader, "Model", "1")
 		modelMap := map[string]string{
 			"1": provider.GLM5Dot1, "2": provider.GLM5, "3": provider.GLM5Turbo,
-			"4": provider.GLM4Dot7, "5": provider.GLM4Dot6,
 		}
 		model := modelMap[modelChoice]
 		if model == "" {
@@ -843,49 +795,14 @@ func setupLLM() {
 		cfg.LLM.GLM.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.GLM.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.GLM.MaxRetries = config.IntPtr(2)
-
-		fmt.Println()
-		fmt.Println("  Plan model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
-		fmt.Printf("    2. %s\n", provider.GLM5)
-		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
-		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
-		case "2":
-			cfg.LLM.GLM.PlanModel = provider.GLM5
-		case "3":
-			cfg.LLM.GLM.PlanModel = provider.GLM4Dot7
-		default:
-			cfg.LLM.GLM.PlanModel = provider.GLM5Dot1
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
-		fmt.Printf("    2. %s\n", provider.GLM5Turbo)
-		fmt.Printf("    3. %s\n", provider.GLM5)
-		fmt.Printf("    4. %s\n", provider.GLM4Dot7)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			cfg.LLM.GLM.ImplModel = provider.GLM5Turbo
-		case "3":
-			cfg.LLM.GLM.ImplModel = provider.GLM5
-		case "4":
-			cfg.LLM.GLM.ImplModel = provider.GLM4Dot7
-		default:
-			cfg.LLM.GLM.ImplModel = provider.GLM5Dot1
-		}
 		// Update Claude settings to use GLM endpoint
 		if err := updateClaudeSettingsEnv(map[string]string{
 			"ANTHROPIC_AUTH_TOKEN":           key,
 			"ANTHROPIC_BASE_URL":             baseURL,
 			"API_TIMEOUT_MS":                 "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.GLM.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.GLM.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   cfg.LLM.GLM.PlanModel,
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  model,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": model,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   model,
 		}); err != nil {
 			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
 		}
@@ -896,44 +813,36 @@ func setupLLM() {
 			saveSecret("llm/kimi_api_key", key)
 			cfg.LLM.Kimi.Enabled = true
 		}
+		fmt.Println()
+		fmt.Println("  Available models:")
+		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
+		fmt.Printf("    2. %s\n", provider.KimiK2Thinking)
+		fmt.Printf("    3. %s\n", provider.KimiK2ThinkingTurbo)
+		fmt.Printf("    4. %s\n", provider.KimiK2TurboPreview)
+		fmt.Println()
+		kimiModelChoice := askString(reader, "Model", "1")
+		kimiModel := provider.KimiK2_5
+		switch kimiModelChoice {
+		case "2":
+			kimiModel = provider.KimiK2Thinking
+		case "3":
+			kimiModel = provider.KimiK2ThinkingTurbo
+		case "4":
+			kimiModel = provider.KimiK2TurboPreview
+		}
 		cfg.LLM.Kimi.Mode = "cli"
+		cfg.LLM.Kimi.Model = kimiModel
 		cfg.LLM.Kimi.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.Kimi.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.Kimi.MaxRetries = config.IntPtr(2)
-
-		fmt.Println()
-		fmt.Println("  Plan model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
-		fmt.Printf("    2. %s\n", provider.KimiK2Thinking)
-		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
-		case "2":
-			cfg.LLM.Kimi.PlanModel = provider.KimiK2Thinking
-		default:
-			cfg.LLM.Kimi.PlanModel = provider.KimiK2_5
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
-		fmt.Printf("    2. %s\n", provider.KimiK2TurboPreview)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			cfg.LLM.Kimi.ImplModel = provider.KimiK2TurboPreview
-		default:
-			cfg.LLM.Kimi.ImplModel = provider.KimiK2_5
-		}
 		// Update Claude settings to use Kimi endpoint
 		if err := updateClaudeSettingsEnv(map[string]string{
 			"ANTHROPIC_AUTH_TOKEN":           key,
 			"ANTHROPIC_BASE_URL":             config.KimiDefaultBaseURL,
 			"API_TIMEOUT_MS":                 "3000000",
-			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  cfg.LLM.Kimi.ImplModel,
-			"ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.LLM.Kimi.ImplModel,
-			"ANTHROPIC_DEFAULT_OPUS_MODEL":   cfg.LLM.Kimi.PlanModel,
+			"ANTHROPIC_DEFAULT_HAIKU_MODEL":  kimiModel,
+			"ANTHROPIC_DEFAULT_SONNET_MODEL": kimiModel,
+			"ANTHROPIC_DEFAULT_OPUS_MODEL":   kimiModel,
 		}); err != nil {
 			fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
 		}
@@ -944,36 +853,31 @@ func setupLLM() {
 			saveSecret("llm/minimax_api_key", key)
 			cfg.LLM.MiniMax.Enabled = true
 		}
+		fmt.Println()
+		fmt.Println("  Available models:")
+		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
+		fmt.Printf("    2. %s\n", provider.MiniMaxM2_7HighSpeed)
+		fmt.Printf("    3. %s\n", provider.MiniMaxM2_5)
+		fmt.Printf("    4. %s\n", provider.MiniMaxM2_5HighSpeed)
+		fmt.Printf("    5. %s\n", provider.MiniMaxM2)
+		fmt.Println()
+		mmModelChoice := askString(reader, "Model", "1")
+		mmModel := provider.MiniMaxM2_7
+		switch mmModelChoice {
+		case "2":
+			mmModel = provider.MiniMaxM2_7HighSpeed
+		case "3":
+			mmModel = provider.MiniMaxM2_5
+		case "4":
+			mmModel = provider.MiniMaxM2_5HighSpeed
+		case "5":
+			mmModel = provider.MiniMaxM2
+		}
 		cfg.LLM.MiniMax.Mode = "cli"
+		cfg.LLM.MiniMax.Model = mmModel
 		cfg.LLM.MiniMax.MaxTokens = config.IntPtr(200000)
 		cfg.LLM.MiniMax.Temperature = config.Float64Ptr(0.5)
 		cfg.LLM.MiniMax.MaxRetries = config.IntPtr(2)
-
-		fmt.Println()
-		fmt.Println("  Plan model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
-		fmt.Printf("    2. %s\n", provider.MiniMaxM2_5)
-		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
-		case "2":
-			cfg.LLM.MiniMax.PlanModel = provider.MiniMaxM2_5
-		default:
-			cfg.LLM.MiniMax.PlanModel = provider.MiniMaxM2_7
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
-		fmt.Printf("    2. %s\n", provider.MiniMaxM2_7HighSpeed)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			cfg.LLM.MiniMax.ImplModel = provider.MiniMaxM2_7HighSpeed
-		default:
-			cfg.LLM.MiniMax.ImplModel = provider.MiniMaxM2_7
-		}
 
 	case "local":
 		baseURL := askString(reader, "Base URL", "http://localhost:11434/v1")
@@ -1048,9 +952,9 @@ func switchMainUpdateEnv(cfg *config.Config, mainProvider string) {
 		"ANTHROPIC_AUTH_TOKEN":           pc.APIKey,
 		"ANTHROPIC_BASE_URL":             pc.BaseURL,
 		"API_TIMEOUT_MS":                 "3000000",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  pc.ImplModel,
-		"ANTHROPIC_DEFAULT_SONNET_MODEL": pc.ImplModel,
-		"ANTHROPIC_DEFAULT_OPUS_MODEL":   pc.PlanModel,
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  pc.Model,
+		"ANTHROPIC_DEFAULT_SONNET_MODEL": pc.Model,
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   pc.Model,
 	}); err != nil {
 		fmt.Printf("⚠️  Warning: could not update ~/.claude/settings.json: %v\n", err)
 	}

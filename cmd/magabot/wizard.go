@@ -54,24 +54,26 @@ type WizardState struct {
 	AnthropicEnabled bool
 	AnthropicKey     string
 	AnthropicMode    string // "api" or "cli"
+	AnthropicModel   string
 	OpenAIEnabled    bool
 	OpenAIKey        string
 	GLMEnabled       bool
 	GLMKey           string
 	GLMBaseURL       string
+	GLMModel         string
 	KimiEnabled      bool
 	KimiKey          string
 	KimiBaseURL      string
+	KimiModel        string
 	MiniMaxEnabled   bool
 	MiniMaxKey       string
 	MiniMaxBaseURL   string
+	MiniMaxModel     string
 	LocalEnabled     bool
 	LocalBaseURL     string
 	LocalModel       string
 
-	PlanModel string
-	ImplModel string
-	Effort    string
+	Effort string
 }
 
 // testLLMConnection tests the LLM connection with the configured provider
@@ -457,36 +459,22 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		}
 
 		fmt.Println()
-		fmt.Println("  Model selection:")
-		fmt.Println("    Plan model (used for planning phase):")
+		fmt.Println("  Model:")
 		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicOpus)
-		fmt.Printf("    2. %s\n", provider.AnthropicSonnet)
-		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
+		fmt.Printf("    2. %s (Opus for planning, Sonnet for execution)\n", provider.AnthropicOpusPlan)
+		fmt.Printf("    3. %s\n", provider.AnthropicSonnet)
+		fmt.Printf("    4. %s\n", provider.AnthropicHaiku)
 		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
+		modelChoice := askString(reader, "Model", "1")
+		switch modelChoice {
 		case "2":
-			state.PlanModel = provider.AnthropicSonnet
+			state.AnthropicModel = provider.AnthropicOpusPlan
 		case "3":
-			state.PlanModel = provider.AnthropicHaiku
+			state.AnthropicModel = provider.AnthropicSonnet
+		case "4":
+			state.AnthropicModel = provider.AnthropicHaiku
 		default:
-			state.PlanModel = provider.AnthropicOpus
-		}
-
-		fmt.Println()
-		fmt.Println("    Implementation model (used for coding):")
-		fmt.Printf("    1. %s (recommended)\n", provider.AnthropicSonnet)
-		fmt.Printf("    2. %s\n", provider.AnthropicOpus)
-		fmt.Printf("    3. %s\n", provider.AnthropicHaiku)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			state.ImplModel = provider.AnthropicOpus
-		case "3":
-			state.ImplModel = provider.AnthropicHaiku
-		default:
-			state.ImplModel = provider.AnthropicSonnet
+			state.AnthropicModel = provider.AnthropicOpus
 		}
 
 		fmt.Println()
@@ -516,38 +504,6 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		fmt.Println()
 		state.OpenAIKey = askPassword(reader, "API key (sk-...)")
 
-		fmt.Println()
-		fmt.Println("  Plan model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
-		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
-		fmt.Printf("    3. %s\n", provider.OpenAIO3)
-		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
-		case "2":
-			state.PlanModel = provider.OpenAIGPT5Mini
-		case "3":
-			state.PlanModel = provider.OpenAIO3
-		default:
-			state.PlanModel = provider.OpenAIGPT5
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.OpenAIGPT5)
-		fmt.Printf("    2. %s\n", provider.OpenAIGPT5Mini)
-		fmt.Printf("    3. %s\n", provider.OpenAIGPT4_1)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			state.ImplModel = provider.OpenAIGPT5Mini
-		case "3":
-			state.ImplModel = provider.OpenAIGPT4_1
-		default:
-			state.ImplModel = provider.OpenAIGPT5
-		}
-
 	case "glm":
 		state.GLMEnabled = true
 		fmt.Println("🇨🇳 Zhipu GLM Configuration")
@@ -559,38 +515,19 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.GLMBaseURL = askString(reader, "Base URL (Anthropic-compatible endpoint)", "https://api.z.ai/api/anthropic")
 
 		fmt.Println()
-		fmt.Println("  Plan model:")
+		fmt.Println("  Model:")
 		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
 		fmt.Printf("    2. %s\n", provider.GLM5)
-		fmt.Printf("    3. %s\n", provider.GLM4Dot7)
+		fmt.Printf("    3. %s\n", provider.GLM5Turbo)
 		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
+		glmModelChoice := askString(reader, "Model", "1")
+		switch glmModelChoice {
 		case "2":
-			state.PlanModel = provider.GLM5
+			state.GLMModel = provider.GLM5
 		case "3":
-			state.PlanModel = provider.GLM4Dot7
+			state.GLMModel = provider.GLM5Turbo
 		default:
-			state.PlanModel = provider.GLM5Dot1
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.GLM5Dot1)
-		fmt.Printf("    2. %s\n", provider.GLM5Turbo)
-		fmt.Printf("    3. %s\n", provider.GLM5)
-		fmt.Printf("    4. %s\n", provider.GLM4Dot7)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			state.ImplModel = provider.GLM5Turbo
-		case "3":
-			state.ImplModel = provider.GLM5
-		case "4":
-			state.ImplModel = provider.GLM4Dot7
-		default:
-			state.ImplModel = provider.GLM5Dot1
+			state.GLMModel = provider.GLM5Dot1
 		}
 
 	case "kimi":
@@ -604,29 +541,22 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.KimiBaseURL = askString(reader, "Base URL (Anthropic-compatible endpoint)", "https://api.moonshot.ai/anthropic")
 
 		fmt.Println()
-		fmt.Println("  Plan model:")
+		fmt.Println("  Model:")
 		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
 		fmt.Printf("    2. %s\n", provider.KimiK2Thinking)
+		fmt.Printf("    3. %s\n", provider.KimiK2ThinkingTurbo)
+		fmt.Printf("    4. %s\n", provider.KimiK2TurboPreview)
 		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
+		kimiModelChoice := askString(reader, "Model", "1")
+		switch kimiModelChoice {
 		case "2":
-			state.PlanModel = provider.KimiK2Thinking
+			state.KimiModel = provider.KimiK2Thinking
+		case "3":
+			state.KimiModel = provider.KimiK2ThinkingTurbo
+		case "4":
+			state.KimiModel = provider.KimiK2TurboPreview
 		default:
-			state.PlanModel = provider.KimiK2_5
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.KimiK2_5)
-		fmt.Printf("    2. %s\n", provider.KimiK2TurboPreview)
-		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
-		case "2":
-			state.ImplModel = provider.KimiK2TurboPreview
-		default:
-			state.ImplModel = provider.KimiK2_5
+			state.KimiModel = provider.KimiK2_5
 		}
 
 	case "minimax":
@@ -640,29 +570,25 @@ func step3LLM(reader *bufio.Reader, state *WizardState) {
 		state.MiniMaxBaseURL = askString(reader, "Base URL (Anthropic-compatible endpoint)", "https://api.minimax.io/anthropic")
 
 		fmt.Println()
-		fmt.Println("  Plan model:")
-		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
-		fmt.Printf("    2. %s\n", provider.MiniMaxM2_5)
-		fmt.Println()
-		planChoice := askString(reader, "Plan model", "1")
-		switch planChoice {
-		case "2":
-			state.PlanModel = provider.MiniMaxM2_5
-		default:
-			state.PlanModel = provider.MiniMaxM2_7
-		}
-
-		fmt.Println()
-		fmt.Println("  Implementation model:")
+		fmt.Println("  Model:")
 		fmt.Printf("    1. %s (recommended)\n", provider.MiniMaxM2_7)
 		fmt.Printf("    2. %s\n", provider.MiniMaxM2_7HighSpeed)
+		fmt.Printf("    3. %s\n", provider.MiniMaxM2_5)
+		fmt.Printf("    4. %s\n", provider.MiniMaxM2_5HighSpeed)
+		fmt.Printf("    5. %s\n", provider.MiniMaxM2)
 		fmt.Println()
-		implChoice := askString(reader, "Impl model", "1")
-		switch implChoice {
+		mmModelChoice := askString(reader, "Model", "1")
+		switch mmModelChoice {
 		case "2":
-			state.ImplModel = provider.MiniMaxM2_7HighSpeed
+			state.MiniMaxModel = provider.MiniMaxM2_7HighSpeed
+		case "3":
+			state.MiniMaxModel = provider.MiniMaxM2_5
+		case "4":
+			state.MiniMaxModel = provider.MiniMaxM2_5HighSpeed
+		case "5":
+			state.MiniMaxModel = provider.MiniMaxM2
 		default:
-			state.ImplModel = provider.MiniMaxM2_7
+			state.MiniMaxModel = provider.MiniMaxM2_7
 		}
 
 	case "local":
@@ -901,9 +827,11 @@ func generateWizardConfig(state *WizardState) string {
 		if state.AnthropicKey != "" {
 			fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.AnthropicKey)
 		}
-		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.AnthropicSonnet)
-		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
-		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
+		anthropicModel := state.AnthropicModel
+		if anthropicModel == "" {
+			anthropicModel = provider.AnthropicSonnet
+		}
+		fmt.Fprintf(&b, "    model: \"%s\"\n", anthropicModel)
 		if state.Effort != "" {
 			fmt.Fprintf(&b, "    effort: \"%s\"\n", state.Effort)
 		}
@@ -917,8 +845,6 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    enabled: true\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.OpenAIKey)
 		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.OpenAIGPT5)
-		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
-		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
 		b.WriteString("    max_tokens: 200000\n")
 		b.WriteString("    temperature: 0.5\n")
 		b.WriteString("    max_retries: 2\n\n")
@@ -929,9 +855,11 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    enabled: true\n")
 		b.WriteString("    mode: \"cli\"\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.GLMKey)
-		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.GLM5Turbo)
-		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
-		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
+		glmModel := state.GLMModel
+		if glmModel == "" {
+			glmModel = provider.GLM5Dot1
+		}
+		fmt.Fprintf(&b, "    model: \"%s\"\n", glmModel)
 		b.WriteString("    max_tokens: 200000\n")
 		b.WriteString("    temperature: 0.5\n")
 		b.WriteString("    max_retries: 2\n\n")
@@ -942,9 +870,11 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    enabled: true\n")
 		b.WriteString("    mode: \"cli\"\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.KimiKey)
-		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.KimiK2_5)
-		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
-		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
+		kimiModel := state.KimiModel
+		if kimiModel == "" {
+			kimiModel = provider.KimiK2_5
+		}
+		fmt.Fprintf(&b, "    model: \"%s\"\n", kimiModel)
 		b.WriteString("    max_tokens: 200000\n")
 		b.WriteString("    temperature: 0.5\n")
 		b.WriteString("    max_retries: 2\n\n")
@@ -955,9 +885,11 @@ func generateWizardConfig(state *WizardState) string {
 		b.WriteString("    enabled: true\n")
 		b.WriteString("    mode: \"cli\"\n")
 		fmt.Fprintf(&b, "    api_key: \"%s\"\n", state.MiniMaxKey)
-		fmt.Fprintf(&b, "    model: \"%s\"\n", provider.MiniMaxM2_7)
-		fmt.Fprintf(&b, "    plan_model: \"%s\"\n", state.PlanModel)
-		fmt.Fprintf(&b, "    impl_model: \"%s\"\n", state.ImplModel)
+		mmModel := state.MiniMaxModel
+		if mmModel == "" {
+			mmModel = provider.MiniMaxM2_7
+		}
+		fmt.Fprintf(&b, "    model: \"%s\"\n", mmModel)
 		b.WriteString("    max_tokens: 200000\n")
 		b.WriteString("    temperature: 0.5\n")
 		b.WriteString("    max_retries: 2\n\n")
