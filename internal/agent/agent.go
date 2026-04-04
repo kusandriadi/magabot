@@ -58,8 +58,8 @@ type Session struct {
 	Platform     string
 	ChatID       string
 	UserID       string
-	MsgCount  int                         // tracks messages sent (for --continue)
-	StartTime time.Time                   // when the session was created
+	MsgCount     int                         // tracks messages sent (for --continue)
+	StartTime    time.Time                   // when the session was created
 	LastActivity time.Time                   // last Execute() call (for idle timeout)
 	cli          *provider.ClaudeCLIProvider // Claude CLI provider (nil for non-Claude agents)
 }
