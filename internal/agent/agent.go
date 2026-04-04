@@ -331,19 +331,20 @@ func (m *Manager) CloseSession(platform, chatID string) {
 // use this to extend the timeout when the caller sends progress messages to the user.
 // onText, if non-nil, is called with accumulated text content during streaming
 // so the caller can deliver partial results incrementally.
-func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), onText func(string), keepalive <-chan struct{}) (string, error) {
+// skillContext, if non-empty, is appended to the CLI system prompt for this request.
+func (m *Manager) Execute(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), onText func(string), keepalive <-chan struct{}, skillContext string) (string, error) {
 	sess.Touch()
 	timeout := time.Duration(m.config.Timeout) * time.Second
 	maxRetries := m.config.MaxRetries
 
 	if sess.Agent == AgentClaude && sess.cli != nil {
-		return m.executeClaude(ctx, sess, message, media, onProgress, onText, keepalive, timeout, maxRetries)
+		return m.executeClaude(ctx, sess, message, media, onProgress, onText, keepalive, skillContext, timeout, maxRetries)
 	}
 	return m.executeCodex(ctx, sess, message, timeout)
 }
 
 // executeClaude runs a message through Claude CLI via allm-go provider.
-func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), onText func(string), keepalive <-chan struct{}, timeout time.Duration, maxRetries int) (string, error) {
+func (m *Manager) executeClaude(ctx context.Context, sess *Session, message string, media []string, onProgress func(string), onText func(string), keepalive <-chan struct{}, skillContext string, timeout time.Duration, maxRetries int) (string, error) {
 	streaming := onProgress != nil
 
 	var allOutput []string
@@ -363,11 +364,15 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		// Configure provider for this attempt
 		count := sess.GetMsgCount()
 
+		appendPrompt := skillContext
 		if m.config.PlanDelegate {
-			sess.cli.SetAppendPrompt(planDelegatePrompt)
-		} else {
-			sess.cli.SetAppendPrompt("")
+			if appendPrompt != "" {
+				appendPrompt = planDelegatePrompt + "\n\n" + appendPrompt
+			} else {
+				appendPrompt = planDelegatePrompt
+			}
 		}
+		sess.cli.SetAppendPrompt(appendPrompt)
 
 		// Build request with phase-aware model selection
 		req := m.buildRequest(sess, message, media, count)

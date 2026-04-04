@@ -1890,12 +1890,11 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		}
 	}()
 
-	// Inject skill context into agent message
-	agentMsg := msg.Text
+	// Collect skill context to inject into agent system prompt (via --append-system-prompt).
+	// This avoids polluting the user message with visible [Skill context] prefixes.
+	var agentSkillContext string
 	if skillsMgr != nil {
-		if matched := skillsMgr.GetMatchedPrompts(agentMsg); matched != "" {
-			agentMsg = fmt.Sprintf("[Skill context]\n%s\n\n%s", matched, agentMsg)
-		}
+		agentSkillContext = skillsMgr.GetMatchedPrompts(msg.Text)
 	}
 
 	// Stream text content incrementally as new messages.
@@ -1910,7 +1909,7 @@ func routeToAgent(ctx context.Context, msg *router.Message, agentMgr *agent.Mana
 		textSt.MarkSent(len(accumulated))
 	}
 
-	output, err := agentMgr.Execute(ctx, sess, agentMsg, msg.Media, wrappedNotify, onText, keepalive)
+	output, err := agentMgr.Execute(ctx, sess, msg.Text, msg.Media, wrappedNotify, onText, keepalive, agentSkillContext)
 	close(statusDone)
 
 	// Flush any remaining text that wasn't sent during streaming.
