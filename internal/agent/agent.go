@@ -58,10 +58,8 @@ type Session struct {
 	Platform     string
 	ChatID       string
 	UserID       string
-	MsgCount     int                         // tracks messages sent (for --continue)
-	LastModel    string                      // model used in the last execution (for detecting model switches)
-	LastResponse string                      // response from the last execution (for context carry-over on model switch)
-	StartTime    time.Time                   // when the session was created
+	MsgCount  int                         // tracks messages sent (for --continue)
+	StartTime time.Time                   // when the session was created
 	LastActivity time.Time                   // last Execute() call (for idle timeout)
 	cli          *provider.ClaudeCLIProvider // Claude CLI provider (nil for non-Claude agents)
 }
@@ -377,41 +375,14 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 		// Build request with phase-aware model selection
 		req := m.buildRequest(sess, message, media, count)
 
-		// effectiveModel reflects what the CLI provider will actually use:
-		// req.Model if set, otherwise the CLI provider's built-in default ("sonnet").
+		// Always use --continue for subsequent messages. Claude CLI handles
+		// model switching with --continue correctly, keeping conversation context.
+		sess.cli.SetContinue(count > 0)
+
+		// effectiveModel for logging: req.Model if set, otherwise CLI default ("sonnet").
 		effectiveModel := req.Model
 		if effectiveModel == "" {
 			effectiveModel = "sonnet"
-		}
-
-		// Detect model switch (e.g. plan=opus → impl=sonnet).
-		// Claude CLI sessions are model-specific: --continue with a different
-		// model silently loses context. When the model changes, start a fresh
-		// session and carry over the previous response as inline context.
-		sess.mu.Lock()
-		lastModel := sess.LastModel
-		lastResp := sess.LastResponse
-		sess.mu.Unlock()
-
-		modelChanged := count > 0 && lastModel != "" && lastModel != effectiveModel
-		if modelChanged {
-			sess.cli.SetContinue(false)
-			if lastResp != "" {
-				// Truncate context to avoid exceeding input limits
-				const maxCtx = 8000
-				prevCtx := lastResp
-				if len(prevCtx) > maxCtx {
-					prevCtx = prevCtx[:maxCtx] + "\n... (truncated)"
-				}
-				// Prepend previous response so the new model has context
-				contextPrefix := fmt.Sprintf("Previous conversation context (from %s):\n---\n%s\n---\n\n", lastModel, prevCtx)
-				req.Messages[0].Content = contextPrefix + req.Messages[0].Content
-			}
-			m.logger.Info("model changed, starting fresh session with context carry-over",
-				"from_model", lastModel, "to_model", effectiveModel,
-			)
-		} else {
-			sess.cli.SetContinue(count > 0)
 		}
 
 		m.logger.Debug("executing agent",
@@ -420,8 +391,7 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 			"streaming", streaming,
 			"model", effectiveModel,
 			"effort", req.Effort,
-			"continue", count > 0 && !modelChanged,
-			"model_changed", modelChanged,
+			"continue", count > 0,
 			"plan_delegate", m.config.PlanDelegate,
 			"append_system_prompt", appendPromptPreview(m.config.PlanDelegate),
 		)
@@ -447,10 +417,6 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 
 		sess.mu.Lock()
 		sess.MsgCount++
-		sess.LastModel = effectiveModel
-		if partial != "" {
-			sess.LastResponse = partial
-		}
 		sess.mu.Unlock()
 		if partial != "" {
 			allOutput = append(allOutput, partial)
@@ -467,16 +433,14 @@ func (m *Manager) executeClaude(ctx context.Context, sess *Session, message stri
 
 		if !timedOut {
 			// Session corruption: invalid thinking block signature.
-			// This happens when the model changes mid-session or the
-			// session data is corrupted. Reset session and retry once
-			// without --continue so the CLI starts a fresh conversation.
+			// This can happen when session data is corrupted.
+			// Retry once without --continue so the CLI starts fresh,
+			// but keep MsgCount so model selection stays in the correct phase.
 			if strings.Contains(err.Error(), "Invalid signature in thinking block") {
-				m.logger.Warn("invalid thinking block signature, resetting session",
+				m.logger.Warn("invalid thinking block signature, retrying without continue",
 					"agent", sess.Agent, "attempt", attempt,
 				)
-				sess.mu.Lock()
-				sess.MsgCount = 0
-				sess.mu.Unlock()
+				sess.cli.SetContinue(false)
 				continue
 			}
 
